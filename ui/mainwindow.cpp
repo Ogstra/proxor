@@ -478,7 +478,7 @@ void MainWindow::show_group(int gid) {
 
     auto group = NekoGui::profileManager->GetGroup(gid);
     if (group == nullptr) {
-        MessageBoxWarning(tr("Error"), QString("No such group: %1").arg(gid));
+        MessageBoxWarning(tr("Error"), QStringLiteral("No such group: %1").arg(gid));
         NekoGui::dataStore->refreshing_group = false;
         return;
     }
@@ -629,7 +629,7 @@ void MainWindow::on_commitDataRequest() {
     //
     if (!isMaximized()) {
         auto olds = NekoGui::dataStore->mw_size;
-        auto news = QString("%1x%2").arg(size().width()).arg(size().height());
+        auto news = QStringLiteral("%1x%2").arg(size().width()).arg(size().height());
         if (olds != news) {
             NekoGui::dataStore->mw_size = news;
         }
@@ -832,12 +832,12 @@ void MainWindow::refresh_status(const QString &traffic_update) {
 
     if (last_test_time.addSecs(2) < QTime::currentTime()) {
         auto txt = running == nullptr ? tr("Not Running")
-                                      : QString("[%1] %2").arg(group_name, running->bean->DisplayName()).left(30);
+                                      : QStringLiteral("[%1] %2").arg(group_name, running->bean->DisplayName()).left(30);
         ui->label_running->setText(txt);
     }
     //
     auto display_socks = DisplayAddress(NekoGui::dataStore->inbound_address, NekoGui::dataStore->inbound_socks_port);
-    auto inbound_txt = QString("Mixed: %1").arg(display_socks);
+    auto inbound_txt = QStringLiteral("Mixed: %1").arg(display_socks);
     ui->label_inbound->setText(inbound_txt);
     //
     ui->checkBox_VPN->setChecked(NekoGui::dataStore->spmode_vpn);
@@ -1167,7 +1167,7 @@ void MainWindow::on_menu_profile_debug_info_triggered() {
     if (ents.count() != 1) return;
     auto btn = QMessageBox::information(this, software_name, ents.first()->ToJsonBytes(), "OK", "Edit", "Reload", 0, 0);
     if (btn == 1) {
-        QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(QString("profiles/%1.json").arg(ents.first()->id)).absoluteFilePath()));
+        QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(QStringLiteral("profiles/%1.json").arg(ents.first()->id)).absoluteFilePath()));
     } else if (btn == 2) {
         NekoGui::dataStore->Load();
         NekoGui::profileManager->LoadManager();
@@ -1800,7 +1800,7 @@ bool MainWindow::StartVPNProcess() {
     //
     vpn_process->setProcessChannelMode(QProcess::ForwardedChannels);
 #ifdef Q_OS_MACOS
-    vpn_process->start("osascript", {"-e", QString("do shell script \"%1\" with administrator privileges")
+    vpn_process->start("osascript", {"-e", QStringLiteral("do shell script \"%1\" with administrator privileges")
                                                .arg("bash " + scriptPath)});
 #else
     vpn_process->start("pkexec", {"bash", scriptPath});
@@ -1823,7 +1823,7 @@ bool MainWindow::StopVPNProcess(bool unconditional) {
 #else
         QProcess p;
 #ifdef Q_OS_MACOS
-        p.start("osascript", {"-e", QString("do shell script \"%1\" with administrator privileges")
+        p.start("osascript", {"-e", QStringLiteral("do shell script \"%1\" with administrator privileges")
                                         .arg("pkill -2 -U 0 nekobox_core")});
 #else
         if (unconditional) {

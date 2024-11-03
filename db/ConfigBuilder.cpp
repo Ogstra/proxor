@@ -76,7 +76,7 @@ namespace NekoGui {
     QString BuildChain(int chainId, const std::shared_ptr<BuildConfigStatus> &status) {
         auto group = profileManager->GetGroup(status->ent->gid);
         if (group == nullptr) {
-            status->result->error = QString("This profile is not in any group, your data may be corrupted.");
+            status->result->error = QStringLiteral("This profile is not in any group, your data may be corrupted.");
             return {};
         }
 
@@ -88,11 +88,11 @@ namespace NekoGui {
                 for (auto id: list) {
                     resolved += profileManager->GetProfile(id);
                     if (resolved.last() == nullptr) {
-                        status->result->error = QString("chain missing ent: %1").arg(id);
+                        status->result->error = QStringLiteral("chain missing ent: %1").arg(id);
                         break;
                     }
                     if (resolved.last()->type == "chain") {
-                        status->result->error = QString("chain in chain is not allowed: %1").arg(id);
+                        status->result->error = QStringLiteral("chain in chain is not allowed: %1").arg(id);
                         break;
                     }
                 }
@@ -109,7 +109,7 @@ namespace NekoGui {
         if (group->front_proxy_id >= 0) {
             auto fEnt = profileManager->GetProfile(group->front_proxy_id);
             if (fEnt == nullptr) {
-                status->result->error = QString("front proxy ent not found.");
+                status->result->error = QStringLiteral("front proxy ent not found.");
                 return {};
             }
             ents += resolveChain(fEnt);
