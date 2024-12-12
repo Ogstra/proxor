@@ -101,7 +101,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->toolButton_server->setMenu(ui->menu_server);
     ui->menubar->setVisible(false);
     connect(ui->toolButton_document, &QToolButton::clicked, this, [=] { QDesktopServices::openUrl(QUrl("https://matsuridayo.github.io/")); });
-    connect(ui->toolButton_ads, &QToolButton::clicked, this, [=] { QDesktopServices::openUrl(QUrl("https://matsuricom.pages.dev/")); });
+    connect(ui->toolButton_ads, &QToolButton::clicked, this, [=] { QDesktopServices::openUrl(QUrl("https://neko-box.pages.dev/喵")); });
     connect(ui->toolButton_update, &QToolButton::clicked, this, [=] { runOnNewThread([=] { CheckUpdate(); }); });
     connect(ui->toolButton_url_test, &QToolButton::clicked, this, [=] { speedtest_current_group(1, true); });
 
@@ -1208,10 +1208,10 @@ void MainWindow::on_menu_export_config_triggered() {
     if (ent->bean->DisplayCoreType() != software_core_name) return;
 
     auto result = BuildConfig(ent, false, true);
-    QString config_core = QJsonObject2QString(result->coreConfig, true);
+    QString config_core = QJsonObject2QString(result->coreConfig, false);
     QApplication::clipboard()->setText(config_core);
 
-    QMessageBox msg(QMessageBox::Information, tr("Config copied"), config_core);
+    QMessageBox msg(QMessageBox::Information, tr("Config copied"), tr("Config copied"));
     msg.addButton("Copy core config", QMessageBox::YesRole);
     msg.addButton("Copy test config", QMessageBox::NoRole);
     msg.addButton(QMessageBox::Ok);
