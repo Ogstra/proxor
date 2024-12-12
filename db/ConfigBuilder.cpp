@@ -486,7 +486,7 @@ namespace NekoGui {
                     } else if (item.startsWith("keyword:")) {
                         domain_keyword += item.replace("keyword:", "").toLower();
                     } else {
-                        domain_full += item.toLower();
+                        domain_subdomain += item.toLower();
                     }
                 }
             }
