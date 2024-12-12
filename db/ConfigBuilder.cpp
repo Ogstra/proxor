@@ -537,7 +537,7 @@ namespace NekoGui {
         }
         dnsRules.append(QJsonObject{
             {"outbound", "any"},
-            {"server", "direct"},
+            {"server", "dns-direct"},
         });
 
         // block
