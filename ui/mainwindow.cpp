@@ -49,6 +49,7 @@
 #include <QMessageBox>
 #include <QDir>
 #include <QFileInfo>
+#include <QPainter>
 
 namespace {
 class CenteredCheckBoxDelegate final : public QStyledItemDelegate {
@@ -108,6 +109,19 @@ public:
         return model->setData(index, currentState == Qt::Checked ? Qt::Unchecked : Qt::Checked, Qt::CheckStateRole);
     }
 };
+
+QIcon makeToggleProxyIcon(const QColor &color) {
+    QPixmap pixmap(24, 24);
+    pixmap.fill(Qt::transparent);
+
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(QPen(color.darker(140), 1.5));
+    painter.setBrush(color);
+    painter.drawEllipse(QRectF(3, 3, 18, 18));
+
+    return QIcon(pixmap);
+}
 }
 
 void UI_InitMainWindow() {
@@ -163,6 +177,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->toolButton_server->setMenu(ui->menu_server);
     ui->menubar->setVisible(false);
     ui->toolButton_toggle_proxy->setText(tr("Start"));
+    ui->toolButton_toggle_proxy->setIcon(makeToggleProxyIcon(QColor(52, 199, 89)));
     ui->toolButton_toggle_proxy->setMinimumWidth(ui->toolButton_toggle_proxy->sizeHint().width());
     ui->toolButton_toggle_proxy->setMaximumWidth(ui->toolButton_toggle_proxy->sizeHint().width());
     connect(ui->toolButton_update, &QToolButton::clicked, this, [=] { runOnNewThread([=] { CheckUpdate(); }); });
@@ -920,6 +935,8 @@ void MainWindow::refresh_status(const QString &traffic_update) {
     ui->checkBox_VPN->setChecked(NekoGui::dataStore->spmode_vpn);
     ui->checkBox_SystemProxy->setChecked(NekoGui::dataStore->spmode_system_proxy);
     ui->toolButton_toggle_proxy->setText(running == nullptr ? tr("Start") : tr("Stop"));
+    ui->toolButton_toggle_proxy->setIcon(running == nullptr ? makeToggleProxyIcon(QColor(52, 199, 89))
+                                                            : makeToggleProxyIcon(QColor(255, 59, 48)));
     if (select_mode) {
         ui->label_running->setText(tr("Select") + " *");
         ui->label_running->setToolTip(tr("Select mode, double-click or press Enter to select a profile, press ESC to exit."));
