@@ -2,6 +2,19 @@ package grpc_server
 
 import "testing"
 
+func TestParseReleaseVersion(t *testing.T) {
+	version, ok := parseReleaseVersion("nekoray-4.0.3-2026-03-22-windows64.zip")
+	if !ok {
+		t.Fatal("expected version to parse")
+	}
+	if version.major != 4 || version.minor != 0 || version.patch != 3 {
+		t.Fatalf("unexpected version components: %+v", version)
+	}
+	if got := version.date.Format("2006-01-02"); got != "2026-03-22" {
+		t.Fatalf("unexpected parsed date: %s", got)
+	}
+}
+
 func TestUpdateArchiveSuffixes(t *testing.T) {
 	tests := []struct {
 		goos     string
@@ -94,6 +107,59 @@ func TestMatchingReleaseAssetFindsNewStableRelease(t *testing.T) {
 	}
 	if asset.Name != "nekoray-4.0.2-2026-03-23-windows64.zip" {
 		t.Fatalf("unexpected asset: %s", asset.Name)
+	}
+}
+
+func TestMatchingReleaseAssetNeverDowngradesWhenOlderReleaseAppearsFirst(t *testing.T) {
+	releases := []githubRelease{
+		{
+			TagName: "nekoray-4.0.2-2026-03-22",
+			Assets: []githubReleaseAsset{
+				{Name: "nekoray-4.0.2-2026-03-22-windows64.zip", BrowserDownloadURL: "https://example.com/402.zip"},
+			},
+		},
+		{
+			TagName: "nekoray-4.0.3-2026-03-22",
+			Assets: []githubReleaseAsset{
+				{Name: "nekoray-4.0.3-2026-03-22-windows64.zip", BrowserDownloadURL: "https://example.com/403.zip"},
+			},
+		},
+	}
+
+	release, asset, selection := matchingReleaseAsset(releases, "nekoray-4.0.3-2026-03-22", []string{"windows64.zip"}, false)
+	if release != nil || asset != nil || selection != updateSelectionCurrent {
+		t.Fatalf("expected current-version match instead of downgrade, got release=%v asset=%v selection=%v", release, asset, selection)
+	}
+}
+
+func TestMatchingReleaseAssetChoosesHighestCompatibleVersion(t *testing.T) {
+	releases := []githubRelease{
+		{
+			TagName: "nekoray-4.0.2-2026-03-22",
+			Assets: []githubReleaseAsset{
+				{Name: "nekoray-4.0.2-2026-03-22-windows64.zip", BrowserDownloadURL: "https://example.com/402.zip"},
+			},
+		},
+		{
+			TagName: "nekoray-4.0.4-2026-03-25",
+			Assets: []githubReleaseAsset{
+				{Name: "nekoray-4.0.4-2026-03-25-windows64.zip", BrowserDownloadURL: "https://example.com/404.zip"},
+			},
+		},
+		{
+			TagName: "nekoray-4.0.3-2026-03-24",
+			Assets: []githubReleaseAsset{
+				{Name: "nekoray-4.0.3-2026-03-24-windows64.zip", BrowserDownloadURL: "https://example.com/403.zip"},
+			},
+		},
+	}
+
+	release, asset, selection := matchingReleaseAsset(releases, "nekoray-4.0.1-2026-03-22", []string{"windows64.zip"}, false)
+	if release == nil || asset == nil || selection != updateSelectionAvailable {
+		t.Fatalf("expected an update candidate")
+	}
+	if release.TagName != "nekoray-4.0.4-2026-03-25" || asset.Name != "nekoray-4.0.4-2026-03-25-windows64.zip" {
+		t.Fatalf("expected highest compatible release, got release=%v asset=%v", release.TagName, asset.Name)
 	}
 }
 
