@@ -487,7 +487,7 @@ void MainWindow::neko_stop(bool crash, bool sem) {
     });
 }
 
-void MainWindow::CheckUpdate() {
+void MainWindow::CheckUpdate(bool silent) {
     // on new thread...
 #ifndef NKR_NO_GRPC
     bool ok;
@@ -499,6 +499,7 @@ void MainWindow::CheckUpdate() {
 
     auto err = response.error();
     if (!err.empty()) {
+        if (silent) return;
         runOnUiThread([=] {
             MessageBoxWarning(QObject::tr("Update"), err.c_str());
         });
@@ -506,6 +507,7 @@ void MainWindow::CheckUpdate() {
     }
 
     if (response.download_url().empty()) {
+        if (silent) return;
         runOnUiThread([=] {
             MessageBoxInfo(QObject::tr("Check for Updates"), QObject::tr("You are already up to date."));
         });

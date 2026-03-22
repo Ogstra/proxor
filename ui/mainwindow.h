@@ -198,7 +198,7 @@ private:
 
     static void stop_core_daemon();
 
-    void CheckUpdate();
+    void CheckUpdate(bool silent = false);
 
 protected:
     bool eventFilter(QObject *obj, QEvent *event) override;
