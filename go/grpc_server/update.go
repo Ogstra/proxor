@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -47,6 +49,15 @@ const (
 	updateSelectionNoCompatible
 )
 
+type releaseVersion struct {
+	major int
+	minor int
+	patch int
+	date  time.Time
+}
+
+var releaseVersionPattern = regexp.MustCompile(`(\d+)\.(\d+)\.(\d+)-(\d{4})-(\d{2})-(\d{2})`)
+
 func updateArchiveSuffixes(goos, goarch string) ([]string, error) {
 	switch {
 	case goos == "windows" && goarch == "amd64":
@@ -62,23 +73,116 @@ func updateArchiveSuffixes(goos, goarch string) ([]string, error) {
 	}
 }
 
+func parseReleaseVersion(raw string) (releaseVersion, bool) {
+	match := releaseVersionPattern.FindStringSubmatch(raw)
+	if len(match) != 7 {
+		return releaseVersion{}, false
+	}
+
+	major, err := strconv.Atoi(match[1])
+	if err != nil {
+		return releaseVersion{}, false
+	}
+	minor, err := strconv.Atoi(match[2])
+	if err != nil {
+		return releaseVersion{}, false
+	}
+	patch, err := strconv.Atoi(match[3])
+	if err != nil {
+		return releaseVersion{}, false
+	}
+
+	dateValue, err := time.Parse("2006-01-02", fmt.Sprintf("%s-%s-%s", match[4], match[5], match[6]))
+	if err != nil {
+		return releaseVersion{}, false
+	}
+
+	return releaseVersion{
+		major: major,
+		minor: minor,
+		patch: patch,
+		date:  dateValue,
+	}, true
+}
+
+func compareReleaseVersions(left, right releaseVersion) int {
+	switch {
+	case left.major != right.major:
+		return left.major - right.major
+	case left.minor != right.minor:
+		return left.minor - right.minor
+	case left.patch != right.patch:
+		return left.patch - right.patch
+	case left.date.Before(right.date):
+		return -1
+	case left.date.After(right.date):
+		return 1
+	default:
+		return 0
+	}
+}
+
+func releaseAssetVersion(release githubRelease, asset githubReleaseAsset) (releaseVersion, bool) {
+	if version, ok := parseReleaseVersion(asset.Name); ok {
+		return version, true
+	}
+	return parseReleaseVersion(release.TagName)
+}
+
 func matchingReleaseAsset(releases []githubRelease, currentVersion string, suffixes []string, includePrerelease bool) (*githubRelease, *githubReleaseAsset, updateSelection) {
+	currentParsed, hasCurrentVersion := parseReleaseVersion(currentVersion)
+	var bestRelease *githubRelease
+	var bestAsset *githubReleaseAsset
+	var bestVersion releaseVersion
+
 	for _, release := range releases {
 		if release.Prerelease && !includePrerelease {
 			continue
 		}
 		for _, asset := range release.Assets {
 			for _, suffix := range suffixes {
-				if strings.HasSuffix(asset.Name, suffix) {
-					if strings.Contains(asset.Name, currentVersion) || release.TagName == currentVersion {
-						return nil, nil, updateSelectionCurrent
+				if !strings.HasSuffix(asset.Name, suffix) {
+					continue
+				}
+				if strings.Contains(asset.Name, currentVersion) || release.TagName == currentVersion {
+					return nil, nil, updateSelectionCurrent
+				}
+
+				if !hasCurrentVersion {
+					if bestRelease == nil {
+						releaseCopy := release
+						assetCopy := asset
+						bestRelease = &releaseCopy
+						bestAsset = &assetCopy
 					}
-					releaseCopy := release
-					assetCopy := asset
-					return &releaseCopy, &assetCopy, updateSelectionAvailable
+					continue
+				}
+
+				candidateVersion, ok := releaseAssetVersion(release, asset)
+				if !ok {
+					continue
+				}
+
+				switch compareReleaseVersions(candidateVersion, currentParsed) {
+				case 0:
+					return nil, nil, updateSelectionCurrent
+				case -1:
+					continue
+				default:
+					if bestRelease == nil || compareReleaseVersions(candidateVersion, bestVersion) > 0 {
+						releaseCopy := release
+						assetCopy := asset
+						bestRelease = &releaseCopy
+						bestAsset = &assetCopy
+						bestVersion = candidateVersion
+					}
 				}
 			}
 		}
+	}
+
+	if bestRelease != nil && bestAsset != nil {
+		return bestRelease, bestAsset, updateSelectionAvailable
 	}
 	return nil, nil, updateSelectionNoCompatible
 }
