@@ -7,10 +7,12 @@ import (
 	"os/signal"
 	"os/user"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"syscall"
 
 	box "github.com/sagernet/sing-box"
+	"github.com/sagernet/sing-box/include"
 	boxlog "github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -27,7 +29,7 @@ func SetDisableColor(value bool) {
 }
 
 func SetLogWriter(writer io.Writer) {
-	if writer == nil {
+	if isNilWriter(writer) {
 		platformWriter = nil
 		return
 	}
@@ -228,7 +230,7 @@ func baseContext() context.Context {
 	if sudoUID > 0 && sudoGID > 0 {
 		ctx = filemanager.WithDefault(ctx, "", "", sudoUID, sudoGID)
 	}
-	return ctx
+	return include.Context(ctx)
 }
 
 type stdPlatformWriter struct {
@@ -240,5 +242,21 @@ func (w stdPlatformWriter) DisableColors() bool {
 }
 
 func (w stdPlatformWriter) WriteMessage(level boxlog.Level, message string) {
+	if isNilWriter(w.writer) {
+		return
+	}
 	_, _ = io.WriteString(w.writer, message+"\n")
+}
+
+func isNilWriter(writer io.Writer) bool {
+	if writer == nil {
+		return true
+	}
+	value := reflect.ValueOf(writer)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
 }

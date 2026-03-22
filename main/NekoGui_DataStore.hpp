@@ -16,7 +16,7 @@ namespace NekoGui {
         // DNS
         QString remote_dns = "https://dns.google/dns-query";
         QString remote_dns_strategy = "";
-        QString direct_dns = "https://doh.pub/dns-query";
+        QString direct_dns = "local";
         QString direct_dns_strategy = "";
         bool dns_routing = true;
         bool use_dns_object = false;
@@ -128,7 +128,7 @@ namespace NekoGui {
         QString utlsFingerprint = "";
 
         // Remember
-        QStringList remember_spmode = {};
+        QStringList remember_spmode = {"vpn"};
         int remember_id = -1919;
         bool remember_enable = false;
 

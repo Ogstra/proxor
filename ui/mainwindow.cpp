@@ -37,6 +37,8 @@
 
 #include <QClipboard>
 #include <QLabel>
+#include <QSignalBlocker>
+#include <QStyledItemDelegate>
 #include <QTextBlock>
 #include <QScrollBar>
 #include <QScreen>
@@ -47,6 +49,66 @@
 #include <QMessageBox>
 #include <QDir>
 #include <QFileInfo>
+
+namespace {
+class CenteredCheckBoxDelegate final : public QStyledItemDelegate {
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+
+    void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override {
+        QStyleOptionViewItem viewOption(option);
+        initStyleOption(&viewOption, index);
+        viewOption.text.clear();
+
+        auto *style = viewOption.widget ? viewOption.widget->style() : QApplication::style();
+        style->drawPrimitive(QStyle::PE_PanelItemViewItem, &viewOption, painter, viewOption.widget);
+
+        if (!(index.flags() & Qt::ItemIsUserCheckable)) return;
+
+        auto state = static_cast<Qt::CheckState>(index.data(Qt::CheckStateRole).toInt());
+        if (state == Qt::Unchecked && !index.data(Qt::CheckStateRole).isValid()) return;
+
+        QStyleOptionButton checkbox;
+        checkbox.state |= QStyle::State_Enabled;
+        if (option.state & QStyle::State_MouseOver) checkbox.state |= QStyle::State_MouseOver;
+        if (option.state & QStyle::State_HasFocus) checkbox.state |= QStyle::State_HasFocus;
+        if (state == Qt::Checked) {
+            checkbox.state |= QStyle::State_On;
+        } else if (state == Qt::PartiallyChecked) {
+            checkbox.state |= QStyle::State_NoChange;
+        } else {
+            checkbox.state |= QStyle::State_Off;
+        }
+
+        auto indicatorSize = style->sizeFromContents(QStyle::CT_CheckBox, &checkbox, QSize(), viewOption.widget);
+        checkbox.rect = QStyle::alignedRect(
+            option.direction,
+            Qt::AlignCenter,
+            indicatorSize,
+            option.rect
+        );
+        style->drawControl(QStyle::CE_CheckBox, &checkbox, painter, viewOption.widget);
+    }
+
+    bool editorEvent(QEvent *event, QAbstractItemModel *model, const QStyleOptionViewItem &option, const QModelIndex &index) override {
+        if (!(index.flags() & Qt::ItemIsUserCheckable)) return false;
+
+        if (event->type() == QEvent::MouseButtonRelease) {
+            auto *mouseEvent = static_cast<QMouseEvent *>(event);
+            QStyleOptionButton checkbox;
+            auto *style = option.widget ? option.widget->style() : QApplication::style();
+            auto indicatorSize = style->sizeFromContents(QStyle::CT_CheckBox, &checkbox, QSize(), option.widget);
+            auto indicatorRect = QStyle::alignedRect(option.direction, Qt::AlignCenter, indicatorSize, option.rect);
+            if (!indicatorRect.contains(mouseEvent->pos())) return false;
+        } else if (event->type() != QEvent::KeyPress) {
+            return false;
+        }
+
+        auto currentState = static_cast<Qt::CheckState>(index.data(Qt::CheckStateRole).toInt());
+        return model->setData(index, currentState == Qt::Checked ? Qt::Unchecked : Qt::Checked, Qt::CheckStateRole);
+    }
+};
+}
 
 void UI_InitMainWindow() {
     mainwindow = new MainWindow;
@@ -100,8 +162,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->toolButton_preferences->setMenu(ui->menu_preferences);
     ui->toolButton_server->setMenu(ui->menu_server);
     ui->menubar->setVisible(false);
-    connect(ui->toolButton_document, &QToolButton::clicked, this, [=] { QDesktopServices::openUrl(QUrl("https://matsuridayo.github.io/")); });
-    connect(ui->toolButton_ads, &QToolButton::clicked, this, [=] { QDesktopServices::openUrl(QUrl("https://neko-box.pages.dev/喵")); });
+    ui->toolButton_toggle_proxy->setText(tr("Start"));
+    ui->toolButton_toggle_proxy->setMinimumWidth(ui->toolButton_toggle_proxy->sizeHint().width());
+    ui->toolButton_toggle_proxy->setMaximumWidth(ui->toolButton_toggle_proxy->sizeHint().width());
     connect(ui->toolButton_update, &QToolButton::clicked, this, [=] { runOnNewThread([=] { CheckUpdate(); }); });
     connect(ui->toolButton_url_test, &QToolButton::clicked, this, [=] { speedtest_current_group(1, true); });
 
@@ -146,6 +209,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         group->Save();
     };
     ui->proxyListTable->refresh_data = [=](int id) { refresh_proxy_list_impl_refresh_data(id); };
+    ui->proxyListTable->setItemDelegateForColumn(0, new CenteredCheckBoxDelegate(ui->proxyListTable));
     if (auto button = ui->proxyListTable->findChild<QAbstractButton *>(QString(), Qt::FindDirectChildrenOnly)) {
         // Corner Button
         connect(button, &QAbstractButton::clicked, this, [=] { refresh_proxy_list_impl(-1, {GroupSortMethod::ById}); });
@@ -162,12 +226,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         action.save_sort = true;
         // 表头
         if (logicalIndex == 0) {
-            action.method = GroupSortMethod::ByType;
+            return;
         } else if (logicalIndex == 1) {
-            action.method = GroupSortMethod::ByAddress;
-        } else if (logicalIndex == 2) {
             action.method = GroupSortMethod::ByName;
+        } else if (logicalIndex == 2) {
+            action.method = GroupSortMethod::ByType;
         } else if (logicalIndex == 3) {
+            action.method = GroupSortMethod::ByAddress;
+        } else if (logicalIndex == 4) {
             action.method = GroupSortMethod::ByLatency;
         } else {
             return;
@@ -410,15 +476,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         },
         DS_cores);
 
-    // Remember system proxy
-    if (NekoGui::dataStore->remember_enable || NekoGui::dataStore->flag_restart_tun_on) {
-        if (NekoGui::dataStore->remember_spmode.contains("system_proxy")) {
-            neko_set_spmode_system_proxy(true, false);
-        }
-        if (NekoGui::dataStore->remember_spmode.contains("vpn") || NekoGui::dataStore->flag_restart_tun_on) {
-            neko_set_spmode_vpn(true, false);
-        }
-    }
+    const bool restore_system_proxy = NekoGui::dataStore->remember_spmode.contains("system_proxy");
+    const bool restore_vpn = NekoGui::dataStore->remember_spmode.contains("vpn") || NekoGui::dataStore->flag_restart_tun_on;
 
     connect(qApp, &QGuiApplication::commitDataRequest, this, &MainWindow::on_commitDataRequest);
 
@@ -439,6 +498,19 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     TM_auto_update_subsctiption_Reset_Minute(NekoGui::dataStore->sub_auto_update);
 
     if (!NekoGui::dataStore->flag_tray) show();
+
+    // Restore spmode after the window has entered the event loop so prompts
+    // like the Tun admin warning are shown the same way as manual activation.
+    if (NekoGui::dataStore->remember_enable || NekoGui::dataStore->flag_restart_tun_on || restore_vpn) {
+        setTimeout([=] {
+            if (restore_system_proxy) {
+                neko_set_spmode_system_proxy(true, false);
+            }
+            if (restore_vpn) {
+                neko_set_spmode_vpn(true, false);
+            }
+        }, this, 0);
+    }
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {
@@ -475,6 +547,7 @@ void MainWindow::on_tabWidget_currentChanged(int index) {
 void MainWindow::show_group(int gid) {
     if (NekoGui::dataStore->refreshing_group) return;
     NekoGui::dataStore->refreshing_group = true;
+    constexpr int toggleColumnWidth = 28;
 
     auto group = NekoGui::profileManager->GetGroup(gid);
     if (group == nullptr) {
@@ -491,18 +564,22 @@ void MainWindow::show_group(int gid) {
 
     // 列宽是否可调
     if (group->manually_column_width) {
-        for (int i = 0; i <= 4; i++) {
+        ui->proxyListTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
+        ui->proxyListTable->horizontalHeader()->resizeSection(0, toggleColumnWidth);
+        for (int i = 1; i <= 5; i++) {
             ui->proxyListTable->horizontalHeader()->setSectionResizeMode(i, QHeaderView::Interactive);
             auto size = group->column_width.value(i);
             if (size <= 0) size = ui->proxyListTable->horizontalHeader()->defaultSectionSize();
             ui->proxyListTable->horizontalHeader()->resizeSection(i, size);
         }
     } else {
-        ui->proxyListTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+        ui->proxyListTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
+        ui->proxyListTable->horizontalHeader()->resizeSection(0, toggleColumnWidth);
         ui->proxyListTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
-        ui->proxyListTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
-        ui->proxyListTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+        ui->proxyListTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+        ui->proxyListTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
         ui->proxyListTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
+        ui->proxyListTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::ResizeToContents);
     }
 
     // show proxies
@@ -789,7 +866,7 @@ void MainWindow::neko_set_spmode_vpn(bool enable, bool save) {
 
     if (save) {
         NekoGui::dataStore->remember_spmode.removeAll("vpn");
-        if (enable && NekoGui::dataStore->remember_enable) {
+        if (enable) {
             NekoGui::dataStore->remember_spmode.append("vpn");
         }
         NekoGui::dataStore->Save();
@@ -842,6 +919,7 @@ void MainWindow::refresh_status(const QString &traffic_update) {
     //
     ui->checkBox_VPN->setChecked(NekoGui::dataStore->spmode_vpn);
     ui->checkBox_SystemProxy->setChecked(NekoGui::dataStore->spmode_system_proxy);
+    ui->toolButton_toggle_proxy->setText(running == nullptr ? tr("Start") : tr("Stop"));
     if (select_mode) {
         ui->label_running->setText(tr("Select") + " *");
         ui->label_running->setToolTip(tr("Select mode, double-click or press Enter to select a profile, press ESC to exit."));
@@ -1025,6 +1103,9 @@ void MainWindow::refresh_proxy_list_impl(const int &id, GroupSortAction groupSor
 }
 
 void MainWindow::refresh_proxy_list_impl_refresh_data(const int &id) {
+    auto group = NekoGui::profileManager->CurrentGroup();
+    auto toggleProxyIds = get_toggle_proxy_ids(group);
+    QSignalBlocker blocker(ui->proxyListTable);
     // 绘制或更新item(s)
     for (int row = 0; row < ui->proxyListTable->rowCount(); row++) {
         auto profileId = ui->proxyListTable->row2Id[row];
@@ -1041,25 +1122,32 @@ void MainWindow::refresh_proxy_list_impl_refresh_data(const int &id) {
         check->setText(isRunning ? "✓" : Int2String(row + 1));
         ui->proxyListTable->setVerticalHeaderItem(row, check);
 
-        // C0: Type
+        // C0: Toggle
         auto f = f0->clone();
-        f->setText(profile->bean->DisplayType());
+        f->setFlags(f->flags() | Qt::ItemIsUserCheckable);
+        f->setCheckState(toggleProxyIds.contains(profileId) ? Qt::Checked : Qt::Unchecked);
         if (isRunning) f->setForeground(palette().link());
         ui->proxyListTable->setItem(row, 0, f);
 
-        // C1: Address+Port
-        f = f0->clone();
-        f->setText(profile->bean->DisplayAddress());
-        if (isRunning) f->setForeground(palette().link());
-        ui->proxyListTable->setItem(row, 1, f);
-
-        // C2: Name
+        // C1: Name
         f = f0->clone();
         f->setText(profile->bean->name);
         if (isRunning) f->setForeground(palette().link());
+        ui->proxyListTable->setItem(row, 1, f);
+
+        // C2: Type
+        f = f0->clone();
+        f->setText(profile->bean->DisplayType());
+        if (isRunning) f->setForeground(palette().link());
         ui->proxyListTable->setItem(row, 2, f);
 
-        // C3: Test Result
+        // C3: Address+Port
+        f = f0->clone();
+        f->setText(profile->bean->DisplayAddress());
+        if (isRunning) f->setForeground(palette().link());
+        ui->proxyListTable->setItem(row, 3, f);
+
+        // C4: Test Result
         f = f0->clone();
         if (profile->full_test_report.isEmpty()) {
             auto color = profile->DisplayLatencyColor();
@@ -1068,18 +1156,19 @@ void MainWindow::refresh_proxy_list_impl_refresh_data(const int &id) {
         } else {
             f->setText(profile->full_test_report);
         }
-        ui->proxyListTable->setItem(row, 3, f);
+        ui->proxyListTable->setItem(row, 4, f);
 
-        // C4: Traffic
+        // C5: Traffic
         f = f0->clone();
         f->setText(profile->traffic_data->DisplayTraffic());
-        ui->proxyListTable->setItem(row, 4, f);
+        ui->proxyListTable->setItem(row, 5, f);
     }
 }
 
 // table菜单相关
 
 void MainWindow::on_proxyListTable_itemDoubleClicked(QTableWidgetItem *item) {
+    if (item == nullptr || item->column() == 0) return;
     auto id = item->data(114514).toInt();
     if (select_mode) {
         emit profile_selected(id);
@@ -1089,6 +1178,24 @@ void MainWindow::on_proxyListTable_itemDoubleClicked(QTableWidgetItem *item) {
     }
     auto dialog = new DialogEditProfile("", id, this);
     connect(dialog, &QDialog::finished, dialog, &QDialog::deleteLater);
+}
+
+void MainWindow::on_proxyListTable_itemChanged(QTableWidgetItem *item) {
+    if (item == nullptr || item->column() != 0) return;
+
+    auto group = NekoGui::profileManager->CurrentGroup();
+    if (group == nullptr) return;
+
+    auto profileId = item->data(114514).toInt();
+    auto toggleProxyIds = group->toggle_proxy_ids;
+    toggleProxyIds.removeAll(profileId);
+    if (item->checkState() == Qt::Checked) {
+        toggleProxyIds << profileId;
+    }
+    if (toggleProxyIds != group->toggle_proxy_ids) {
+        group->toggle_proxy_ids = toggleProxyIds;
+        group->Save();
+    }
 }
 
 void MainWindow::on_menu_add_from_input_triggered() {
@@ -1470,6 +1577,36 @@ QList<std::shared_ptr<NekoGui::ProxyEntity>> MainWindow::get_selected_or_group()
         profiles = NekoGui::profileManager->CurrentGroup()->ProfilesWithOrder();
     }
     return profiles;
+}
+
+QList<int> MainWindow::get_toggle_proxy_ids(const std::shared_ptr<NekoGui::Group> &group) const {
+    if (group == nullptr) return {};
+
+    QList<int> validIds;
+    for (const auto &profile: group->ProfilesWithOrder()) {
+        if (group->toggle_proxy_ids.contains(profile->id)) {
+            validIds << profile->id;
+        }
+    }
+    return validIds;
+}
+
+void MainWindow::on_toolButton_toggle_proxy_clicked() {
+    if (NekoGui::dataStore->started_id >= 0) {
+        neko_stop();
+        return;
+    }
+
+    auto group = NekoGui::profileManager->CurrentGroup();
+    if (group == nullptr || group->archive) return;
+
+    auto toggleProxyIds = get_toggle_proxy_ids(group);
+    if (toggleProxyIds.isEmpty()) {
+        MessageBoxWarning(software_name, tr("Select at least one proxy in the Toggle column first."));
+        return;
+    }
+
+    neko_start(toggleProxyIds.first());
 }
 
 void MainWindow::keyPressEvent(QKeyEvent *event) {

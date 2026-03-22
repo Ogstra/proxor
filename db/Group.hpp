@@ -19,6 +19,7 @@ namespace NekoGui {
         bool manually_column_width = false;
         QList<int> column_width;
         QList<int> order;
+        QList<int> toggle_proxy_ids;
 
         Group();
 

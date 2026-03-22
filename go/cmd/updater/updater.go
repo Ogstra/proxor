@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -11,71 +13,124 @@ import (
 	"github.com/codeclysm/extract"
 )
 
-func Updater() {
-	pre_cleanup := func() {
-		if runtime.GOOS == "linux" {
-			os.RemoveAll("./usr")
-		}
-		os.RemoveAll("./nekoray_update")
-	}
+const (
+	updateExtractDir = "./update-package"
+)
 
-	// find update package
-	var updatePackagePath string
-	if len(os.Args) == 2 && Exist(os.Args[1]) {
-		updatePackagePath = os.Args[1]
-	} else if Exist("./nekoray.zip") {
-		updatePackagePath = "./nekoray.zip"
-	} else if Exist("./nekoray.tar.gz") {
-		updatePackagePath = "./nekoray.tar.gz"
-	} else {
-		log.Fatalln("no update")
+func Updater() {
+	updatePackagePath, err := findUpdatePackage()
+	if err != nil {
+		log.Fatalln(err.Error())
 	}
 	log.Println("updating from", updatePackagePath)
 
-	// extract update package
-	if strings.HasSuffix(updatePackagePath, ".zip") {
-		pre_cleanup()
-		f, err := os.Open(updatePackagePath)
-		if err != nil {
-			log.Fatalln(err.Error())
-		}
-		err = extract.Zip(context.Background(), f, "./nekoray_update", nil)
-		if err != nil {
-			log.Fatalln(err.Error())
-		}
-		f.Close()
-	} else if strings.HasSuffix(updatePackagePath, ".tar.gz") {
-		pre_cleanup()
-		f, err := os.Open(updatePackagePath)
-		if err != nil {
-			log.Fatalln(err.Error())
-		}
-		err = extract.Gz(context.Background(), f, "./nekoray_update", nil)
-		if err != nil {
-			log.Fatalln(err.Error())
-		}
-		f.Close()
+	preCleanup()
+	if err := extractUpdatePackage(updatePackagePath); err != nil {
+		failUpdate(err)
 	}
 
-	// remove old file
+	payloadRoot, err := findPayloadRoot(updateExtractDir)
+	if err != nil {
+		failUpdate(err)
+	}
+
 	removeAll("./*.dll")
 	removeAll("./*.dmp")
 
-	// update move
-	err := Mv("./nekoray_update/nekoray", "./")
-	if err != nil {
-		MessageBoxPlain("NekoGui Updater", "Update failed. Please close the running instance and run the updater again.\n\n"+err.Error())
-		log.Fatalln(err.Error())
+	if err := moveReplacing(payloadRoot, "."); err != nil {
+		failUpdate(fmt.Errorf("failed to install update: %w", err))
 	}
 
-	os.RemoveAll("./nekoray_update")
-	os.RemoveAll("./nekoray.zip")
-	os.RemoveAll("./nekoray.tar.gz")
+	postCleanup()
 
-	// nekoray -> nekobox
+	// Remove stale legacy names left by old packages.
 	os.Remove("./nekoray.exe")
 	os.Remove("./nekoray.png")
 	os.Remove("./nekoray_core.exe")
+}
+
+func failUpdate(err error) {
+	MessageBoxPlain("NekoBox Updater", "The update could not be installed.\n\nPlease close any running NekoBox processes and try again.\n\n"+err.Error())
+	log.Fatalln(err.Error())
+}
+
+func preCleanup() {
+	if runtime.GOOS == "linux" {
+		os.RemoveAll("./usr")
+	}
+	os.RemoveAll(updateExtractDir)
+}
+
+func postCleanup() {
+	os.RemoveAll(updateExtractDir)
+	os.RemoveAll("./update-package.zip")
+	os.RemoveAll("./update-package.tar.gz")
+	os.RemoveAll("./nekoray.zip")
+	os.RemoveAll("./nekoray.tar.gz")
+}
+
+func findUpdatePackage() (string, error) {
+	if len(os.Args) == 2 && Exist(os.Args[1]) {
+		return os.Args[1], nil
+	}
+
+	candidates := []string{
+		"./update-package.zip",
+		"./update-package.tar.gz",
+		"./nekoray.zip",
+		"./nekoray.tar.gz",
+	}
+	for _, candidate := range candidates {
+		if Exist(candidate) {
+			return candidate, nil
+		}
+	}
+	return "", errors.New("no update package was found")
+}
+
+func extractUpdatePackage(updatePackagePath string) error {
+	f, err := os.Open(updatePackagePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	switch {
+	case strings.HasSuffix(updatePackagePath, ".zip"):
+		return extract.Zip(context.Background(), f, updateExtractDir, nil)
+	case strings.HasSuffix(updatePackagePath, ".tar.gz"):
+		return extract.Gz(context.Background(), f, updateExtractDir, nil)
+	default:
+		return fmt.Errorf("unsupported update package format: %s", updatePackagePath)
+	}
+}
+
+func findPayloadRoot(base string) (string, error) {
+	legacyRoot := filepath.Join(base, "nekoray")
+	if info, err := os.Stat(legacyRoot); err == nil && info.IsDir() {
+		return legacyRoot, nil
+	}
+
+	entries, err := os.ReadDir(base)
+	if err != nil {
+		return "", err
+	}
+
+	filtered := make([]os.DirEntry, 0, len(entries))
+	for _, entry := range entries {
+		if entry.Name() == "__MACOSX" {
+			continue
+		}
+		filtered = append(filtered, entry)
+	}
+
+	if len(filtered) == 1 && filtered[0].IsDir() {
+		return filepath.Join(base, filtered[0].Name()), nil
+	}
+	if len(filtered) == 0 {
+		return "", errors.New("the update package is empty")
+	}
+	return base, nil
 }
 
 func Exist(path string) bool {
@@ -83,47 +138,48 @@ func Exist(path string) bool {
 	return err == nil
 }
 
-func FindExist(paths []string) string {
-	for _, path := range paths {
-		if Exist(path) {
-			return path
-		}
-	}
-	return ""
-}
-
-func Mv(src, dst string) error {
-	s, err := os.Stat(src)
+func moveReplacing(src, dst string) error {
+	info, err := os.Stat(src)
 	if err != nil {
 		return err
 	}
-	if s.IsDir() {
-		es, err := os.ReadDir(src)
+
+	if info.IsDir() {
+		entries, err := os.ReadDir(src)
 		if err != nil {
 			return err
 		}
-		for _, e := range es {
-			err = Mv(filepath.Join(src, e.Name()), filepath.Join(dst, e.Name()))
-			if err != nil {
+		for _, entry := range entries {
+			if err := moveReplacing(filepath.Join(src, entry.Name()), filepath.Join(dst, entry.Name())); err != nil {
 				return err
 			}
 		}
-	} else {
-		err = os.MkdirAll(filepath.Dir(dst), 0755)
-		if err != nil {
-			return err
-		}
-		err = os.Rename(src, dst)
-		if err != nil {
-			return err
-		}
+		return os.RemoveAll(src)
 	}
-	return nil
+
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return err
+	}
+	if err := os.RemoveAll(dst); err != nil {
+		return err
+	}
+	if err := os.Rename(src, dst); err == nil {
+		return nil
+	}
+
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(dst, data, info.Mode()); err != nil {
+		return err
+	}
+	return os.Remove(src)
 }
 
 func removeAll(glob string) {
 	files, _ := filepath.Glob(glob)
 	for _, f := range files {
-		os.Remove(f)
+		os.RemoveAll(f)
 	}
 }
