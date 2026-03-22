@@ -23,4 +23,8 @@ fi
 popd
 
 #### prepare deployment ####
+if [ -d "$DEPLOYMENT/public_res" ]; then
+  cp -r "$DEPLOYMENT/public_res"/. "$DEST"
+fi
+
 cp $BUILD/*.pdb $DEPLOYMENT
