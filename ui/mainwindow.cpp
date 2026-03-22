@@ -37,6 +37,8 @@
 
 #include <QClipboard>
 #include <QLabel>
+#include <QCheckBox>
+#include <QHBoxLayout>
 #include <QSignalBlocker>
 #include <QStyledItemDelegate>
 #include <QTextBlock>
@@ -122,6 +124,24 @@ QIcon makeToggleProxyIcon(const QColor &color) {
 
     return QIcon(pixmap);
 }
+
+QWidget *makeCenteredCheckboxCell(QWidget *parent, bool checked, const std::function<void(bool)> &onToggled) {
+    auto *container = new QWidget(parent);
+    auto *layout = new QHBoxLayout(container);
+    layout->setContentsMargins(6, 0, 6, 0);
+    layout->setSpacing(0);
+    layout->setAlignment(Qt::AlignCenter);
+
+    auto *checkbox = new QCheckBox(container);
+    checkbox->setText({});
+    checkbox->setChecked(checked);
+    layout->addWidget(checkbox, 0, Qt::AlignCenter);
+
+    QObject::connect(checkbox, &QCheckBox::toggled, container, [onToggled](bool enabled) {
+        onToggled(enabled);
+    });
+    return container;
+}
 }
 
 void UI_InitMainWindow() {
@@ -175,11 +195,26 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->toolButton_program->setMenu(ui->menu_program);
     ui->toolButton_preferences->setMenu(ui->menu_preferences);
     ui->toolButton_server->setMenu(ui->menu_server);
+    const QString dropdownButtonStyle =
+        "QToolButton#toolButton_program::menu-indicator,"
+        "QToolButton#toolButton_preferences::menu-indicator,"
+        "QToolButton#toolButton_server::menu-indicator {"
+        "image: none;"
+        "width: 0px;"
+        "height: 0px;"
+        "subcontrol-position: center;"
+        "}";
+    ui->toolButton_program->setStyleSheet(dropdownButtonStyle);
+    ui->toolButton_preferences->setStyleSheet(dropdownButtonStyle);
+    ui->toolButton_server->setStyleSheet(dropdownButtonStyle);
     ui->menubar->setVisible(false);
     ui->toolButton_toggle_proxy->setText(tr("Start"));
     ui->toolButton_toggle_proxy->setIcon(makeToggleProxyIcon(QColor(52, 199, 89)));
-    ui->toolButton_toggle_proxy->setMinimumWidth(ui->toolButton_toggle_proxy->sizeHint().width());
-    ui->toolButton_toggle_proxy->setMaximumWidth(ui->toolButton_toggle_proxy->sizeHint().width());
+    constexpr int toggleButtonSide = 56;
+    ui->toolButton_toggle_proxy->setIconSize(QSize(20, 20));
+    ui->toolButton_toggle_proxy->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+    ui->toolButton_toggle_proxy->setStyleSheet("QToolButton#toolButton_toggle_proxy { padding: 4px; }");
+    ui->toolButton_toggle_proxy->setFixedSize(toggleButtonSide, toggleButtonSide);
     connect(ui->toolButton_update, &QToolButton::clicked, this, [=] { runOnNewThread([=] { CheckUpdate(); }); });
     connect(ui->toolButton_url_test, &QToolButton::clicked, this, [=] { speedtest_current_group(1, true); });
 
@@ -224,7 +259,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         group->Save();
     };
     ui->proxyListTable->refresh_data = [=](int id) { refresh_proxy_list_impl_refresh_data(id); };
-    ui->proxyListTable->setItemDelegateForColumn(0, new CenteredCheckBoxDelegate(ui->proxyListTable));
     if (auto button = ui->proxyListTable->findChild<QAbstractButton *>(QString(), Qt::FindDirectChildrenOnly)) {
         // Corner Button
         connect(button, &QAbstractButton::clicked, this, [=] { refresh_proxy_list_impl(-1, {GroupSortMethod::ById}); });
@@ -562,7 +596,8 @@ void MainWindow::on_tabWidget_currentChanged(int index) {
 void MainWindow::show_group(int gid) {
     if (NekoGui::dataStore->refreshing_group) return;
     NekoGui::dataStore->refreshing_group = true;
-    constexpr int toggleColumnWidth = 28;
+    QCheckBox toggleCheckboxPrototype;
+    const int toggleColumnWidth = toggleCheckboxPrototype.sizeHint().width() + 16;
 
     auto group = NekoGui::profileManager->GetGroup(gid);
     if (group == nullptr) {
@@ -1141,10 +1176,25 @@ void MainWindow::refresh_proxy_list_impl_refresh_data(const int &id) {
 
         // C0: Toggle
         auto f = f0->clone();
-        f->setFlags(f->flags() | Qt::ItemIsUserCheckable);
-        f->setCheckState(toggleProxyIds.contains(profileId) ? Qt::Checked : Qt::Unchecked);
-        if (isRunning) f->setForeground(palette().link());
+        f->setText({});
+        f->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
         ui->proxyListTable->setItem(row, 0, f);
+        ui->proxyListTable->setCellWidget(row, 0, makeCenteredCheckboxCell(
+            ui->proxyListTable,
+            toggleProxyIds.contains(profileId),
+            [profileId](bool enabled) {
+                auto group = NekoGui::profileManager->CurrentGroup();
+                if (group == nullptr) return;
+
+                auto toggleProxyIds = group->toggle_proxy_ids;
+                toggleProxyIds.removeAll(profileId);
+                if (enabled) toggleProxyIds << profileId;
+                if (toggleProxyIds != group->toggle_proxy_ids) {
+                    group->toggle_proxy_ids = toggleProxyIds;
+                    group->Save();
+                }
+            }
+        ));
 
         // C1: Name
         f = f0->clone();
