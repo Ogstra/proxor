@@ -18,12 +18,12 @@ import (
 
 	"github.com/matsuridayo/libneko/neko_common"
 
-	grpc_auth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
+	grpc_auth "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/auth"
 	"google.golang.org/grpc"
 )
 
 type BaseServer struct {
-	gen.LibcoreServiceServer
+	gen.UnimplementedLibcoreServiceServer
 }
 
 func (s *BaseServer) Exit(ctx context.Context, in *gen.EmptyReq) (out *gen.EmptyResp, _ error) {

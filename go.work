@@ -1,0 +1,13 @@
+go 1.26.1
+
+use (
+	./go/cmd/nekobox_core
+	./go/cmd/updater
+	./go/grpc_server
+)
+
+replace github.com/matsuridayo/libneko => ../libneko
+
+replace github.com/sagernet/sing => ./3rdparty/sing
+
+replace github.com/sagernet/sing-box => ../sing-box

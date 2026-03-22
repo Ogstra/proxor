@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -56,7 +55,7 @@ func main() {
 
 func Copy(src string, dst string) {
 	// Read all content of src to data
-	data, _ := ioutil.ReadFile(src)
+	data, _ := os.ReadFile(src)
 	// Write data to dst
-	ioutil.WriteFile(dst, data, 0644)
+	os.WriteFile(dst, data, 0644)
 }
