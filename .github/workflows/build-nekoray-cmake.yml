@@ -169,15 +169,14 @@ jobs:
           cd deployment
           cp -r public_res/* linux64
           cp -r public_res/* windows64
+          rm -rf linux64/config windows64/config
           rm -rf public_res *.pdb
           ####
-          mv linux64 nekoray
-          zip -r $version_standalone-linux64.zip nekoray
-          rm -rf nekoray
+          bash ../libs/package_release.sh linux64 $version_standalone-linux64.zip
+          rm -rf linux64
           ####
-          mv windows64 nekoray
-          zip -r $version_standalone-windows64.zip nekoray
-          rm -rf nekoray
+          bash ../libs/package_release.sh windows64 $version_standalone-windows64.zip
+          rm -rf windows64
       - name: Pack Debian
         run: |
           source libs/env_deploy.sh

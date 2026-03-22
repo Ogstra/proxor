@@ -80,6 +80,7 @@ CMakeLists.txt.user*
 
 # Deploy
 /deployment
+/release-assets
 /neko*.sh
 /qtsdk
 
