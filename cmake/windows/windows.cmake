@@ -18,16 +18,16 @@ if (NOT NKR_VERSION_PATCH)
 endif ()
 generate_product_version(
         QV2RAY_RC
-        ICON "${CMAKE_SOURCE_DIR}/res/nekobox.ico"
-        NAME "nekobox"
-        BUNDLE "nekobox"
+        ICON "${CMAKE_SOURCE_DIR}/res/proxor.ico"
+        NAME "Proxor"
+        BUNDLE "proxor"
         VERSION_MAJOR "${NKR_VERSION_MAJOR}"
         VERSION_MINOR "${NKR_VERSION_MINOR}"
         VERSION_PATCH "${NKR_VERSION_PATCH}"
         VERSION_REVISION 0
-        COMPANY_NAME "nekobox"
-        COMPANY_COPYRIGHT "nekobox"
-        FILE_DESCRIPTION "nekobox"
+        COMPANY_NAME "Proxor"
+        COMPANY_COPYRIGHT "Proxor"
+        FILE_DESCRIPTION "Proxor"
 )
 add_definitions(-DUNICODE -D_UNICODE -DNOMINMAX)
 set(GUI_TYPE WIN32)
