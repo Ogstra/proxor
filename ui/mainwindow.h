@@ -19,6 +19,7 @@
 #include "GroupSort.hpp"
 
 #include "db/ProxyEntity.hpp"
+#include "db/Group.hpp"
 #include "main/GuiUtils.hpp"
 
 #endif
@@ -131,7 +132,11 @@ private slots:
 
     void on_proxyListTable_itemDoubleClicked(QTableWidgetItem *item);
 
+    void on_proxyListTable_itemChanged(QTableWidgetItem *item);
+
     void on_proxyListTable_customContextMenuRequested(const QPoint &pos);
+
+    void on_toolButton_toggle_proxy_clicked();
 
     void on_tabWidget_currentChanged(int index);
 
@@ -164,6 +169,8 @@ private:
     QList<std::shared_ptr<NekoGui::ProxyEntity>> get_now_selected_list();
 
     QList<std::shared_ptr<NekoGui::ProxyEntity>> get_selected_or_group();
+
+    QList<int> get_toggle_proxy_ids(const std::shared_ptr<NekoGui::Group> &group) const;
 
     void dialog_message_impl(const QString &sender, const QString &info);
 

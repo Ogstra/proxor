@@ -505,38 +505,47 @@ void MainWindow::CheckUpdate() {
         return;
     }
 
-    if (response.release_download_url() == nullptr) {
+    if (response.download_url().empty()) {
         runOnUiThread([=] {
-            MessageBoxInfo(QObject::tr("Update"), QObject::tr("No update"));
+            MessageBoxInfo(QObject::tr("Check for Updates"), QObject::tr("You are already up to date."));
         });
         return;
     }
 
     runOnUiThread([=] {
         auto allow_updater = !NekoGui::dataStore->flag_use_appdata;
-        auto note_pre_release = response.is_pre_release() ? " (Pre-release)" : "";
-        QMessageBox box(QMessageBox::Question, QObject::tr("Update") + note_pre_release,
-                        QObject::tr("Update found: %1\nRelease note:\n%2").arg(response.assets_name().c_str(), response.release_note().c_str()));
-        //
-        QAbstractButton *btn1 = nullptr;
-        if (allow_updater) {
-            btn1 = box.addButton(QObject::tr("Update"), QMessageBox::AcceptRole);
+        auto notePreRelease = response.is_pre_release() ? QObject::tr("Prerelease") : QObject::tr("Release");
+        auto releasePageUrl = QUrl(response.release_url().c_str());
+        QString details = QObject::tr("Current version: %1\nAvailable package: %2\nChannel: %3")
+                              .arg(QString(NKR_VERSION), response.assets_name().c_str(), notePreRelease);
+        if (!response.release_note().empty()) {
+            details += QObject::tr("\n\nRelease notes:\n%1").arg(response.release_note().c_str());
         }
-        QAbstractButton *btn2 = box.addButton(QObject::tr("Open in browser"), QMessageBox::AcceptRole);
-        box.addButton(QObject::tr("Close"), QMessageBox::RejectRole);
+        if (!allow_updater) {
+            details += QObject::tr("\n\nAutomatic installation is disabled in appdata mode.");
+        }
+
+        QMessageBox box(QMessageBox::Question, QObject::tr("Update Available"), details, QMessageBox::NoButton, this);
+        QAbstractButton *downloadButton = nullptr;
+        if (allow_updater) {
+            downloadButton = box.addButton(QObject::tr("Download and Restart"), QMessageBox::AcceptRole);
+        }
+        QAbstractButton *openButton = box.addButton(QObject::tr("Open Release Page"), QMessageBox::AcceptRole);
+        box.addButton(QObject::tr("Cancel"), QMessageBox::RejectRole);
         box.exec();
-        //
-        if (btn1 == box.clickedButton() && allow_updater) {
-            // Download Update
+
+        if (downloadButton == box.clickedButton() && allow_updater) {
             runOnNewThread([=] {
                 bool ok2;
                 libcore::UpdateReq request2;
                 request2.set_action(libcore::UpdateAction::Download);
                 auto response2 = NekoGui_rpc::defaultClient->Update(&ok2, request2);
+                if (!ok2) return;
+
                 runOnUiThread([=] {
                     if (response2.error().empty()) {
-                        auto q = QMessageBox::question(nullptr, QObject::tr("Update"),
-                                                       QObject::tr("Update is ready, restart to install?"));
+                        auto q = QMessageBox::question(nullptr, QObject::tr("Update Ready"),
+                                                       QObject::tr("The update package has been downloaded. Restart now to install it?"));
                         if (q == QMessageBox::StandardButton::Yes) {
                             this->exit_reason = 1;
                             on_menu_exit_triggered();
@@ -546,8 +555,8 @@ void MainWindow::CheckUpdate() {
                     }
                 });
             });
-        } else if (btn2 == box.clickedButton()) {
-            QDesktopServices::openUrl(QUrl(response.release_url().c_str()));
+        } else if (openButton == box.clickedButton() && releasePageUrl.isValid()) {
+            QDesktopServices::openUrl(releasePageUrl);
         }
     });
 #endif

@@ -2,11 +2,29 @@ set(PLATFORM_SOURCES 3rdparty/WinCommander.cpp sys/windows/guihelper.cpp sys/win
 set(PLATFORM_LIBRARIES wininet wsock32 ws2_32 user32 rasapi32 iphlpapi)
 
 include(cmake/windows/generate_product_version.cmake)
+file(STRINGS "${CMAKE_SOURCE_DIR}/nekoray_version.txt" NKR_WINDOWS_VERSION LIMIT_COUNT 1)
+string(REGEX MATCH "^([0-9]+)\\.([0-9]+)\\.([0-9]+)" NKR_WINDOWS_VERSION_MATCH "${NKR_WINDOWS_VERSION}")
+set(NKR_VERSION_MAJOR "${CMAKE_MATCH_1}")
+set(NKR_VERSION_MINOR "${CMAKE_MATCH_2}")
+set(NKR_VERSION_PATCH "${CMAKE_MATCH_3}")
+if (NOT NKR_VERSION_MAJOR)
+    set(NKR_VERSION_MAJOR 1)
+endif ()
+if (NOT NKR_VERSION_MINOR)
+    set(NKR_VERSION_MINOR 0)
+endif ()
+if (NOT NKR_VERSION_PATCH)
+    set(NKR_VERSION_PATCH 0)
+endif ()
 generate_product_version(
         QV2RAY_RC
         ICON "${CMAKE_SOURCE_DIR}/res/nekobox.ico"
         NAME "nekobox"
         BUNDLE "nekobox"
+        VERSION_MAJOR "${NKR_VERSION_MAJOR}"
+        VERSION_MINOR "${NKR_VERSION_MINOR}"
+        VERSION_PATCH "${NKR_VERSION_PATCH}"
+        VERSION_REVISION 0
         COMPANY_NAME "nekobox"
         COMPANY_COPYRIGHT "nekobox"
         FILE_DESCRIPTION "nekobox"

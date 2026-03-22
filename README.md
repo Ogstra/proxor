@@ -1,50 +1,20 @@
 # NekoBox For PC
 
-Qt based cross-platform GUI proxy configuration manager (backend: sing-box)
+Qt-based cross-platform proxy manager for Windows and Linux.
 
-Support Windows / Linux out of the box now.
+This fork ships the desktop GUI as `nekobox` / `nekobox.exe` and the backend core as `nekobox_core` on top of the current sing-box integration used by this repository.
 
-基于 Qt 的跨平台代理配置管理器 (后端 sing-box)
+Current version: `4.0.1-2026-03-22`
 
-目前支持 Windows / Linux 开箱即用
+## Highlights
 
-## 下载 / Download
+- Windows and Linux desktop builds
+- sing-box based core workflow
+- Profile management, subscriptions, routing, and traffic stats
+- TUN mode and system proxy integration
+- gRPC-based GUI/core communication
 
-### GitHub Releases (Portable ZIP)
-
-便携格式，无安装器。转到 Releases 下载预编译的二进制文件，解压后即可使用。
-
-[![GitHub All Releases](https://img.shields.io/github/downloads/Matsuridayo/nekoray/total?label=downloads-total&logo=github&style=flat-square)](https://github.com/Matsuridayo/nekoray/releases)
-
-[下载 / Download](https://github.com/Matsuridayo/nekoray/releases)
-
-[安装包的说明，如果你不知道要下载哪一个](https://github.com/MatsuriDayo/nekoray/wiki/Installation-package-description)
-
-### Package
-
-#### AUR
-
-- [nekoray](https://aur.archlinux.org/packages/nekoray)
-- [nekoray-git](https://aur.archlinux.org/packages/nekoray-git)
-
-#### archlinuxcn
-
-- [nekoray](https://github.com/archlinuxcn/repo/tree/master/archlinuxcn/nekoray)
-- [nekoray-git](https://github.com/archlinuxcn/repo/tree/master/archlinuxcn/nekoray-git)
-
-#### Scoop Extras
-
-`scoop install nekoray`
-
-## 更改记录 & 发布频道 / Changelog & Telegram Channel
-
-https://t.me/Matsuridayo
-
-## 项目主页 & 文档 / Homepage & Documents
-
-https://matsuridayo.github.io
-
-## 代理 / Proxy
+## Supported Proxy Types
 
 - SOCKS (4/4a/5)
 - HTTP(S)
@@ -52,68 +22,52 @@ https://matsuridayo.github.io
 - VMess
 - VLESS
 - Trojan
-- TUIC ( sing-box )
-- NaïveProxy ( Custom Core )
-- Hysteria2 ( Custom Core or sing-box )
-- Custom Outbound
-- Custom Config
-- Custom Core
+- TUIC
+- NaiveProxy
+- Hysteria2
+- Custom outbound
+- Custom config
+- Custom core
 
-## 订阅 / Subscription
+## Documentation
 
-- Raw: some widely used formats (like Shadowsocks, Clash and v2rayN)
-- 原始格式: 一些广泛使用的格式 (如 Shadowsocks、Clash 和 v2rayN)
+- [Build Windows](docs/Build_Windows.md)
+- [Build Linux](docs/Build_Linux.md)
+- [Build Core](docs/Build_Core.md)
+- [Linux Runtime Guide](docs/Run_Linux.md)
+- [Run Flags](docs/RunFlags.md)
 
-## 运行参数
+## Runtime Notes
 
-[运行参数](docs/RunFlags.md)
+### Windows
 
-## Windows 运行
+If the application reports missing runtime DLLs, install the [Microsoft Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe).
 
-若提示 DLL 缺失，无法运行，请下载 安装 [微软 C++ 运行库](https://aka.ms/vs/17/release/vc_redist.x64.exe)
+### Linux
 
-## Linux 运行
+Linux packaging and deployment vary by distribution. Use the local build and runtime guides in [`docs/`](docs/readme.md) instead of old third-party package references.
 
-[Linux 运行教程](docs/Run_Linux.md)
+## Dependencies
 
-## 编译教程 / Compile Tutorial
+### GUI and Native Build
 
-请看 [技术文档 / Technical documentation](https://github.com/MatsuriDayo/nekoray/tree/main/docs)
+- Qt 5.15 or Qt 6 Widgets/Network/Svg
+- protobuf C++ (`v21.4` in `libs/build_deps_all.sh`)
+- yaml-cpp (`0.7.0`)
+- zxing-cpp (`2.0.0`)
+- QHotkey
 
-## 捐助 / Donate
+### Core and Go Toolchain
 
-如果这个项目对您有帮助，可以通过捐赠的方式帮助我们维持这个项目。
-
-捐赠满等额 50 USD 可以在「[捐赠榜](https://mtrdnt.pages.dev/donation_list)」显示头像，如果您未被添加到这里，欢迎联系我们补充。
-
-Donations of 50 USD or more can display your avatar on the [Donation List](https://mtrdnt.pages.dev/donation_list). If you are not added here, please contact us to add it.
-
-USDT TRC20
-
-`TRhnA7SXE5Sap5gSG3ijxRmdYFiD4KRhPs`
-
-XMR
-
-`49bwESYQjoRL3xmvTcjZKHEKaiGywjLYVQJMUv79bXonGiyDCs8AzE3KiGW2ytTybBCpWJUvov8SjZZEGg66a4e59GXa6k5`
+- Go `1.26.x`
+- sing-box fork from the local workspace
+- libneko from the local workspace
+- gRPC `v1.79.3`
+- protobuf-go `v1.36.11`
 
 ## Credits
 
-Core:
-
-- [v2fly/v2ray-core](https://github.com/v2fly/v2ray-core) ( < 3.10 )
-- [MatsuriDayo/Matsuri](https://github.com/MatsuriDayo/Matsuri) ( < 3.10 )
-- [MatsuriDayo/v2ray-core](https://github.com/MatsuriDayo/v2ray-core) ( < 3.10 )
-- [XTLS/Xray-core](https://github.com/XTLS/Xray-core) ( 3.10 <= Version <= 3.26 )
-- [MatsuriDayo/Xray-core](https://github.com/MatsuriDayo/Xray-core) ( 3.10 <= Version <= 3.26 )
-- [SagerNet/sing-box](https://github.com/SagerNet/sing-box)
-- [Matsuridayo/sing-box-extra](https://github.com/MatsuriDayo/sing-box-extra)
-
-Gui:
-
-- [Qv2ray](https://github.com/Qv2ray/Qv2ray)
-- [Qt](https://www.qt.io/)
-- [protobuf](https://github.com/protocolbuffers/protobuf)
-- [yaml-cpp](https://github.com/jbeder/yaml-cpp)
-- [zxing-cpp](https://github.com/nu-book/zxing-cpp)
-- [QHotkey](https://github.com/Skycoder42/QHotkey)
-- [AppImageKit](https://github.com/AppImage/AppImageKit)
+- Original desktop project lineage: [MatsuriDayo/nekoray](https://github.com/MatsuriDayo/nekoray)
+- Current backend foundation: `sing-box`, `sing`, and `libneko`
+- UI/editor components adapted from [Qv2ray](https://github.com/Qv2ray/Qv2ray)
+- Native libraries: Qt, protobuf, yaml-cpp, zxing-cpp, QHotkey

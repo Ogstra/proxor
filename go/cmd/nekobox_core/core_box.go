@@ -17,10 +17,8 @@ var instance_cancel context.CancelFunc
 
 func setupCore() {
 	boxmain.SetDisableColor(true)
-	boxmain.SetLogWriter(neko_log.LogWriter)
-	//
 	neko_log.SetupLog(50*1024, "./neko.log")
-	//
+	boxmain.SetLogWriter(neko_log.LogWriter)
 	neko_common.GetCurrentInstance = func() interface{} {
 		return instance
 	}

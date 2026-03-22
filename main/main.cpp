@@ -198,6 +198,12 @@ int main(int argc, char* argv[]) {
     isLoaded = NekoGui::dataStore->routing->Load();
     if (!isLoaded) {
         NekoGui::dataStore->routing->Save();
+    } else if (!NekoGui::dataStore->routing->use_dns_object &&
+               NekoGui::dataStore->routing->direct_dns == "https://doh.pub/dns-query") {
+        // Migrate the legacy default to the local resolver to avoid slow
+        // bootstrap resolution on startup when the direct DoH endpoint stalls.
+        NekoGui::dataStore->routing->direct_dns = "local";
+        NekoGui::dataStore->routing->Save();
     }
 
     // Translate

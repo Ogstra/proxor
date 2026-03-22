@@ -1,24 +1,63 @@
-## 构建 nekobox_core
+# Build `nekobox_core`
 
-### 目录结构
+## Expected Workspace Layout
 
+The repository expects the desktop project and the forked Go workspaces to live side by side:
+
+```text
+nekoray/
+  go/cmd/*
+libneko/
+sing-box/
+sing-box-extra/
 ```
-  | nekoray
-  |   go/cmd/*
-  | sing-box-extra
-  | sing-box
-  | ......
+
+The helper bootstrap script prepares that layout for local development.
+
+## Bootstrap Sources
+
+```bash
+bash libs/get_source.sh
 ```
 
-### 常规构建
+This script prepares the local fork/workspace layout used by the Go modules and `go.work`.
 
-1. `bash libs/get_source.sh` （自动下载目录结构，自动 checkout commit）
-2. `GOOS=windows GOARCH=amd64 bash libs/build_go.sh`
+## Standard Build
 
-具体支持的 GOOS 和 GOARCH 请看 `libs/build_go.sh`
+Windows AMD64 example:
 
-非官方构建无需编译 `updater` `launcher`
+```bash
+GOOS=windows GOARCH=amd64 bash libs/build_go.sh
+```
 
-### sing-box tags
+The build script writes the resulting binaries into the matching deployment directory:
 
-具体使用的 tags 请看 `libs/build_go.sh`
+- `deployment/windows64`
+- `deployment/windows-arm64`
+- `deployment/linux64`
+- `deployment/linux-arm64`
+
+## Current Core Build Tags
+
+The current repository build uses these sing-box tags:
+
+```text
+with_gvisor
+with_quic
+with_dhcp
+with_wireguard
+with_utls
+with_acme
+with_clash_api
+with_tailscale
+with_conntrack
+with_grpc
+```
+
+These tags are defined in `libs/build_go.sh`.
+
+## Notes
+
+- `nekobox_core` and `updater` are built from the Go workspace.
+- The updater is renamed to `launcher` on Linux by `libs/build_go.sh`.
+- If you are doing a fork-specific build, keep the local `replace` directives and `go.work` entries aligned with your sibling repositories.
