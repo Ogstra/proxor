@@ -4,7 +4,7 @@ Qt-based cross-platform proxy manager for Windows and Linux.
 
 This fork ships the desktop GUI as `nekobox` / `nekobox.exe` and the backend core as `nekobox_core` on top of the current sing-box integration used by this repository.
 
-Current version: `4.0.1-2026-03-22`
+Current version: `4.0.4-2026-03-22`
 
 <img width="801" height="631" alt="nekobox" src="https://github.com/user-attachments/assets/ca508369-cb98-485b-b8e4-dc942b423d9c" />
 
