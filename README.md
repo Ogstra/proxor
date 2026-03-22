@@ -6,6 +6,8 @@ This fork ships the desktop GUI as `nekobox` / `nekobox.exe` and the backend cor
 
 Current version: `4.0.1-2026-03-22`
 
+<img width="801" height="631" alt="nekobox" src="https://github.com/user-attachments/assets/ca508369-cb98-485b-b8e4-dc942b423d9c" />
+
 ## Highlights
 
 - Windows and Linux desktop builds
