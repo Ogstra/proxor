@@ -170,9 +170,9 @@
         <widget class="QGroupBox" name="horizontalGroupBox1">
          <layout class="QHBoxLayout" name="horizontalLayout_18">
           <item>
-           <widget class="QCheckBox" name="check_include_pre">
+           <widget class="QCheckBox" name="check_update_on_start">
             <property name="text">
-             <string>Include Pre-release when checking update</string>
+             <string>Check program updates on start</string>
             </property>
            </widget>
           </item>

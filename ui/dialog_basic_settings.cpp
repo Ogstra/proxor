@@ -95,7 +95,7 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     // Style
     ui->connection_statistics_box->setDisabled(true);
     //
-    D_LOAD_BOOL(check_include_pre)
+    D_LOAD_BOOL(check_update_on_start)
     D_LOAD_BOOL(connection_statistics)
     D_LOAD_BOOL(start_minimal)
     D_LOAD_INT(max_log_line)
@@ -150,6 +150,7 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     D_LOAD_BOOL(sub_use_proxy)
     D_LOAD_BOOL(sub_clear)
     D_LOAD_BOOL(sub_insecure)
+    D_LOAD_BOOL(check_update_on_start)
     D_LOAD_INT_ENABLE(sub_auto_update, sub_auto_update_enable)
 
     // Core
@@ -229,7 +230,7 @@ void DialogBasicSettings::accept() {
 
     NekoGui::dataStore->language = ui->language->currentIndex();
     D_SAVE_BOOL(connection_statistics)
-    D_SAVE_BOOL(check_include_pre)
+    D_SAVE_BOOL(check_update_on_start)
     D_SAVE_BOOL(start_minimal)
     D_SAVE_INT(max_log_line)
 
@@ -263,6 +264,7 @@ void DialogBasicSettings::accept() {
     D_SAVE_BOOL(sub_use_proxy)
     D_SAVE_BOOL(sub_clear)
     D_SAVE_BOOL(sub_insecure)
+    D_SAVE_BOOL(check_update_on_start)
     D_SAVE_INT_ENABLE(sub_auto_update, sub_auto_update_enable)
 
     // Core

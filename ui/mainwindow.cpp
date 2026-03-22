@@ -548,6 +548,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     connect(TM_auto_update_subsctiption, &QTimer::timeout, this, [&] { UI_update_all_groups(true); });
     TM_auto_update_subsctiption_Reset_Minute(NekoGui::dataStore->sub_auto_update);
 
+    if (NekoGui::dataStore->check_update_on_start) {
+        setTimeout([this] {
+            runOnNewThread([this] { CheckUpdate(true); });
+        }, this, 1500);
+    }
+
     if (!NekoGui::dataStore->flag_tray) show();
 
     // Restore spmode after the window has entered the event loop so prompts
