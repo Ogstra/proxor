@@ -210,11 +210,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->menubar->setVisible(false);
     ui->toolButton_toggle_proxy->setText(tr("Start"));
     ui->toolButton_toggle_proxy->setIcon(makeToggleProxyIcon(QColor(52, 199, 89)));
-    constexpr int toggleButtonSide = 56;
     ui->toolButton_toggle_proxy->setIconSize(QSize(20, 20));
     ui->toolButton_toggle_proxy->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
     ui->toolButton_toggle_proxy->setStyleSheet("QToolButton#toolButton_toggle_proxy { padding: 4px; }");
-    ui->toolButton_toggle_proxy->setFixedSize(toggleButtonSide, toggleButtonSide);
+    setTimeout([this] {
+        const int referenceHeight = qMax(ui->toolButton_program->height(), ui->toolButton_program->sizeHint().height());
+        ui->toolButton_toggle_proxy->setFixedSize(referenceHeight, referenceHeight);
+    }, this, 0);
     connect(ui->toolButton_update, &QToolButton::clicked, this, [=] { runOnNewThread([=] { CheckUpdate(); }); });
     connect(ui->toolButton_url_test, &QToolButton::clicked, this, [=] { speedtest_current_group(1, true); });
 
