@@ -84,4 +84,8 @@ CMakeLists.txt.user*
 /qtsdk
 
 .vs
-out
+out.planning/
+.planning/
+.claude/
+.cache/
+.tmp/

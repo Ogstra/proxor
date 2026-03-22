@@ -9,7 +9,7 @@ import (
 	"github.com/matsuridayo/libneko/neko_log"
 	box "github.com/sagernet/sing-box"
 	"github.com/sagernet/sing-box/boxapi"
-	boxmain "github.com/sagernet/sing-box/cmd/sing-box"
+	boxmain "nekobox_core/boxmain"
 )
 
 var instance *box.Box
@@ -17,6 +17,7 @@ var instance_cancel context.CancelFunc
 
 func setupCore() {
 	boxmain.SetDisableColor(true)
+	boxmain.SetLogWriter(neko_log.LogWriter)
 	//
 	neko_log.SetupLog(50*1024, "./neko.log")
 	//

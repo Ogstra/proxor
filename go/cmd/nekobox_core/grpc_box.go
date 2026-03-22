@@ -9,11 +9,10 @@ import (
 	"grpc_server/gen"
 
 	"github.com/matsuridayo/libneko/neko_common"
-	"github.com/matsuridayo/libneko/neko_log"
 	"github.com/matsuridayo/libneko/speedtest"
 	box "github.com/sagernet/sing-box"
 	"github.com/sagernet/sing-box/boxapi"
-	boxmain "github.com/sagernet/sing-box/cmd/sing-box"
+	boxmain "nekobox_core/boxmain"
 
 	"log"
 
@@ -47,8 +46,6 @@ func (s *server) Start(ctx context.Context, in *gen.LoadConfigReq) (out *gen.Err
 	instance, instance_cancel, err = boxmain.Create([]byte(in.CoreConfig))
 
 	if instance != nil {
-		// Logger
-		instance.SetLogWritter(neko_log.LogWriter)
 		// V2ray Service
 		if in.StatsOutbounds != nil {
 			instance.Router().SetV2RayServer(boxapi.NewSbV2rayServer(option.V2RayStatsServiceOptions{
