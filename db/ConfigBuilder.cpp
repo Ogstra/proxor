@@ -541,11 +541,14 @@ namespace NekoGui {
             };
 
         // Direct
+        const auto directDnsAddress = dataStore->vpn_internal_tun && dataStore->spmode_vpn && !status->forTest
+                                          ? QStringLiteral("local")
+                                          : dataStore->routing->direct_dns;
         QJsonObject directObj{
             {"tag", "dns-direct"},
             {"address_resolver", "dns-local"},
             {"strategy", dataStore->routing->direct_dns_strategy},
-            {"address", dataStore->routing->direct_dns},
+            {"address", directDnsAddress},
             {"detour", "direct"},
         };
         if (dataStore->routing->dns_final_out == "bypass") {

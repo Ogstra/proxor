@@ -16,7 +16,7 @@ namespace NekoGui {
         // DNS
         QString remote_dns = "https://dns.google/dns-query";
         QString remote_dns_strategy = "";
-        QString direct_dns = "local";
+        QString direct_dns = "https://doh.pub/dns-query";
         QString direct_dns_strategy = "";
         bool dns_routing = true;
         bool use_dns_object = false;

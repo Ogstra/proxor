@@ -199,10 +199,10 @@ int main(int argc, char* argv[]) {
     if (!isLoaded) {
         NekoGui::dataStore->routing->Save();
     } else if (!NekoGui::dataStore->routing->use_dns_object &&
-               NekoGui::dataStore->routing->direct_dns == "https://doh.pub/dns-query") {
-        // Migrate the legacy default to the local resolver to avoid slow
-        // bootstrap resolution on startup when the direct DoH endpoint stalls.
-        NekoGui::dataStore->routing->direct_dns = "local";
+               NekoGui::dataStore->routing->direct_dns == "local") {
+        // Keep the original direct DoH default outside Tun mode. Tun startup
+        // now forces a temporary local resolver in the generated config.
+        NekoGui::dataStore->routing->direct_dns = "https://doh.pub/dns-query";
         NekoGui::dataStore->routing->Save();
     }
 
