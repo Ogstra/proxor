@@ -15,6 +15,8 @@ mkdir -p $DEST
 
 export CGO_ENABLED=0
 
+NEKOBOX_CORE_TAGS="with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_conntrack,with_grpc"
+
 #### Go: updater ####
 pushd go/cmd/updater
 [ "$GOOS" == "darwin" ] || go build -o $DEST -trimpath -ldflags "-w -s"
@@ -23,5 +25,5 @@ popd
 
 #### Go: nekobox_core ####
 pushd go/cmd/nekobox_core
-go build -v -o $DEST -trimpath -ldflags "-w -s -X github.com/matsuridayo/libneko/neko_common.Version_neko=$version_standalone" -tags "with_clash_api,with_gvisor,with_quic,with_wireguard,with_utls,with_ech"
+go build -v -o $DEST -trimpath -ldflags "-w -s -X github.com/matsuridayo/libneko/neko_common.Version_neko=$version_standalone" -tags "$NEKOBOX_CORE_TAGS"
 popd
