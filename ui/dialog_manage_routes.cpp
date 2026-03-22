@@ -21,14 +21,11 @@ DialogManageRoutes::DialogManageRoutes(QWidget *parent) : QDialog(parent), ui(ne
     title_base = windowTitle();
 
     QStringList qsValue = {""};
-    QString dnsHelpDocumentUrl;
     //
     ui->outbound_domain_strategy->addItems(Preset::SingBox::DomainStrategy);
     ui->domainStrategyCombo->addItems(Preset::SingBox::DomainStrategy);
     qsValue += QStringLiteral("prefer_ipv4 prefer_ipv6 ipv4_only ipv6_only").split(" ");
     ui->dns_object->setPlaceholderText(DecodeB64IfValid("ewogICJzZXJ2ZXJzIjogW10sCiAgInJ1bGVzIjogW10sCiAgImZpbmFsIjogIiIsCiAgInN0cmF0ZWd5IjogIiIsCiAgImRpc2FibGVfY2FjaGUiOiBmYWxzZSwKICAiZGlzYWJsZV9leHBpcmUiOiBmYWxzZSwKICAiaW5kZXBlbmRlbnRfY2FjaGUiOiBmYWxzZSwKICAicmV2ZXJzZV9tYXBwaW5nIjogZmFsc2UsCiAgImZha2VpcCI6IHt9Cn0="));
-    dnsHelpDocumentUrl = "https://sing-box.sagernet.org/configuration/dns/";
-    //
     ui->direct_dns_strategy->addItems(qsValue);
     ui->remote_dns_strategy->addItems(qsValue);
     //
@@ -40,9 +37,6 @@ DialogManageRoutes::DialogManageRoutes(QWidget *parent) : QDialog(parent), ui(ne
         ui->dns_object->setDisabled(!useDNSObject);
     });
     ui->use_dns_object->stateChanged(Qt::Unchecked); // uncheck to uncheck
-    connect(ui->dns_document, &QPushButton::clicked, this, [=] {
-        MessageBoxInfo("DNS", dnsHelpDocumentUrl);
-    });
     connect(ui->format_dns_object, &QPushButton::clicked, this, [=] {
         auto obj = QString2QJsonObject(ui->dns_object->toPlainText());
         if (obj.isEmpty()) {

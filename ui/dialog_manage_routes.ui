@@ -394,19 +394,6 @@ For more information, see the document &quot;Configuration/DNS&quot;.</string>
               </property>
              </widget>
             </item>
-            <item>
-             <widget class="QPushButton" name="dns_document">
-              <property name="sizePolicy">
-               <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
-                <horstretch>0</horstretch>
-                <verstretch>0</verstretch>
-               </sizepolicy>
-              </property>
-              <property name="text">
-               <string>Document</string>
-              </property>
-             </widget>
-            </item>
            </layout>
           </item>
           <item>
@@ -643,7 +630,6 @@ For more information, see the document &quot;Configuration/DNS&quot;.</string>
   <tabstop>dns_final_out</tabstop>
   <tabstop>use_dns_object</tabstop>
   <tabstop>format_dns_object</tabstop>
-  <tabstop>dns_document</tabstop>
   <tabstop>dns_object</tabstop>
   <tabstop>preset</tabstop>
   <tabstop>custom_route_edit</tabstop>

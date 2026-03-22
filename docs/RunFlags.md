@@ -1,5 +1,10 @@
-# 运行参数
+# Run Flags
 
-- `-many` 无视同目录正在运行的实例，强行开启新的实例。
-- `-appdata` 开启后配置文件会指定目录，未指定目录则使用共享目录，无法多开和自动升级。
-- `-flag_reorder` 进行重新整理配置文件的顺序，并删除损坏和孤立的配置。
+- `-many`
+  Allows starting another instance from the same directory even if one is already running.
+
+- `-appdata`
+  Stores configuration under the specified appdata directory. If no directory is provided, the shared appdata location is used. This mode disables multi-instance behavior and automatic self-update flows.
+
+- `-flag_reorder`
+  Reorders stored configuration files and removes corrupted or orphaned entries.

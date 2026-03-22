@@ -95,12 +95,14 @@ namespace NekoGui {
                 int ii = 0;
                 QList<int> newProfilesIdOrder;
                 std::map<int, std::shared_ptr<ProxyEntity>> newProfiles;
+                std::map<int, int> pidOld2New;
                 for (auto gid: groupsTabOrder) {
                     auto group = GetGroup(gid);
                     gidOld2New[gid] = ii++;
                     for (auto const &profile: group->ProfilesWithOrder()) {
                         auto oldId = profile->id;
                         auto newId = i++;
+                        pidOld2New[oldId] = newId;
                         profile->id = newId;
                         profile->gid = gidOld2New[gid];
                         profile->fn = QStringLiteral("profiles/%1.json").arg(newId);
@@ -109,6 +111,13 @@ namespace NekoGui {
                         newProfilesIdOrder << newId;
                     }
                     group->order = {};
+                    QList<int> newToggleProxyIds;
+                    for (auto oldId: group->toggle_proxy_ids) {
+                        if (pidOld2New.count(oldId)) {
+                            newToggleProxyIds << pidOld2New[oldId];
+                        }
+                    }
+                    group->toggle_proxy_ids = newToggleProxyIds;
                     group->Save();
                 }
                 profiles = newProfiles;
@@ -268,6 +277,12 @@ namespace NekoGui {
         profiles[ent->id] = ent;
         profilesIdOrder.push_back(ent->id);
 
+        auto group = GetGroup(ent->gid);
+        if (group != nullptr && !group->toggle_proxy_ids.contains(ent->id)) {
+            group->toggle_proxy_ids.push_back(ent->id);
+            group->Save();
+        }
+
         ent->fn = QStringLiteral("profiles/%1.json").arg(ent->id);
         ent->Save();
         return true;
@@ -276,6 +291,13 @@ namespace NekoGui {
     void ProfileManager::DeleteProfile(int id) {
         if (id < 0) return;
         if (dataStore->started_id == id) return;
+        auto ent = GetProfile(id);
+        if (ent != nullptr) {
+            auto group = GetGroup(ent->gid);
+            if (group != nullptr && group->toggle_proxy_ids.removeAll(id) > 0) {
+                group->Save();
+            }
+        }
         profiles.erase(id);
         profilesIdOrder.removeAll(id);
         QFile(QStringLiteral("profiles/%1.json").arg(id)).remove();
@@ -286,6 +308,7 @@ namespace NekoGui {
         auto oldGroup = GetGroup(ent->gid);
         if (oldGroup != nullptr && !oldGroup->order.isEmpty()) {
             oldGroup->order.removeAll(ent->id);
+            oldGroup->toggle_proxy_ids.removeAll(ent->id);
             oldGroup->Save();
         }
         auto newGroup = GetGroup(gid);
@@ -315,6 +338,7 @@ namespace NekoGui {
         _add(new configItem("lastup", &sub_last_update, itemType::integer64));
         _add(new configItem("manually_column_width", &manually_column_width, itemType::boolean));
         _add(new configItem("column_width", &column_width, itemType::integerList));
+        _add(new configItem("toggle_proxy_ids", &toggle_proxy_ids, itemType::integerList));
     }
 
     std::shared_ptr<Group> ProfileManager::LoadGroup(const QString &jsonPath) {
