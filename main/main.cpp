@@ -2,7 +2,6 @@
 
 #include <QApplication>
 #include <QDir>
-#include <QTranslator>
 #include <QMessageBox>
 #include <QStandardPaths>
 #include <QLocalSocket>
@@ -10,7 +9,7 @@
 #include <QThread>
 
 #include "3rdparty/RunGuard.hpp"
-#include "main/NekoGui.hpp"
+#include "main/ProxorGui.hpp"
 
 #include "ui/mainwindow_interface.h"
 
@@ -25,28 +24,6 @@ void signal_handler(int signum) {
     }
 }
 
-QTranslator* trans = nullptr;
-QTranslator* trans_qt = nullptr;
-
-void loadTranslate(const QString& locale) {
-    if (trans != nullptr) {
-        trans->deleteLater();
-    }
-    if (trans_qt != nullptr) {
-        trans_qt->deleteLater();
-    }
-    //
-    trans = new QTranslator;
-    trans_qt = new QTranslator;
-    QLocale::setDefault(QLocale(locale));
-    //
-    if (trans->load(":/translations/" + locale + ".qm")) {
-        QCoreApplication::installTranslator(trans);
-    }
-    if (trans_qt->load(QApplication::applicationDirPath() + "/qtbase_" + locale + ".qm")) {
-        QCoreApplication::installTranslator(trans_qt);
-    }
-}
 
 #define LOCAL_SERVER_PREFIX "proxorlocalserver-"
 
@@ -78,32 +55,32 @@ int main(int argc, char* argv[]) {
 #endif
 
     // Flags
-    NekoGui::dataStore->argv = QApplication::arguments();
-    if (NekoGui::dataStore->argv.contains("-many")) NekoGui::dataStore->flag_many = true;
-    if (NekoGui::dataStore->argv.contains("-appdata")) {
-        NekoGui::dataStore->flag_use_appdata = true;
-        int appdataIndex = NekoGui::dataStore->argv.indexOf("-appdata");
-        if (NekoGui::dataStore->argv.size() > appdataIndex + 1 && !NekoGui::dataStore->argv.at(appdataIndex + 1).startsWith("-")) {
-            NekoGui::dataStore->appdataDir = NekoGui::dataStore->argv.at(appdataIndex + 1);
+    ProxorGui::dataStore->argv = QApplication::arguments();
+    if (ProxorGui::dataStore->argv.contains("-many")) ProxorGui::dataStore->flag_many = true;
+    if (ProxorGui::dataStore->argv.contains("-appdata")) {
+        ProxorGui::dataStore->flag_use_appdata = true;
+        int appdataIndex = ProxorGui::dataStore->argv.indexOf("-appdata");
+        if (ProxorGui::dataStore->argv.size() > appdataIndex + 1 && !ProxorGui::dataStore->argv.at(appdataIndex + 1).startsWith("-")) {
+            ProxorGui::dataStore->appdataDir = ProxorGui::dataStore->argv.at(appdataIndex + 1);
         }
     }
-    if (NekoGui::dataStore->argv.contains("-tray")) NekoGui::dataStore->flag_tray = true;
-    if (NekoGui::dataStore->argv.contains("-debug")) NekoGui::dataStore->flag_debug = true;
-    if (NekoGui::dataStore->argv.contains("-flag_restart_tun_on")) NekoGui::dataStore->flag_restart_tun_on = true;
-    if (NekoGui::dataStore->argv.contains("-flag_reorder")) NekoGui::dataStore->flag_reorder = true;
+    if (ProxorGui::dataStore->argv.contains("-tray")) ProxorGui::dataStore->flag_tray = true;
+    if (ProxorGui::dataStore->argv.contains("-debug")) ProxorGui::dataStore->flag_debug = true;
+    if (ProxorGui::dataStore->argv.contains("-flag_restart_tun_on")) ProxorGui::dataStore->flag_restart_tun_on = true;
+    if (ProxorGui::dataStore->argv.contains("-flag_reorder")) ProxorGui::dataStore->flag_reorder = true;
 #ifdef NKR_CPP_USE_APPDATA
-    NekoGui::dataStore->flag_use_appdata = true; // Example: Package & MacOS
+    ProxorGui::dataStore->flag_use_appdata = true; // Example: Package & MacOS
 #endif
 #ifdef NKR_CPP_DEBUG
-    NekoGui::dataStore->flag_debug = true;
+    ProxorGui::dataStore->flag_debug = true;
 #endif
 
     // dirs & clean
     auto wd = QDir(QApplication::applicationDirPath());
-    if (NekoGui::dataStore->flag_use_appdata) {
+    if (ProxorGui::dataStore->flag_use_appdata) {
         QApplication::setApplicationName("proxor");
-        if (!NekoGui::dataStore->appdataDir.isEmpty()) {
-            wd.setPath(NekoGui::dataStore->appdataDir);
+        if (!ProxorGui::dataStore->appdataDir.isEmpty()) {
+            wd.setPath(ProxorGui::dataStore->appdataDir);
         } else {
             wd.setPath(QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation));
         }
@@ -125,7 +102,7 @@ int main(int argc, char* argv[]) {
     RunGuard guard("proxor" + wd.absolutePath());
     quint64 guard_data_in = GetRandomUint64();
     quint64 guard_data_out = 0;
-    if (!NekoGui::dataStore->flag_many && !guard.tryToRun(&guard_data_in)) {
+    if (!ProxorGui::dataStore->flag_many && !guard.tryToRun(&guard_data_in)) {
         // Some Good System
         if (guard.isAnotherRunning(&guard_data_out)) {
             // Wake up a running instance
@@ -148,7 +125,7 @@ int main(int argc, char* argv[]) {
 // icons
 #if (QT_VERSION >= QT_VERSION_CHECK(5, 11, 0))
     QIcon::setFallbackSearchPaths(QStringList{
-        ":/neko",
+        ":/proxor",
         ":/icon",
     });
 #endif
@@ -176,55 +153,36 @@ int main(int argc, char* argv[]) {
     }
 
     // Load dataStore
-    switch (NekoGui::coreType) {
-        case NekoGui::CoreType::SING_BOX:
-            NekoGui::dataStore->fn = "groups/nekobox.json";
+    switch (ProxorGui::coreType) {
+        case ProxorGui::CoreType::SING_BOX:
+            ProxorGui::dataStore->fn = "groups/proxor.json";
             break;
         default:
             MessageBoxWarning("Error", "Unknown coreType.");
             return 0;
     }
-    auto isLoaded = NekoGui::dataStore->Load();
+    auto isLoaded = ProxorGui::dataStore->Load();
     if (!isLoaded) {
-        NekoGui::dataStore->Save();
+        ProxorGui::dataStore->Save();
     }
 
     // Datastore & Flags
-    if (NekoGui::dataStore->start_minimal) NekoGui::dataStore->flag_tray = true;
+    if (ProxorGui::dataStore->start_minimal) ProxorGui::dataStore->flag_tray = true;
 
     // load routing
-    NekoGui::dataStore->routing = std::make_unique<NekoGui::Routing>();
-    NekoGui::dataStore->routing->fn = ROUTES_PREFIX + NekoGui::dataStore->active_routing;
-    isLoaded = NekoGui::dataStore->routing->Load();
+    ProxorGui::dataStore->routing = std::make_unique<ProxorGui::Routing>();
+    ProxorGui::dataStore->routing->fn = ROUTES_PREFIX + ProxorGui::dataStore->active_routing;
+    isLoaded = ProxorGui::dataStore->routing->Load();
     if (!isLoaded) {
-        NekoGui::dataStore->routing->Save();
-    } else if (!NekoGui::dataStore->routing->use_dns_object &&
-               NekoGui::dataStore->routing->direct_dns == "local") {
+        ProxorGui::dataStore->routing->Save();
+    } else if (!ProxorGui::dataStore->routing->use_dns_object &&
+               ProxorGui::dataStore->routing->direct_dns == "local") {
         // Keep the original direct DoH default outside Tun mode. Tun startup
         // now forces a temporary local resolver in the generated config.
-        NekoGui::dataStore->routing->direct_dns = "https://doh.pub/dns-query";
-        NekoGui::dataStore->routing->Save();
+        ProxorGui::dataStore->routing->direct_dns = "https://doh.pub/dns-query";
+        ProxorGui::dataStore->routing->Save();
     }
 
-    // Translate
-    QString locale;
-    switch (NekoGui::dataStore->language) {
-        case 1: // English
-            break;
-        case 2:
-            locale = "zh_CN";
-            break;
-        case 3:
-            locale = "fa_IR"; // farsi(iran)
-            break;
-        case 4:
-            locale = "ru_RU"; // Russian
-            break;
-        default:
-            locale = QLocale().name();
-    }
-    QGuiApplication::tr("QT_LAYOUT_DIRECTION");
-    loadTranslate(locale);
 
     // Signals
     signal(SIGTERM, signal_handler);

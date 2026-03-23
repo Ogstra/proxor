@@ -1,4 +1,4 @@
-#include "NekoGui_Utils.hpp"
+#include "ProxorGui_Utils.hpp"
 
 #include "3rdparty/base64.h"
 #include "3rdparty/QThreadCreateThread.hpp"

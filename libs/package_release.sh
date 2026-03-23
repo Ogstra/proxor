@@ -23,7 +23,7 @@ OUTPUT_ZIP_ABS="$OUTPUT_DIR_ABS/$OUTPUT_NAME"
 STAGE_DIR="$(mktemp -d "${PWD}/.tmp-release.XXXXXX")"
 trap 'rm -rf "$STAGE_DIR"' EXIT
 
-PACKAGE_ROOT="$STAGE_DIR/nekoray"
+PACKAGE_ROOT="$STAGE_DIR/proxor"
 mkdir -p "$PACKAGE_ROOT"
 
 to_windows_path() {
@@ -64,7 +64,7 @@ done
 
 rm -f "$OUTPUT_ZIP_ABS"
 if command -v zip >/dev/null 2>&1; then
-  ( cd "$STAGE_DIR" && zip -r "$OUTPUT_ZIP_ABS" nekoray >/dev/null )
+  ( cd "$STAGE_DIR" && zip -r "$OUTPUT_ZIP_ABS" proxor >/dev/null )
 else
   PACKAGE_ROOT_WIN="$(to_windows_path "$PACKAGE_ROOT")"
   OUTPUT_ZIP_WIN="$(to_windows_path "$OUTPUT_ZIP_ABS")"

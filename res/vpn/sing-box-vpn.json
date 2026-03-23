@@ -12,7 +12,7 @@
             {
                 "tag": "dns-remote",
                 "address": "8.8.8.8",
-                "detour": "neko-socks"
+                "detour": "proxor-socks"
             },
             {
                 "tag": "dns-direct",
@@ -44,10 +44,8 @@
             },
             {
                 "process_name": [
-                    "nekoray_core",
-                    "nekoray_core.exe",
-                    "nekobox_core",
-                    "nekobox_core.exe"
+                    "proxor_core",
+                    "proxor_core.exe"
                 ],
                 "server": "dns-direct"
             },
@@ -75,7 +73,7 @@
     "outbounds": [
         {
             "type": "socks",
-            "tag": "neko-socks",
+            "tag": "proxor-socks",
             "udp_fragment": true,
             //%SOCKS_USER_PASS%
             "server": "127.0.0.1",
@@ -126,17 +124,15 @@
             {
                 "port": 53,
                 "process_name": [
-                    "nekoray_core",
-                    "nekoray_core.exe"
+                    "proxor_core",
+                    "proxor_core.exe"
                 ],
                 "outbound": "dns-out"
             },
             {
                 "process_name": [
-                    "nekoray_core",
-                    "nekoray_core.exe",
-                    "nekobox_core",
-                    "nekobox_core.exe"
+                    "proxor_core",
+                    "proxor_core.exe"
                 ],
                 "outbound": "direct"
             }

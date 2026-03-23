@@ -19,7 +19,7 @@
 #include "3rdparty/fix_old_qt.h"
 #include "3rdparty/qv2ray/wrapper.hpp"
 #include "fmt/Preset.hpp"
-#include "main/NekoGui.hpp"
+#include "main/ProxorGui.hpp"
 
 #define QV_MODULE_NAME "SystemProxy"
 
@@ -254,7 +254,7 @@ namespace Qv2ray::components::proxy {
 #endif
 
 #ifdef Q_OS_WIN
-        QString str = NekoGui::dataStore->system_proxy_format;
+        QString str = ProxorGui::dataStore->system_proxy_format;
         if (str.isEmpty()) str = Preset::Windows::system_proxy_format[0];
         str = str.replace("{ip}", address)
                   .replace("{http_port}", Int2String(httpPort))

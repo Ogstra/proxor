@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	fmt.Println("sing-box:", constant.Version, "Proxor:", proxor_common.Version_neko)
+	fmt.Println("sing-box:", constant.Version, "Proxor:", proxor_common.Version_proxor)
 	fmt.Println()
 
 	// proxor_core

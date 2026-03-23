@@ -1,8 +1,8 @@
 #pragma once
 
-#include "main/NekoGui.hpp"
+#include "main/ProxorGui.hpp"
 
-namespace NekoGui_fmt {
+namespace ProxorGui_fmt {
     class ChainBean : public AbstractBean {
     public:
         QList<int> list; // in to out
@@ -15,4 +15,4 @@ namespace NekoGui_fmt {
 
         QString DisplayAddress() override { return ""; };
     };
-} // namespace NekoGui_fmt
+} // namespace ProxorGui_fmt

@@ -17,7 +17,7 @@ public:
 
     ~EditNaive() override;
 
-    void onStart(std::shared_ptr<NekoGui::ProxyEntity> _ent) override;
+    void onStart(std::shared_ptr<ProxorGui::ProxyEntity> _ent) override;
 
     bool onEnd() override;
 
@@ -25,7 +25,7 @@ public:
 
 private:
     Ui::EditNaive *ui;
-    std::shared_ptr<NekoGui::ProxyEntity> ent;
+    std::shared_ptr<ProxorGui::ProxyEntity> ent;
 
     struct {
         QString certificate;

@@ -1,4 +1,4 @@
-#include "NekoGui.hpp"
+#include "ProxorGui.hpp"
 #include "fmt/Preset.hpp"
 
 #include <QFile>
@@ -18,7 +18,7 @@
 #include <unistd.h>
 #endif
 
-namespace NekoGui_ConfigItem {
+namespace ProxorGui_ConfigItem {
 
     // 添加关联
     void JsonStore::_add(configItem *item) {
@@ -218,9 +218,9 @@ namespace NekoGui_ConfigItem {
         return ok;
     }
 
-} // namespace NekoGui_ConfigItem
+} // namespace ProxorGui_ConfigItem
 
-namespace NekoGui {
+namespace ProxorGui {
 
     DataStore *dataStore = new DataStore();
 
@@ -304,7 +304,7 @@ namespace NekoGui {
         if (isDefault) {
             QString version = SubStrBefore(NKR_VERSION, "-");
             if (!version.contains(".")) version = "2.0";
-            return "NekoBox/PC/" + version + " (Prefer ClashMeta Format)";
+            return "Proxor/PC/" + version + " (Prefer ClashMeta Format)";
         }
         return user_agent;
     }
@@ -367,13 +367,13 @@ namespace NekoGui {
     }
 
     bool Routing::SetToActive(const QString &name) {
-        NekoGui::dataStore->routing = std::make_unique<Routing>();
-        NekoGui::dataStore->routing->load_control_must = true;
-        NekoGui::dataStore->routing->fn = ROUTES_PREFIX + name;
-        auto ok = NekoGui::dataStore->routing->Load();
+        ProxorGui::dataStore->routing = std::make_unique<Routing>();
+        ProxorGui::dataStore->routing->load_control_must = true;
+        ProxorGui::dataStore->routing->fn = ROUTES_PREFIX + name;
+        auto ok = ProxorGui::dataStore->routing->Load();
         if (ok) {
-            NekoGui::dataStore->active_routing = name;
-            NekoGui::dataStore->Save();
+            ProxorGui::dataStore->active_routing = name;
+            ProxorGui::dataStore->Save();
         }
         return ok;
     }
@@ -421,8 +421,8 @@ namespace NekoGui {
         search << "/usr/share/sing-geoip";
         search << "/usr/share/sing-geosite";
         search << "/usr/share/sing-box";
-        search << "/usr/lib/nekobox";
-        search << "/usr/share/nekobox";
+        search << "/usr/lib/proxor";
+        search << "/usr/share/proxor";
         for (const auto &dir: search) {
             if (dir.isEmpty()) continue;
             QFileInfo asset(dir + "/" + name);
@@ -433,8 +433,8 @@ namespace NekoGui {
         return {};
     }
 
-    QString FindNekoBoxCoreRealPath() {
-        auto fn = QApplication::applicationDirPath() + "/nekobox_core";
+    QString FindProxorCoreRealPath() {
+        auto fn = QApplication::applicationDirPath() + "/proxor_core";
         auto fi = QFileInfo(fn);
         if (fi.isSymLink()) return fi.symLinkTarget();
         return fn;
@@ -451,7 +451,7 @@ namespace NekoGui {
         admin = Windows_IsInAdmin();
 #else
 #ifdef Q_OS_LINUX
-        admin |= Linux_GetCapString(FindNekoBoxCoreRealPath()).contains("cap_net_admin");
+        admin |= Linux_GetCapString(FindProxorCoreRealPath()).contains("cap_net_admin");
 #endif
         admin |= geteuid() == 0;
 #endif
@@ -460,4 +460,4 @@ namespace NekoGui {
         return admin;
     };
 
-} // namespace NekoGui
+} // namespace ProxorGui

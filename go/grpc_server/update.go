@@ -221,7 +221,7 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 			return ret, nil
 		}
 		req.Header.Set("Accept", "application/vnd.github+json")
-		req.Header.Set("User-Agent", updateUserAgentPrefix+proxor_common.Version_neko)
+		req.Header.Set("User-Agent", updateUserAgentPrefix+proxor_common.Version_proxor)
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -244,7 +244,7 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 			return ret, nil
 		}
 
-		release, asset, selection := matchingReleaseAsset(releases, proxor_common.Version_neko, suffixes, in.CheckPreRelease)
+		release, asset, selection := matchingReleaseAsset(releases, proxor_common.Version_proxor, suffixes, in.CheckPreRelease)
 		if selection == updateSelectionCurrent {
 			updateDownloadURL = ""
 			updatePackagePath = ""
@@ -276,7 +276,7 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 			ret.Error = err.Error()
 			return ret, nil
 		}
-		req.Header.Set("User-Agent", updateUserAgentPrefix+proxor_common.Version_neko)
+		req.Header.Set("User-Agent", updateUserAgentPrefix+proxor_common.Version_proxor)
 
 		resp, err := client.Do(req)
 		if err != nil {

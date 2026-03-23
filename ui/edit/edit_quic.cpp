@@ -15,7 +15,7 @@ EditQUIC::~EditQUIC() {
     delete ui;
 }
 
-void EditQUIC::onStart(std::shared_ptr<NekoGui::ProxyEntity> _ent) {
+void EditQUIC::onStart(std::shared_ptr<ProxorGui::ProxyEntity> _ent) {
     this->ent = _ent;
     auto bean = this->ent->QUICBean();
 
@@ -45,7 +45,7 @@ void EditQUIC::onStart(std::shared_ptr<NekoGui::ProxyEntity> _ent) {
     P_LOAD_BOOL(allowInsecure);
     P_LOAD_BOOL(disableSni);
 
-    if (bean->proxy_type == NekoGui_fmt::QUICBean::proxy_Hysteria2) {
+    if (bean->proxy_type == ProxorGui_fmt::QUICBean::proxy_Hysteria2) {
         ui->uuid->hide();
         ui->uuid_l->hide();
         ui->uuidgen->hide();
@@ -66,7 +66,7 @@ void EditQUIC::onStart(std::shared_ptr<NekoGui::ProxyEntity> _ent) {
         ui->connectionReceiveWindow_l->hide();
         ui->streamReceiveWindow->hide();
         ui->streamReceiveWindow_l->hide();
-    } else if (bean->proxy_type == NekoGui_fmt::QUICBean::proxy_TUIC) {
+    } else if (bean->proxy_type == ProxorGui_fmt::QUICBean::proxy_TUIC) {
         ui->hopPort->hide();
         ui->hopPort_l->hide();
         ui->hopInterval->hide();

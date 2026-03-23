@@ -1,4 +1,4 @@
-name: Nekoray build matrix - cmake
+name: Proxor build matrix - cmake
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ jobs:
   build-go:
     strategy:
       matrix:
-        cross_os: [windows, linux]
+        cross_os: [windows]
         cross_arch: [amd64]
         include:
           - cross_os: public_res
@@ -53,7 +53,7 @@ jobs:
       - name: Uploading Artifact
         uses: actions/upload-artifact@v3
         with:
-          name: NekoRay-${{ github.sha }}-Common-${{ matrix.cross_os }}-${{ matrix.cross_arch }}
+          name: Proxor-${{ github.sha }}-Common-${{ matrix.cross_os }}-${{ matrix.cross_arch }}
           path: artifacts.tgz
   build-cpp:
     strategy:
@@ -62,9 +62,6 @@ jobs:
           - platform: windows-2022
             arch: x64
             qt_version: "6.7"
-          - platform: ubuntu-20.04
-            arch: x64
-            qt_version: "5.12"
       fail-fast: false
 
     runs-on: ${{ matrix.platform }}
@@ -88,7 +85,7 @@ jobs:
         if: matrix.platform == 'windows-2022'
         env:
           DL_QT_VER: ${{ matrix.qt_version }}
-        run: bash ./libs/download_qtsdk_win.sh
+        run: bash ./libs/download_proxor_qtsdk_win.sh
       # ========================================================================================================= 编译与 Qt 无关的依赖
       - name: Install ninja-build tool
         uses: seanmiddleditch/gha-setup-ninja@v3
@@ -100,17 +97,8 @@ jobs:
           key: DepsCache-${{ matrix.platform }}-${{ matrix.arch }}-${{ hashFiles('libs/build_deps_*.sh') }}-Qt${{ matrix.qt_version }}
       - name: Build Dependencies
         shell: bash
-        if: steps.cache-deps.outputs.cache-hit != 'true' && matrix.platform != 'ubuntu-20.04'
+        if: steps.cache-deps.outputs.cache-hit != 'true'
         run: ./libs/build_deps_all.sh
-      - name: Build Dependencies (Docker)
-        shell: bash
-        if: steps.cache-deps.outputs.cache-hit != 'true' && matrix.platform == 'ubuntu-20.04'
-        run: |
-          docker run --rm \
-            -v $PWD:/nekoray \
-            -w /nekoray \
-            ghcr.io/matsuridayo/debian10-qt5:20230131 \
-            bash -c "./libs/build_deps_all.sh"
       # ========================================================================================================= Generate MakeFile and Build
       - name: Windows - Generate MakeFile and Build
         shell: bash
@@ -127,15 +115,6 @@ jobs:
           ninja -j2
           cd ..
           ./libs/deploy_windows64.sh
-      - name: Linux - Generate MakeFile and Build
-        shell: bash
-        if: matrix.platform == 'ubuntu-20.04'
-        run: |
-          docker run --rm \
-            -v $PWD:/nekoray \
-            -w /nekoray \
-            ghcr.io/matsuridayo/debian10-qt5:20230131 \
-            bash -c "mkdir build && pushd build && cmake -GNinja -DCMAKE_BUILD_TYPE=Release .. && ninja && popd &&./libs/deploy_linux64.sh"
       # ========================================================================================================= Deployments
       - name: Tar files
         shell: bash
@@ -143,7 +122,7 @@ jobs:
       - name: Uploading Artifact
         uses: actions/upload-artifact@v3
         with:
-          name: NekoRay-${{ github.sha }}-${{ matrix.platform }}-${{ matrix.arch }}-Qt${{ matrix.qt_version }}
+          name: Proxor-${{ github.sha }}-${{ matrix.platform }}-${{ matrix.arch }}-Qt${{ matrix.qt_version }}
           path: artifacts.tgz
   publish:
     name: Pack & Publish Release
@@ -167,39 +146,15 @@ jobs:
           source libs/env_deploy.sh
           find . -name artifacts.tgz | xargs -n1 tar xvzf
           cd deployment
-          cp -r public_res/* linux64
           cp -r public_res/* windows64
-          rm -rf linux64/config windows64/config
+          rm -rf windows64/config
           rm -rf public_res *.pdb
-          ####
-          bash ../libs/package_release.sh linux64 $version_standalone-linux64.zip
-          rm -rf linux64
           ####
           bash ../libs/package_release.sh windows64 $version_standalone-windows64.zip
           rm -rf windows64
-      - name: Pack Debian
-        run: |
-          source libs/env_deploy.sh
-          find . -name artifacts.tgz | xargs -n1 tar xvzf
-          cd deployment
-          cp -r public_res/* linux64
-          ####
-          bash ../libs/package_debian.sh ${{ github.event.inputs.tag }}
-          mv nekoray.deb $version_standalone-debian-x64.deb
-          sudo rm -rf nekoray
-      - name: Pack AppImage
-        run: |
-          source libs/env_deploy.sh
-          find . -name artifacts.tgz | xargs -n1 tar xvzf
-          cd deployment
-          cp -r public_res/* linux64
-          ####
-          bash ../libs/package_appimage.sh
-          mv nekobox-x86_64.AppImage $version_standalone-linux-x64.AppImage
       - name: Clean Up
         run: |
           cd deployment
-          rm -rf linux64
           rm -rf windows64
           rm -rf public_res
           rm -rf *.pdb
