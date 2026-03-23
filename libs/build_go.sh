@@ -23,7 +23,7 @@ pushd go/cmd/updater
 [ "$GOOS" == "linux" ] && mv $DEST/updater $DEST/launcher || true
 popd
 
-#### Go: nekobox_core ####
-pushd go/cmd/nekobox_core
-go build -v -o $DEST -trimpath -ldflags "-w -s -X github.com/matsuridayo/libneko/neko_common.Version_neko=$version_standalone" -tags "$NEKOBOX_CORE_TAGS"
+#### Go: proxor_core ####
+pushd go/cmd/proxor_core
+go build -v -o $DEST -trimpath -ldflags "-w -s -X github.com/Ogstra/proxorlib/proxor_common.Version_neko=$version_standalone" -tags "$NEKOBOX_CORE_TAGS"
 popd

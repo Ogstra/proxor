@@ -3,15 +3,12 @@ package grpc_server
 import "testing"
 
 func TestParseReleaseVersion(t *testing.T) {
-	version, ok := parseReleaseVersion("nekoray-4.0.3-2026-03-22-windows64.zip")
+	version, ok := parseReleaseVersion("proxor-1.0.3-windows64.zip")
 	if !ok {
 		t.Fatal("expected version to parse")
 	}
-	if version.major != 4 || version.minor != 0 || version.patch != 3 {
+	if version.major != 1 || version.minor != 0 || version.patch != 3 {
 		t.Fatalf("unexpected version components: %+v", version)
-	}
-	if got := version.date.Format("2006-01-02"); got != "2026-03-22" {
-		t.Fatalf("unexpected parsed date: %s", got)
 	}
 }
 
@@ -54,14 +51,14 @@ func TestUpdateArchiveSuffixes(t *testing.T) {
 func TestMatchingReleaseAssetNoUpdateWhenCurrentVersionMatches(t *testing.T) {
 	releases := []githubRelease{
 		{
-			TagName: "nekoray-4.0.1-2026-03-22",
+			TagName: "proxor-1.0.1",
 			Assets: []githubReleaseAsset{
-				{Name: "nekoray-4.0.1-2026-03-22-windows64.zip"},
+				{Name: "proxor-1.0.1-windows64.zip"},
 			},
 		},
 	}
 
-	release, asset, selection := matchingReleaseAsset(releases, "nekoray-4.0.1-2026-03-22", []string{"windows64.zip"}, false)
+	release, asset, selection := matchingReleaseAsset(releases, "proxor-1.0.1", []string{"windows64.zip"}, false)
 	if release != nil || asset != nil || selection != updateSelectionCurrent {
 		t.Fatalf("expected current-version match, got release=%v asset=%v selection=%v", release, asset, selection)
 	}
@@ -70,21 +67,21 @@ func TestMatchingReleaseAssetNoUpdateWhenCurrentVersionMatches(t *testing.T) {
 func TestMatchingReleaseAssetSkipsPrereleaseByDefault(t *testing.T) {
 	releases := []githubRelease{
 		{
-			TagName:    "nekoray-4.0.2-2026-03-23",
+			TagName:    "proxor-1.0.2",
 			Prerelease: true,
 			Assets: []githubReleaseAsset{
-				{Name: "nekoray-4.0.2-2026-03-23-windows64.zip", BrowserDownloadURL: "https://example.com/pre.zip"},
+				{Name: "proxor-1.0.2-windows64.zip", BrowserDownloadURL: "https://example.com/pre.zip"},
 			},
 		},
 		{
-			TagName: "nekoray-4.0.1-2026-03-22",
+			TagName: "proxor-1.0.1",
 			Assets: []githubReleaseAsset{
-				{Name: "nekoray-4.0.1-2026-03-22-windows64.zip", BrowserDownloadURL: "https://example.com/current.zip"},
+				{Name: "proxor-1.0.1-windows64.zip", BrowserDownloadURL: "https://example.com/current.zip"},
 			},
 		},
 	}
 
-	release, asset, selection := matchingReleaseAsset(releases, "nekoray-4.0.1-2026-03-22", []string{"windows64.zip"}, false)
+	release, asset, selection := matchingReleaseAsset(releases, "proxor-1.0.1", []string{"windows64.zip"}, false)
 	if release != nil || asset != nil || selection != updateSelectionCurrent {
 		t.Fatalf("expected current-version match when prereleases are skipped, got release=%v asset=%v selection=%v", release, asset, selection)
 	}
@@ -93,19 +90,19 @@ func TestMatchingReleaseAssetSkipsPrereleaseByDefault(t *testing.T) {
 func TestMatchingReleaseAssetFindsNewStableRelease(t *testing.T) {
 	releases := []githubRelease{
 		{
-			TagName: "nekoray-4.0.2-2026-03-23",
+			TagName: "proxor-1.0.2",
 			HTMLURL: "https://example.com/release",
 			Assets: []githubReleaseAsset{
-				{Name: "nekoray-4.0.2-2026-03-23-windows64.zip", BrowserDownloadURL: "https://example.com/update.zip"},
+				{Name: "proxor-1.0.2-windows64.zip", BrowserDownloadURL: "https://example.com/update.zip"},
 			},
 		},
 	}
 
-	release, asset, selection := matchingReleaseAsset(releases, "nekoray-4.0.1-2026-03-22", []string{"windows64.zip"}, false)
+	release, asset, selection := matchingReleaseAsset(releases, "proxor-1.0.1", []string{"windows64.zip"}, false)
 	if release == nil || asset == nil || selection != updateSelectionAvailable {
 		t.Fatalf("expected an update candidate")
 	}
-	if asset.Name != "nekoray-4.0.2-2026-03-23-windows64.zip" {
+	if asset.Name != "proxor-1.0.2-windows64.zip" {
 		t.Fatalf("unexpected asset: %s", asset.Name)
 	}
 }
@@ -113,20 +110,20 @@ func TestMatchingReleaseAssetFindsNewStableRelease(t *testing.T) {
 func TestMatchingReleaseAssetNeverDowngradesWhenOlderReleaseAppearsFirst(t *testing.T) {
 	releases := []githubRelease{
 		{
-			TagName: "nekoray-4.0.2-2026-03-22",
+			TagName: "proxor-1.0.2",
 			Assets: []githubReleaseAsset{
-				{Name: "nekoray-4.0.2-2026-03-22-windows64.zip", BrowserDownloadURL: "https://example.com/402.zip"},
+				{Name: "proxor-1.0.2-windows64.zip", BrowserDownloadURL: "https://example.com/102.zip"},
 			},
 		},
 		{
-			TagName: "nekoray-4.0.3-2026-03-22",
+			TagName: "proxor-1.0.3",
 			Assets: []githubReleaseAsset{
-				{Name: "nekoray-4.0.3-2026-03-22-windows64.zip", BrowserDownloadURL: "https://example.com/403.zip"},
+				{Name: "proxor-1.0.3-windows64.zip", BrowserDownloadURL: "https://example.com/103.zip"},
 			},
 		},
 	}
 
-	release, asset, selection := matchingReleaseAsset(releases, "nekoray-4.0.3-2026-03-22", []string{"windows64.zip"}, false)
+	release, asset, selection := matchingReleaseAsset(releases, "proxor-1.0.3", []string{"windows64.zip"}, false)
 	if release != nil || asset != nil || selection != updateSelectionCurrent {
 		t.Fatalf("expected current-version match instead of downgrade, got release=%v asset=%v selection=%v", release, asset, selection)
 	}
@@ -135,30 +132,30 @@ func TestMatchingReleaseAssetNeverDowngradesWhenOlderReleaseAppearsFirst(t *test
 func TestMatchingReleaseAssetChoosesHighestCompatibleVersion(t *testing.T) {
 	releases := []githubRelease{
 		{
-			TagName: "nekoray-4.0.2-2026-03-22",
+			TagName: "proxor-1.0.2",
 			Assets: []githubReleaseAsset{
-				{Name: "nekoray-4.0.2-2026-03-22-windows64.zip", BrowserDownloadURL: "https://example.com/402.zip"},
+				{Name: "proxor-1.0.2-windows64.zip", BrowserDownloadURL: "https://example.com/102.zip"},
 			},
 		},
 		{
-			TagName: "nekoray-4.0.4-2026-03-25",
+			TagName: "proxor-1.0.4",
 			Assets: []githubReleaseAsset{
-				{Name: "nekoray-4.0.4-2026-03-25-windows64.zip", BrowserDownloadURL: "https://example.com/404.zip"},
+				{Name: "proxor-1.0.4-windows64.zip", BrowserDownloadURL: "https://example.com/104.zip"},
 			},
 		},
 		{
-			TagName: "nekoray-4.0.3-2026-03-24",
+			TagName: "proxor-1.0.3",
 			Assets: []githubReleaseAsset{
-				{Name: "nekoray-4.0.3-2026-03-24-windows64.zip", BrowserDownloadURL: "https://example.com/403.zip"},
+				{Name: "proxor-1.0.3-windows64.zip", BrowserDownloadURL: "https://example.com/103.zip"},
 			},
 		},
 	}
 
-	release, asset, selection := matchingReleaseAsset(releases, "nekoray-4.0.1-2026-03-22", []string{"windows64.zip"}, false)
+	release, asset, selection := matchingReleaseAsset(releases, "proxor-1.0.1", []string{"windows64.zip"}, false)
 	if release == nil || asset == nil || selection != updateSelectionAvailable {
 		t.Fatalf("expected an update candidate")
 	}
-	if release.TagName != "nekoray-4.0.4-2026-03-25" || asset.Name != "nekoray-4.0.4-2026-03-25-windows64.zip" {
+	if release.TagName != "proxor-1.0.4" || asset.Name != "proxor-1.0.4-windows64.zip" {
 		t.Fatalf("expected highest compatible release, got release=%v asset=%v", release.TagName, asset.Name)
 	}
 }
@@ -166,14 +163,14 @@ func TestMatchingReleaseAssetChoosesHighestCompatibleVersion(t *testing.T) {
 func TestMatchingReleaseAssetReportsNoCompatiblePackage(t *testing.T) {
 	releases := []githubRelease{
 		{
-			TagName: "nekoray-4.0.2-2026-03-23",
+			TagName: "proxor-1.0.2",
 			Assets: []githubReleaseAsset{
-				{Name: "nekoray-4.0.2-2026-03-23-linux64.zip"},
+				{Name: "proxor-1.0.2-linux64.zip"},
 			},
 		},
 	}
 
-	release, asset, selection := matchingReleaseAsset(releases, "nekoray-4.0.1-2026-03-22", []string{"windows64.zip"}, false)
+	release, asset, selection := matchingReleaseAsset(releases, "proxor-1.0.1", []string{"windows64.zip"}, false)
 	if release != nil || asset != nil || selection != updateSelectionNoCompatible {
 		t.Fatalf("expected no compatible package, got release=%v asset=%v selection=%v", release, asset, selection)
 	}

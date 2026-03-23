@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/matsuridayo/libneko/neko_common"
+	"github.com/Ogstra/proxorlib/proxor_common"
 )
 
 const (
@@ -201,7 +201,7 @@ func githubError(resp *http.Response) string {
 
 func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.UpdateResp, error) {
 	ret := &gen.UpdateResp{}
-	client := neko_common.CreateProxyHttpClient(neko_common.GetCurrentInstance())
+	client := proxor_common.CreateProxyHttpClient(proxor_common.GetCurrentInstance())
 
 	switch in.Action {
 	case gen.UpdateAction_Check:
@@ -221,7 +221,7 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 			return ret, nil
 		}
 		req.Header.Set("Accept", "application/vnd.github+json")
-		req.Header.Set("User-Agent", updateUserAgentPrefix+neko_common.Version_neko)
+		req.Header.Set("User-Agent", updateUserAgentPrefix+proxor_common.Version_neko)
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -244,7 +244,7 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 			return ret, nil
 		}
 
-		release, asset, selection := matchingReleaseAsset(releases, neko_common.Version_neko, suffixes, in.CheckPreRelease)
+		release, asset, selection := matchingReleaseAsset(releases, proxor_common.Version_neko, suffixes, in.CheckPreRelease)
 		if selection == updateSelectionCurrent {
 			updateDownloadURL = ""
 			updatePackagePath = ""
@@ -276,7 +276,7 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 			ret.Error = err.Error()
 			return ret, nil
 		}
-		req.Header.Set("User-Agent", updateUserAgentPrefix+neko_common.Version_neko)
+		req.Header.Set("User-Agent", updateUserAgentPrefix+proxor_common.Version_neko)
 
 		resp, err := client.Do(req)
 		if err != nil {

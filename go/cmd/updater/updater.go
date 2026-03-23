@@ -47,6 +47,8 @@ func Updater() {
 	os.Remove("./nekoray.exe")
 	os.Remove("./nekoray.png")
 	os.Remove("./nekoray_core.exe")
+	os.Remove("./nekobox.exe")
+	os.Remove("./nekobox_core.exe")
 }
 
 func failUpdate(err error) {
@@ -77,8 +79,8 @@ func findUpdatePackage() (string, error) {
 	candidates := []string{
 		"./update-package.zip",
 		"./update-package.tar.gz",
-		"./nekoray.zip",
-		"./nekoray.tar.gz",
+		"./proxor.zip",
+		"./proxor.tar.gz",
 	}
 	for _, candidate := range candidates {
 		if Exist(candidate) {
@@ -106,7 +108,7 @@ func extractUpdatePackage(updatePackagePath string) error {
 }
 
 func findPayloadRoot(base string) (string, error) {
-	legacyRoot := filepath.Join(base, "nekoray")
+	legacyRoot := filepath.Join(base, "proxor")
 	if info, err := os.Stat(legacyRoot); err == nil && info.IsDir() {
 		return legacyRoot, nil
 	}

@@ -56,7 +56,7 @@ func TestRunCoreInterceptorsRejectBadToken(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	ctx = metadata.AppendToOutgoingContext(ctx, "nekoray_auth", "wrong-token")
+	ctx = metadata.AppendToOutgoingContext(ctx, "proxor_auth", "wrong-token")
 
 	client := gen.NewLibcoreServiceClient(conn)
 	_, err = client.Update(ctx, &gen.UpdateReq{})

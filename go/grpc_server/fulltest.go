@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/matsuridayo/libneko/neko_common"
-	"github.com/matsuridayo/libneko/speedtest"
+	"github.com/Ogstra/proxorlib/proxor_common"
+	"github.com/Ogstra/proxorlib/speedtest"
 )
 
 const (
@@ -38,7 +38,7 @@ func getBetweenStr(str, start, end string) string {
 
 func DoFullTest(ctx context.Context, in *gen.TestReq, instance interface{}) (out *gen.TestResp, _ error) {
 	out = &gen.TestResp{}
-	httpClient := neko_common.CreateProxyHttpClient(instance)
+	httpClient := proxor_common.CreateProxyHttpClient(instance)
 
 	// Latency
 	var latency string
@@ -60,7 +60,7 @@ func DoFullTest(ctx context.Context, in *gen.TestReq, instance interface{}) (out
 
 		go func() {
 			var startTime = time.Now()
-			pc, err := neko_common.DialContext(ctx, instance, "udp", "8.8.8.8:53")
+			pc, err := proxor_common.DialContext(ctx, instance, "udp", "8.8.8.8:53")
 			if err == nil {
 				defer pc.Close()
 				dnsPacket, _ := hex.DecodeString("0000010000010000000000000377777706676f6f676c6503636f6d0000010001")

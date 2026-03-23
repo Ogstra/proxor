@@ -16,7 +16,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/matsuridayo/libneko/neko_common"
+	"github.com/Ogstra/proxorlib/proxor_common"
 
 	grpc_auth "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/auth"
 	"google.golang.org/grpc"
@@ -40,7 +40,7 @@ func RunCore(setupCore func(), server gen.LibcoreServiceServer) {
 	_debug := flag.Bool("debug", false, "")
 	flag.CommandLine.Parse(os.Args[2:])
 
-	neko_common.Debug = *_debug
+	proxor_common.Debug = *_debug
 
 	go func() {
 		parent, err := os.FindProcess(os.Getppid())
@@ -94,7 +94,7 @@ func RunCore(setupCore func(), server gen.LibcoreServiceServer) {
 	)
 	gen.RegisterLibcoreServiceServer(s, server)
 
-	name := "nekobox_core"
+	name := "proxor_core"
 
 	log.Printf("%s grpc server listening at %v\n", name, lis.Addr())
 	if err := s.Serve(lis); err != nil {
