@@ -29,7 +29,7 @@ func main() {
 				time.Sleep(time.Second)
 				Updater()
 				// 3. start
-				exec.Command("./nekobox.exe").Start()
+				exec.Command("./proxor.exe").Start()
 			} else {
 				// 1. main prog quit and run "updater.exe"
 				Copy("./updater.exe", "./updater.old")
@@ -42,7 +42,7 @@ func main() {
 			if os.Getenv("NKR_FROM_LAUNCHER") == "1" {
 				Launcher()
 			} else {
-				exec.Command("./nekobox").Start()
+				exec.Command("./proxor").Start()
 			}
 		}
 		return
