@@ -19,8 +19,9 @@ import (
 )
 
 const (
-	updateRepoOwner = "Ogstra"
-	updateRepoName  = "nekoray"
+	updateRepoOwner       = "Ogstra"
+	updateRepoName        = "proxor"
+	updateUserAgentPrefix = "Proxor-Updater/"
 )
 
 type githubReleaseAsset struct {
@@ -233,7 +234,7 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 			return ret, nil
 		}
 		req.Header.Set("Accept", "application/vnd.github+json")
-		req.Header.Set("User-Agent", "NekoBox-Updater/"+neko_common.Version_neko)
+		req.Header.Set("User-Agent", updateUserAgentPrefix+neko_common.Version_neko)
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -288,7 +289,7 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 			ret.Error = err.Error()
 			return ret, nil
 		}
-		req.Header.Set("User-Agent", "NekoBox-Updater/"+neko_common.Version_neko)
+		req.Header.Set("User-Agent", updateUserAgentPrefix+neko_common.Version_neko)
 
 		resp, err := client.Do(req)
 		if err != nil {
