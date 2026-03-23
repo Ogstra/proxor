@@ -16,7 +16,7 @@ type Authenticator struct {
 // Authenticate checks that a token exists and is valid. It stores the user
 // metadata in the returned context and removes the token from the context.
 func (a Authenticator) Authenticate(ctx context.Context) (newCtx context.Context, err error) {
-	auth, err := extractHeader(ctx, "nekoray_auth")
+	auth, err := extractHeader(ctx, "proxor_auth")
 	if err != nil {
 		return ctx, err
 	}
@@ -25,7 +25,7 @@ func (a Authenticator) Authenticate(ctx context.Context) (newCtx context.Context
 		return ctx, status.Error(codes.Unauthenticated, "invalid token")
 	}
 
-	return purgeHeader(ctx, "nekoray_auth"), nil
+	return purgeHeader(ctx, "proxor_auth"), nil
 }
 
 func extractHeader(ctx context.Context, header string) (string, error) {

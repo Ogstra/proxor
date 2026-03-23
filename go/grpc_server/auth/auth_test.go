@@ -20,7 +20,7 @@ func TestAuthenticateMissingMetadata(t *testing.T) {
 
 func TestAuthenticateWrongToken(t *testing.T) {
 	auther := Authenticator{Token: "secret"}
-	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("nekoray_auth", "wrong"))
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("proxor_auth", "wrong"))
 
 	_, err := auther.Authenticate(ctx)
 	if status.Code(err) != codes.Unauthenticated {
@@ -31,7 +31,7 @@ func TestAuthenticateWrongToken(t *testing.T) {
 func TestAuthenticateMultipleHeaderValues(t *testing.T) {
 	auther := Authenticator{Token: "secret"}
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.MD{
-		"nekoray_auth": []string{"one", "two"},
+		"proxor_auth": []string{"one", "two"},
 	})
 
 	_, err := auther.Authenticate(ctx)
@@ -43,7 +43,7 @@ func TestAuthenticateMultipleHeaderValues(t *testing.T) {
 func TestAuthenticatePurgesHeaderOnSuccess(t *testing.T) {
 	auther := Authenticator{Token: "secret"}
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
-		"nekoray_auth", "secret",
+		"proxor_auth", "secret",
 		"other", "keep",
 	))
 
@@ -56,8 +56,8 @@ func TestAuthenticatePurgesHeaderOnSuccess(t *testing.T) {
 	if !ok {
 		t.Fatal("expected metadata in returned context")
 	}
-	if vals := md.Get("nekoray_auth"); len(vals) != 0 {
-		t.Fatalf("expected nekoray_auth to be purged, got %v", vals)
+	if vals := md.Get("proxor_auth"); len(vals) != 0 {
+		t.Fatalf("expected proxor_auth to be purged, got %v", vals)
 	}
 	if vals := md.Get("other"); len(vals) != 1 || vals[0] != "keep" {
 		t.Fatalf("expected other header to be preserved, got %v", vals)
