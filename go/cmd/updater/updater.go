@@ -50,7 +50,7 @@ func Updater() {
 }
 
 func failUpdate(err error) {
-	MessageBoxPlain("NekoBox Updater", "The update could not be installed.\n\nPlease close any running NekoBox processes and try again.\n\n"+err.Error())
+	MessageBoxPlain("Proxor Updater", "The update could not be installed.\n\nPlease close any running Proxor processes and try again.\n\n"+err.Error())
 	log.Fatalln(err.Error())
 }
 
