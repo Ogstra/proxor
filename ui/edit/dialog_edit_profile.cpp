@@ -113,9 +113,7 @@ DialogEditProfile::DialogEditProfile(const QString &_type, int profileOrGroupId,
         LOAD_TYPE("trojan")
         LOAD_TYPE("vmess")
         LOAD_TYPE("vless")
-        LOAD_TYPE("naive")
         LOAD_TYPE("hysteria2")
-        LOAD_TYPE("tuic")
         ui->type->addItem(tr("Custom (%1 outbound)").arg(software_core_name), "internal");
         ui->type->addItem(tr("Custom (%1 config)").arg(software_core_name), "internal-full");
         ui->type->addItem(tr("Custom (Extra Core)"), "custom");
