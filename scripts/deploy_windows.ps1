@@ -84,7 +84,7 @@ if (-not $SkipQtDeploy) {
     }
 }
 
-foreach ($name in @("translations", "libEGL.dll", "libGLESv2.dll", "Qt6Pdf.dll")) {
+foreach ($name in @("translations", "libEGL.dll", "libGLESv2.dll", "Qt6Pdf.dll", "dxcompiler.dll", "dxil.dll")) {
     $path = Join-Path $resolvedOutputDir $name
     if (Test-Path $path) {
         Remove-Item -Recurse -Force $path
@@ -96,6 +96,15 @@ foreach ($dll in @("libcrypto-3-x64.dll", "libssl-3-x64.dll")) {
     if (Test-Path $source) {
         Copy-Item $source $resolvedOutputDir -Force
     }
+}
+
+# Copy SQLite driver plugin
+$qtSqlDriversDir = Join-Path $repoRoot "qtsdk\Qt\plugins\sqldrivers"
+$destSqlDriversDir = Join-Path $resolvedOutputDir "sqldrivers"
+New-Item -ItemType Directory -Force -Path $destSqlDriversDir | Out-Null
+$sqliteSource = Join-Path $qtSqlDriversDir "qsqlite.dll"
+if (Test-Path $sqliteSource) {
+    Copy-Item $sqliteSource $destSqlDriversDir -Force
 }
 
 if (-not $SkipPublicRes) {

@@ -16,6 +16,7 @@ pushd $DEST
 windeployqt proxor.exe --no-compiler-runtime --no-system-d3d-compiler --no-opengl-sw --verbose 2
 rm -rf translations
 rm -rf libEGL.dll libGLESv2.dll Qt6Pdf.dll
+rm -f dxcompiler.dll dxil.dll
 
 if [ "$DL_QT_VER" != "5.15" ]; then
   cp $SRC_ROOT/qtsdk/Qt/bin/libcrypto-3-x64.dll .
@@ -23,6 +24,10 @@ if [ "$DL_QT_VER" != "5.15" ]; then
 fi
 
 popd
+
+#### copy SQLite driver plugin ####
+mkdir -p "$DEST/sqldrivers"
+cp "$SRC_ROOT/qtsdk/Qt/plugins/sqldrivers/qsqlite.dll" "$DEST/sqldrivers/"
 
 #### prepare deployment ####
 if [ -d "$DEPLOYMENT/public_res" ]; then
