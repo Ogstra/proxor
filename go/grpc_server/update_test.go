@@ -178,3 +178,19 @@ func TestMatchingReleaseAssetReportsNoCompatiblePackage(t *testing.T) {
 		t.Fatalf("expected no compatible package, got release=%v asset=%v selection=%v", release, asset, selection)
 	}
 }
+
+func TestUpdateRepoConstants(t *testing.T) {
+	if updateRepoName != "proxor" {
+		t.Fatalf("updateRepoName = %q, want %q", updateRepoName, "proxor")
+	}
+	if updateRepoOwner != "Ogstra" {
+		t.Fatalf("updateRepoOwner = %q, want %q", updateRepoOwner, "Ogstra")
+	}
+}
+
+func TestUpdateUserAgent(t *testing.T) {
+	const want = "Proxor-Updater/"
+	if updateUserAgentPrefix != want {
+		t.Fatalf("updateUserAgentPrefix = %q, want %q", updateUserAgentPrefix, want)
+	}
+}
