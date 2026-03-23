@@ -2,8 +2,6 @@
 
 #include "main/ProxorGui.hpp"
 
-#include <QPainter>
-
 QPixmap Icon::GetTrayIcon(Icon::TrayIconStatus status) {
     QPixmap pixmap;
 
@@ -21,30 +19,7 @@ QPixmap Icon::GetTrayIcon(Icon::TrayIconStatus status) {
 
     if (status == TrayIconStatus::NONE) return pixmap;
 
-    auto p = QPainter(&pixmap);
-
-    auto side = pixmap.width();
-    auto radius = side * 0.4;
-    auto d = side * 0.3;
-    auto margin = side * 0.05;
-
-    if (status == TrayIconStatus::RUNNING) {
-        p.setBrush(QBrush(Qt::darkGreen));
-    } else if (status == TrayIconStatus::SYSTEM_PROXY) {
-        p.setBrush(QBrush(Qt::blue));
-    } else if (status == TrayIconStatus::VPN) {
-        p.setBrush(QBrush(Qt::red));
-    }
-    p.drawRoundedRect(
-        QRect(side - d - margin,
-              side - d - margin,
-              d,
-              d),
-        radius,
-        radius);
-    p.end();
-
-    return pixmap;
+    return QPixmap(":/proxor/proxor_active.png");
 }
 
 QPixmap Icon::GetMaterialIcon(const QString &name) {
