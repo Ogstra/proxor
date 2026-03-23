@@ -56,7 +56,7 @@ namespace QtGrpc {
 
         QString url_base;
         QString serviceName;
-        QByteArray nekoray_auth;
+        QByteArray proxor_auth;
 
         // async
         QNetworkReply *post(const QString &method, const QString &service, const QByteArray &args) {
@@ -74,7 +74,7 @@ namespace QtGrpc {
             request.setRawHeader(GrpcAcceptEncodingHeader, QByteArray{"identity,deflate,gzip"});
             request.setRawHeader(AcceptEncodingHeader, QByteArray{"identity,gzip"});
             request.setRawHeader(TEHeader, QByteArray{"trailers"});
-            request.setRawHeader("nekoray_auth", nekoray_auth);
+            request.setRawHeader("proxor_auth", proxor_auth);
 
             QByteArray msg(GrpcMessageSizeHeaderSize, '\0');
             *reinterpret_cast<int *>(msg.data() + 1) = qToBigEndian((int) args.size());
@@ -139,9 +139,9 @@ namespace QtGrpc {
         }
 
     public:
-        Http2GrpcChannelPrivate(const QString &url_, const QString &nekoray_auth_, const QString &serviceName_) {
+        Http2GrpcChannelPrivate(const QString &url_, const QString &proxor_auth_, const QString &serviceName_) {
             url_base = "http://" + url_;
-            nekoray_auth = nekoray_auth_.toLatin1();
+            proxor_auth = proxor_auth_.toLatin1();
             serviceName = serviceName_;
             //
             thread = new QThread;
