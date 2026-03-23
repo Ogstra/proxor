@@ -8,6 +8,8 @@ mkdir -p $DEST
 
 #### copy exe ####
 cp $BUILD/proxor.exe $DEST
+cp $SRC_ROOT/go/cmd/nekobox_core/nekobox_core.exe $DEST
+cp $SRC_ROOT/go/cmd/updater/updater.exe $DEST
 
 #### deploy qt & DLL runtime ####
 pushd $DEST
