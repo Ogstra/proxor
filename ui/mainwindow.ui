@@ -480,8 +480,6 @@
      <addaction name="actionfake_3"/>
     </widget>
     <addaction name="actionShow_window"/>
-    <addaction name="menu_add_from_clipboard2"/>
-    <addaction name="menu_scan_qr"/>
     <addaction name="separator"/>
     <addaction name="actionStart_with_system"/>
     <addaction name="actionRemember_last_proxy"/>
@@ -629,11 +627,6 @@
     <string notr="true">Del</string>
    </property>
   </action>
-  <action name="menu_add_from_clipboard2">
-   <property name="text">
-    <string>Add profile from clipboard</string>
-   </property>
-  </action>
   <action name="menu_profile_debug_info">
    <property name="text">
     <string>Debug Info</string>
@@ -690,11 +683,6 @@
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+R</string>
-   </property>
-  </action>
-  <action name="menu_scan_qr">
-   <property name="text">
-    <string>Scan QR Code</string>
    </property>
   </action>
   <action name="menu_spmode_system_proxy">
