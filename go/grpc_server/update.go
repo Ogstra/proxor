@@ -54,10 +54,9 @@ type releaseVersion struct {
 	major int
 	minor int
 	patch int
-	date  time.Time
 }
 
-var releaseVersionPattern = regexp.MustCompile(`(\d+)\.(\d+)\.(\d+)-(\d{4})-(\d{2})-(\d{2})`)
+var releaseVersionPattern = regexp.MustCompile(`(\d+)\.(\d+)\.(\d+)`)
 
 func updateArchiveSuffixes(goos, goarch string) ([]string, error) {
 	switch {
@@ -76,7 +75,7 @@ func updateArchiveSuffixes(goos, goarch string) ([]string, error) {
 
 func parseReleaseVersion(raw string) (releaseVersion, bool) {
 	match := releaseVersionPattern.FindStringSubmatch(raw)
-	if len(match) != 7 {
+	if len(match) != 4 {
 		return releaseVersion{}, false
 	}
 
@@ -93,16 +92,10 @@ func parseReleaseVersion(raw string) (releaseVersion, bool) {
 		return releaseVersion{}, false
 	}
 
-	dateValue, err := time.Parse("2006-01-02", fmt.Sprintf("%s-%s-%s", match[4], match[5], match[6]))
-	if err != nil {
-		return releaseVersion{}, false
-	}
-
 	return releaseVersion{
 		major: major,
 		minor: minor,
 		patch: patch,
-		date:  dateValue,
 	}, true
 }
 
@@ -112,14 +105,8 @@ func compareReleaseVersions(left, right releaseVersion) int {
 		return left.major - right.major
 	case left.minor != right.minor:
 		return left.minor - right.minor
-	case left.patch != right.patch:
-		return left.patch - right.patch
-	case left.date.Before(right.date):
-		return -1
-	case left.date.After(right.date):
-		return 1
 	default:
-		return 0
+		return left.patch - right.patch
 	}
 }
 
