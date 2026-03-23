@@ -1,6 +1,6 @@
 // DO NOT INCLUDE THIS
 
-namespace NekoGui_ConfigItem {
+namespace ProxorGui_ConfigItem {
     // config 工具
     enum itemType {
         string,
@@ -65,6 +65,6 @@ namespace NekoGui_ConfigItem {
 
         bool Load();
     };
-} // namespace NekoGui_ConfigItem
+} // namespace ProxorGui_ConfigItem
 
-using namespace NekoGui_ConfigItem;
+using namespace ProxorGui_ConfigItem;

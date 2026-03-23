@@ -1,4 +1,10 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.10)
+if (POLICY CMP0091)
+    cmake_policy(SET CMP0091 NEW)
+endif ()
+if (POLICY CMP0077)
+    cmake_policy(SET CMP0077 NEW)
+endif ()
 
 project(proxor VERSION 0.1 LANGUAGES CXX)
 
@@ -6,6 +12,10 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+if (MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+endif ()
 
 # WINDOWS PDB FILE
 if (WIN32)
@@ -16,17 +26,31 @@ if (WIN32)
 endif ()
 
 # Find Qt
-if (NOT QT_VERSION_MAJOR)
-    set(QT_VERSION_MAJOR 5)
+set(PROXOR_LOCAL_QT_DIR "${CMAKE_SOURCE_DIR}/qtsdk/Qt")
+if (EXISTS "${PROXOR_LOCAL_QT_DIR}/lib/cmake")
+    list(PREPEND CMAKE_PREFIX_PATH "${PROXOR_LOCAL_QT_DIR}")
 endif ()
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Network Svg LinguistTools)
+
+if (WIN32 AND MINGW AND EXISTS "${PROXOR_LOCAL_QT_DIR}/lib/cmake")
+    message(FATAL_ERROR
+        "The bundled Qt SDK at ${PROXOR_LOCAL_QT_DIR} is the Visual Studio runtime and cannot be linked with MinGW.\n"
+        "Configure Proxor from a Visual Studio 2022 developer shell so CMake picks cl.exe,\n"
+        "or override CMAKE_PREFIX_PATH/Qt6_DIR with a MinGW-compatible Qt SDK.")
+endif ()
+
+if (NOT QT_VERSION_MAJOR)
+    if (DEFINED Qt5_DIR AND NOT DEFINED Qt6_DIR)
+        set(QT_VERSION_MAJOR 5)
+    else ()
+        set(QT_VERSION_MAJOR 6)
+    endif ()
+endif ()
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Network Svg)
 
 if (NKR_CROSS)
-    set_property(TARGET Qt5::moc PROPERTY IMPORTED_LOCATION /usr/bin/moc)
-    set_property(TARGET Qt5::uic PROPERTY IMPORTED_LOCATION /usr/bin/uic)
-    set_property(TARGET Qt5::rcc PROPERTY IMPORTED_LOCATION /usr/bin/rcc)
-    set_property(TARGET Qt5::lrelease PROPERTY IMPORTED_LOCATION /usr/bin/lrelease)
-    set_property(TARGET Qt5::lupdate PROPERTY IMPORTED_LOCATION /usr/bin/lupdate)
+    set_property(TARGET Qt${QT_VERSION_MAJOR}::moc PROPERTY IMPORTED_LOCATION /usr/bin/moc)
+    set_property(TARGET Qt${QT_VERSION_MAJOR}::uic PROPERTY IMPORTED_LOCATION /usr/bin/uic)
+    set_property(TARGET Qt${QT_VERSION_MAJOR}::rcc PROPERTY IMPORTED_LOCATION /usr/bin/rcc)
 endif ()
 
 #### Platform Variables ####
@@ -101,6 +125,7 @@ endif ()
 if (NKR_NO_QHOTKEY)
     nkr_add_compile_definitions(NKR_NO_QHOTKEY)
 else ()
+    set(QT_DEFAULT_MAJOR_VERSION ${QT_VERSION_MAJOR})
     set(QHOTKEY_INSTALL OFF)
     set(BUILD_SHARED_LIBS OFF)
     add_subdirectory(3rdparty/QHotkey)
@@ -123,8 +148,8 @@ set(PROJECT_SOURCES
         ${PLATFORM_SOURCES}
 
         main/main.cpp
-        main/NekoGui.cpp
-        main/NekoGui_Utils.cpp
+        main/ProxorGui.cpp
+        main/ProxorGui_Utils.cpp
         main/HTTPRequestHelper.cpp
 
         3rdparty/base64.cpp
@@ -230,7 +255,7 @@ set(PROJECT_SOURCES
         ui/widget/GroupItem.h
         ui/widget/GroupItem.ui
 
-        res/neko.qrc
+        res/proxor.qrc
         res/theme/feiyangqingyun/qss.qrc
         ${QV2RAY_RC}
 )
@@ -269,24 +294,6 @@ set_target_properties(proxor PROPERTIES
         WIN32_EXECUTABLE TRUE
 )
 
-# Target Source Translations
-
-set(TS_FILES
-        translations/zh_CN.ts
-        translations/fa_IR.ts
-        translations/ru_RU.ts
-)
-set(LUPDATE_OPTIONS
-        -locations none -no-obsolete
-)
-if (${QT_VERSION_MAJOR} GREATER_EQUAL 6)
-    qt_add_lupdate(proxor TS_FILES ${TS_FILES} OPTIONS ${LUPDATE_OPTIONS})
-    qt_add_lrelease(proxor TS_FILES ${TS_FILES} QM_FILES_OUTPUT_VARIABLE QM_FILES)
-else ()
-    qt5_create_translation(QM_FILES ${PROJECT_SOURCES} ${TS_FILES} OPTIONS ${LUPDATE_OPTIONS})
-endif ()
-configure_file(translations/translations.qrc ${CMAKE_BINARY_DIR} COPYONLY)
-target_sources(proxor PRIVATE ${CMAKE_BINARY_DIR}/translations.qrc)
 
 # Target Link
 

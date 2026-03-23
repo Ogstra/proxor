@@ -1,8 +1,8 @@
 #pragma once
 
-#include "main/NekoGui.hpp"
+#include "main/ProxorGui.hpp"
 
-namespace NekoGui_traffic {
+namespace ProxorGui_traffic {
     class TrafficData : public JsonStore {
     public:
         int id = -1; // ent id
@@ -37,4 +37,4 @@ namespace NekoGui_traffic {
             return UNICODE_LRO + QStringLiteral("%1↑ %2↓").arg(ReadableSize(uplink), ReadableSize(downlink));
         }
     };
-} // namespace NekoGui_traffic
+} // namespace ProxorGui_traffic

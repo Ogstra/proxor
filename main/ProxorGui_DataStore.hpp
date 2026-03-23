@@ -1,6 +1,6 @@
 // DO NOT INCLUDE THIS
 
-namespace NekoGui {
+namespace ProxorGui {
 
     class Routing : public JsonStore {
     public:
@@ -180,4 +180,4 @@ namespace NekoGui {
 
     extern DataStore *dataStore;
 
-} // namespace NekoGui
+} // namespace ProxorGui

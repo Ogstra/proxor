@@ -6,7 +6,7 @@
 #include "ui/ThemeManager.hpp"
 #include "ui/Icon.hpp"
 #include "main/GuiUtils.hpp"
-#include "main/NekoGui.hpp"
+#include "main/ProxorGui.hpp"
 
 #include <QStyleFactory>
 #include <QFileDialog>
@@ -66,7 +66,7 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
 
     D_LOAD_STRING(inbound_address)
     D_LOAD_COMBO_STRING(log_level)
-    CACHE.custom_inbound = NekoGui::dataStore->custom_inbound;
+    CACHE.custom_inbound = ProxorGui::dataStore->custom_inbound;
     D_LOAD_INT(inbound_socks_port)
     D_LOAD_INT(test_concurrent)
     D_LOAD_INT(test_download_timeout)
@@ -84,9 +84,9 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
         auto str = QInputDialog::getItem(this, ui->sys_proxy_format->text() + " (Windows)",
                                          tr("Advanced system proxy settings. Please select a format."),
                                          Preset::Windows::system_proxy_format,
-                                         Preset::Windows::system_proxy_format.indexOf(NekoGui::dataStore->system_proxy_format),
+                                         Preset::Windows::system_proxy_format.indexOf(ProxorGui::dataStore->system_proxy_format),
                                          false, &ok);
-        if (ok) NekoGui::dataStore->system_proxy_format = str;
+        if (ok) ProxorGui::dataStore->system_proxy_format = str;
     });
 #else
     ui->sys_proxy_format->hide();
@@ -100,21 +100,21 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     D_LOAD_BOOL(start_minimal)
     D_LOAD_INT(max_log_line)
     //
-    if (NekoGui::dataStore->traffic_loop_interval == 500) {
+    if (ProxorGui::dataStore->traffic_loop_interval == 500) {
         ui->rfsh_r->setCurrentIndex(0);
-    } else if (NekoGui::dataStore->traffic_loop_interval == 1000) {
+    } else if (ProxorGui::dataStore->traffic_loop_interval == 1000) {
         ui->rfsh_r->setCurrentIndex(1);
-    } else if (NekoGui::dataStore->traffic_loop_interval == 2000) {
+    } else if (ProxorGui::dataStore->traffic_loop_interval == 2000) {
         ui->rfsh_r->setCurrentIndex(2);
-    } else if (NekoGui::dataStore->traffic_loop_interval == 3000) {
+    } else if (ProxorGui::dataStore->traffic_loop_interval == 3000) {
         ui->rfsh_r->setCurrentIndex(3);
-    } else if (NekoGui::dataStore->traffic_loop_interval == 5000) {
+    } else if (ProxorGui::dataStore->traffic_loop_interval == 5000) {
         ui->rfsh_r->setCurrentIndex(4);
     } else {
         ui->rfsh_r->setCurrentIndex(5);
     }
     //
-    ui->language->setCurrentIndex(NekoGui::dataStore->language);
+    ui->language->setCurrentIndex(ProxorGui::dataStore->language);
     connect(ui->language, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this, [=](int index) {
         CACHE.needRestart = true;
     });
@@ -123,30 +123,30 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     ui->theme->addItems(QStyleFactory::keys());
     //
     bool ok;
-    auto themeId = NekoGui::dataStore->theme.toInt(&ok);
+    auto themeId = ProxorGui::dataStore->theme.toInt(&ok);
     if (ok) {
         ui->theme->setCurrentIndex(themeId);
     } else {
-        ui->theme->setCurrentText(NekoGui::dataStore->theme);
+        ui->theme->setCurrentText(ProxorGui::dataStore->theme);
     }
     //
     connect(ui->theme, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this, [=](int index) {
         if (index + 1 <= built_in_len) {
             themeManager->ApplyTheme(Int2String(index));
-            NekoGui::dataStore->theme = Int2String(index);
+            ProxorGui::dataStore->theme = Int2String(index);
         } else {
             themeManager->ApplyTheme(ui->theme->currentText());
-            NekoGui::dataStore->theme = ui->theme->currentText();
+            ProxorGui::dataStore->theme = ui->theme->currentText();
         }
         repaint();
         mainwindow->repaint();
-        NekoGui::dataStore->Save();
+        ProxorGui::dataStore->Save();
     });
 
     // Subscription
 
-    ui->user_agent->setText(NekoGui::dataStore->user_agent);
-    ui->user_agent->setPlaceholderText(NekoGui::dataStore->GetUserAgent(true));
+    ui->user_agent->setText(ProxorGui::dataStore->user_agent);
+    ui->user_agent->setPlaceholderText(ProxorGui::dataStore->GetUserAgent(true));
     D_LOAD_BOOL(sub_use_proxy)
     D_LOAD_BOOL(sub_clear)
     D_LOAD_BOOL(sub_insecure)
@@ -157,7 +157,7 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
 
     ui->groupBox_core->setTitle(software_core_name);
     //
-    CACHE.extraCore = QString2QJsonObject(NekoGui::dataStore->extraCore->core_map);
+    CACHE.extraCore = QString2QJsonObject(ProxorGui::dataStore->extraCore->core_map);
     if (!CACHE.extraCore.contains("naive")) CACHE.extraCore.insert("naive", "");
     if (!CACHE.extraCore.contains("hysteria2")) CACHE.extraCore.insert("hysteria2", "");
     if (!CACHE.extraCore.contains("tuic")) CACHE.extraCore.insert("tuic", "");
@@ -206,7 +206,7 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     ui->utlsFingerprint->addItems(Preset::SingBox::UtlsFingerPrint);
 
     D_LOAD_BOOL(skip_cert)
-    ui->utlsFingerprint->setCurrentText(NekoGui::dataStore->utlsFingerprint);
+    ui->utlsFingerprint->setCurrentText(ProxorGui::dataStore->utlsFingerprint);
 }
 
 DialogBasicSettings::~DialogBasicSettings() {
@@ -218,7 +218,7 @@ void DialogBasicSettings::accept() {
 
     D_SAVE_STRING(inbound_address)
     D_SAVE_COMBO_STRING(log_level)
-    NekoGui::dataStore->custom_inbound = CACHE.custom_inbound;
+    ProxorGui::dataStore->custom_inbound = CACHE.custom_inbound;
     D_SAVE_INT(inbound_socks_port)
     D_SAVE_INT(test_concurrent)
     D_SAVE_INT(test_download_timeout)
@@ -228,28 +228,28 @@ void DialogBasicSettings::accept() {
 
     // Style
 
-    NekoGui::dataStore->language = ui->language->currentIndex();
+    ProxorGui::dataStore->language = ui->language->currentIndex();
     D_SAVE_BOOL(connection_statistics)
     D_SAVE_BOOL(check_update_on_start)
     D_SAVE_BOOL(start_minimal)
     D_SAVE_INT(max_log_line)
 
-    if (NekoGui::dataStore->max_log_line <= 0) {
-        NekoGui::dataStore->max_log_line = 200;
+    if (ProxorGui::dataStore->max_log_line <= 0) {
+        ProxorGui::dataStore->max_log_line = 200;
     }
 
     if (ui->rfsh_r->currentIndex() == 0) {
-        NekoGui::dataStore->traffic_loop_interval = 500;
+        ProxorGui::dataStore->traffic_loop_interval = 500;
     } else if (ui->rfsh_r->currentIndex() == 1) {
-        NekoGui::dataStore->traffic_loop_interval = 1000;
+        ProxorGui::dataStore->traffic_loop_interval = 1000;
     } else if (ui->rfsh_r->currentIndex() == 2) {
-        NekoGui::dataStore->traffic_loop_interval = 2000;
+        ProxorGui::dataStore->traffic_loop_interval = 2000;
     } else if (ui->rfsh_r->currentIndex() == 3) {
-        NekoGui::dataStore->traffic_loop_interval = 3000;
+        ProxorGui::dataStore->traffic_loop_interval = 3000;
     } else if (ui->rfsh_r->currentIndex() == 4) {
-        NekoGui::dataStore->traffic_loop_interval = 5000;
+        ProxorGui::dataStore->traffic_loop_interval = 5000;
     } else {
-        NekoGui::dataStore->traffic_loop_interval = 0;
+        ProxorGui::dataStore->traffic_loop_interval = 0;
     }
 
     // Subscription
@@ -260,7 +260,7 @@ void DialogBasicSettings::accept() {
         TM_auto_update_subsctiption_Reset_Minute(0);
     }
 
-    NekoGui::dataStore->user_agent = ui->user_agent->text();
+    ProxorGui::dataStore->user_agent = ui->user_agent->text();
     D_SAVE_BOOL(sub_use_proxy)
     D_SAVE_BOOL(sub_clear)
     D_SAVE_BOOL(sub_insecure)
@@ -269,7 +269,7 @@ void DialogBasicSettings::accept() {
 
     // Core
 
-    NekoGui::dataStore->extraCore->core_map = QJsonObject2QString(CACHE.extraCore, true);
+    ProxorGui::dataStore->extraCore->core_map = QJsonObject2QString(CACHE.extraCore, true);
 
     // Mux
     D_SAVE_INT(mux_concurrency)
@@ -280,10 +280,10 @@ void DialogBasicSettings::accept() {
     // Security
 
     D_SAVE_BOOL(skip_cert)
-    NekoGui::dataStore->utlsFingerprint = ui->utlsFingerprint->currentText();
+    ProxorGui::dataStore->utlsFingerprint = ui->utlsFingerprint->currentText();
 
     // 关闭连接统计，停止刷新前清空记录。
-    if (NekoGui::dataStore->traffic_loop_interval == 0 || !NekoGui::dataStore->connection_statistics) {
+    if (ProxorGui::dataStore->traffic_loop_interval == 0 || !ProxorGui::dataStore->connection_statistics) {
         MW_dialog_message("", "ClearConnectionList");
     }
 
@@ -297,7 +297,7 @@ void DialogBasicSettings::accept() {
 
 void DialogBasicSettings::refresh_auth() {
     ui->inbound_auth->setText({});
-    if (NekoGui::dataStore->inbound_auth->NeedAuth()) {
+    if (ProxorGui::dataStore->inbound_auth->NeedAuth()) {
         ui->inbound_auth->setIcon(Icon::GetMaterialIcon("lock-outline"));
     } else {
         ui->inbound_auth->setIcon(Icon::GetMaterialIcon("lock-open-outline"));
@@ -337,8 +337,8 @@ void DialogBasicSettings::on_inbound_auth_clicked() {
     auto pass_l = new QLabel(tr("Password"));
     auto user = new MyLineEdit;
     auto pass = new MyLineEdit;
-    user->setText(NekoGui::dataStore->inbound_auth->username);
-    pass->setText(NekoGui::dataStore->inbound_auth->password);
+    user->setText(ProxorGui::dataStore->inbound_auth->username);
+    pass->setText(ProxorGui::dataStore->inbound_auth->password);
     //
     layout->addWidget(user_l, 0, 0);
     layout->addWidget(user, 0, 1);
@@ -348,8 +348,8 @@ void DialogBasicSettings::on_inbound_auth_clicked() {
     box->setOrientation(Qt::Horizontal);
     box->setStandardButtons(QDialogButtonBox::Cancel | QDialogButtonBox::Ok);
     connect(box, &QDialogButtonBox::accepted, w, [=] {
-        NekoGui::dataStore->inbound_auth->username = user->text();
-        NekoGui::dataStore->inbound_auth->password = pass->text();
+        ProxorGui::dataStore->inbound_auth->username = user->text();
+        ProxorGui::dataStore->inbound_auth->password = pass->text();
         MW_dialog_message(Dialog_DialogBasicSettings, "UpdateDataStore");
         w->accept();
     });
@@ -375,26 +375,26 @@ void DialogBasicSettings::on_core_settings_clicked() {
     //
     auto core_box_underlying_dns_l = new QLabel(tr("Override underlying DNS"));
     core_box_underlying_dns = new MyLineEdit;
-    core_box_underlying_dns->setText(NekoGui::dataStore->core_box_underlying_dns);
+    core_box_underlying_dns->setText(ProxorGui::dataStore->core_box_underlying_dns);
     core_box_underlying_dns->setMinimumWidth(300);
     layout->addWidget(core_box_underlying_dns_l, ++line, 0);
     layout->addWidget(core_box_underlying_dns, line, 1);
     //
     auto core_box_enable_clash_api_l = new QLabel("Enable Clash API");
     core_box_enable_clash_api = new QCheckBox;
-    core_box_enable_clash_api->setChecked(NekoGui::dataStore->core_box_clash_api > 0);
+    core_box_enable_clash_api->setChecked(ProxorGui::dataStore->core_box_clash_api > 0);
     layout->addWidget(core_box_enable_clash_api_l, ++line, 0);
     layout->addWidget(core_box_enable_clash_api, line, 1);
     //
     auto core_box_clash_api_l = new QLabel("Clash API Listen Port");
     core_box_clash_api = new MyLineEdit;
-    core_box_clash_api->setText(Int2String(std::abs(NekoGui::dataStore->core_box_clash_api)));
+    core_box_clash_api->setText(Int2String(std::abs(ProxorGui::dataStore->core_box_clash_api)));
     layout->addWidget(core_box_clash_api_l, ++line, 0);
     layout->addWidget(core_box_clash_api, line, 1);
     //
     auto core_box_clash_api_secret_l = new QLabel("Clash API Secret");
     core_box_clash_api_secret = new MyLineEdit;
-    core_box_clash_api_secret->setText(NekoGui::dataStore->core_box_clash_api_secret);
+    core_box_clash_api_secret->setText(ProxorGui::dataStore->core_box_clash_api_secret);
     layout->addWidget(core_box_clash_api_secret_l, ++line, 0);
     layout->addWidget(core_box_clash_api_secret, line, 1);
     //
@@ -402,9 +402,9 @@ void DialogBasicSettings::on_core_settings_clicked() {
     box->setOrientation(Qt::Horizontal);
     box->setStandardButtons(QDialogButtonBox::Cancel | QDialogButtonBox::Ok);
     connect(box, &QDialogButtonBox::accepted, w, [=] {
-        NekoGui::dataStore->core_box_underlying_dns = core_box_underlying_dns->text();
-        NekoGui::dataStore->core_box_clash_api = core_box_clash_api->text().toInt() * (core_box_enable_clash_api->isChecked() ? 1 : -1);
-        NekoGui::dataStore->core_box_clash_api_secret = core_box_clash_api_secret->text();
+        ProxorGui::dataStore->core_box_underlying_dns = core_box_underlying_dns->text();
+        ProxorGui::dataStore->core_box_clash_api = core_box_clash_api->text().toInt() * (core_box_enable_clash_api->isChecked() ? 1 : -1);
+        ProxorGui::dataStore->core_box_clash_api_secret = core_box_clash_api_secret->text();
         MW_dialog_message(Dialog_DialogBasicSettings, "UpdateDataStore");
         w->accept();
     });

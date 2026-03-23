@@ -7,7 +7,7 @@ import (
 )
 
 var Version_v2ray = "N/A"
-var Version_neko = "N/A"
+var Version_proxor = "N/A"
 
 var Debug bool
 

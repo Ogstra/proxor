@@ -123,7 +123,7 @@
        <widget class="QCheckBox" name="single_core">
         <property name="toolTip">
          <string>Add a tun inbound to the profile startup, instead of using two processes.
-This needs to be run NekoBox with administrator privileges.</string>
+This needs to be run Proxor with administrator privileges.</string>
         </property>
         <property name="text">
          <string>Internal Tun</string>
@@ -173,7 +173,7 @@ This needs to be run NekoBox with administrator privileges.</string>
      <item>
       <widget class="QCheckBox" name="whitelist_mode">
        <property name="toolTip">
-        <string>Whether blacklisted or whitelisted, your traffic will be handled by nekobox_core (sing-tun). This is NOT equal to &quot;process mode&quot; of some software.</string>
+        <string>Whether blacklisted or whitelisted, your traffic will be handled by proxor_core (sing-tun). This is NOT equal to &quot;process mode&quot; of some software.</string>
        </property>
        <property name="text">
         <string>Whitelist mode</string>

@@ -33,12 +33,12 @@ EditCustom::~EditCustom() {
     P_SAVE_INT(mapping_port)                        \
     P_SAVE_INT(socks_port)
 
-void EditCustom::onStart(std::shared_ptr<NekoGui::ProxyEntity> _ent) {
+void EditCustom::onStart(std::shared_ptr<ProxorGui::ProxyEntity> _ent) {
     this->ent = _ent;
     auto bean = this->ent->CustomBean();
 
     // load known core
-    auto core_map = QString2QJsonObject(NekoGui::dataStore->extraCore->core_map);
+    auto core_map = QString2QJsonObject(ProxorGui::dataStore->extraCore->core_map);
     for (const auto &key: core_map.keys()) {
         ui->core->addItem(key);
     }
@@ -101,7 +101,7 @@ void EditCustom::onStart(std::shared_ptr<NekoGui::ProxyEntity> _ent) {
         th << "%server_port% => " + get_edit_text_serverPort();
         MessageBoxInfo(tr("Preview replace"), th.join("\n"));
         // EditCustom::onEnd
-        auto tmpEnt = NekoGui::ProfileManager::NewProxyEntity("custom");
+        auto tmpEnt = ProxorGui::ProfileManager::NewProxyEntity("custom");
         auto bean = tmpEnt->CustomBean();
         SAVE_CUSTOM_BEAN
         // 补充
@@ -109,7 +109,7 @@ void EditCustom::onStart(std::shared_ptr<NekoGui::ProxyEntity> _ent) {
         bean->serverPort = get_edit_text_serverPort().toInt();
         if (bean->core.isEmpty()) return;
         //
-        auto result = NekoGui::BuildConfig(tmpEnt, false, false);
+        auto result = ProxorGui::BuildConfig(tmpEnt, false, false);
         if (!result->error.isEmpty()) {
             MessageBoxInfo(software_name, result->error);
             return;

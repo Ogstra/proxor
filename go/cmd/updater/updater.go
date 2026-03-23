@@ -43,12 +43,6 @@ func Updater() {
 
 	postCleanup()
 
-	// Remove stale legacy names left by old packages.
-	os.Remove("./nekoray.exe")
-	os.Remove("./nekoray.png")
-	os.Remove("./nekoray_core.exe")
-	os.Remove("./nekobox.exe")
-	os.Remove("./nekobox_core.exe")
 }
 
 func failUpdate(err error) {
@@ -67,8 +61,6 @@ func postCleanup() {
 	os.RemoveAll(updateExtractDir)
 	os.RemoveAll("./update-package.zip")
 	os.RemoveAll("./update-package.tar.gz")
-	os.RemoveAll("./nekoray.zip")
-	os.RemoveAll("./nekoray.tar.gz")
 }
 
 func findUpdatePackage() (string, error) {

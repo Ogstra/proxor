@@ -3,7 +3,7 @@
 #include "fmt/AbstractBean.hpp"
 #include "fmt/V2RayStreamSettings.hpp"
 
-namespace NekoGui_fmt {
+namespace ProxorGui_fmt {
     class VMessBean : public AbstractBean {
     public:
         QString uuid = "";
@@ -27,4 +27,4 @@ namespace NekoGui_fmt {
 
         QString ToShareLink() override;
     };
-} // namespace NekoGui_fmt
+} // namespace ProxorGui_fmt

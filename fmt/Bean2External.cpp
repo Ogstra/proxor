@@ -19,7 +19,7 @@
     f.close();                                                    \
     auto TempFile = QFileInfo(f).absoluteFilePath();
 
-namespace NekoGui_fmt {
+namespace ProxorGui_fmt {
     // -1: Cannot use this config
     // 0: Internal
     // 1: Mapping External
@@ -27,7 +27,7 @@ namespace NekoGui_fmt {
 
     int NaiveBean::NeedExternal(bool isFirstProfile) {
         if (isFirstProfile) {
-            if (NekoGui::dataStore->spmode_vpn) {
+            if (ProxorGui::dataStore->spmode_vpn) {
                 return 1;
             }
             return 2;
@@ -38,7 +38,7 @@ namespace NekoGui_fmt {
     int QUICBean::NeedExternal(bool isFirstProfile) {
         auto extCore = [=] {
             if (isFirstProfile) {
-                if (NekoGui::dataStore->spmode_vpn && hopPort.trimmed().isEmpty()) {
+                if (ProxorGui::dataStore->spmode_vpn && hopPort.trimmed().isEmpty()) {
                     return 1;
                 }
                 return 2;
@@ -65,7 +65,7 @@ namespace NekoGui_fmt {
     }
 
     ExternalBuildResult NaiveBean::BuildExternal(int mapping_port, int socks_port, int external_stat) {
-        ExternalBuildResult result{NekoGui::dataStore->extraCore->Get("naive")};
+        ExternalBuildResult result{ProxorGui::dataStore->extraCore->Get("naive")};
 
         auto is_direct = external_stat == 2;
         auto domain_address = sni.isEmpty() ? serverAddress : sni;
@@ -102,7 +102,7 @@ namespace NekoGui_fmt {
 
     ExternalBuildResult QUICBean::BuildExternal(int mapping_port, int socks_port, int external_stat) {
         if (proxy_type == proxy_TUIC) {
-            ExternalBuildResult result{NekoGui::dataStore->extraCore->Get("tuic")};
+            ExternalBuildResult result{ProxorGui::dataStore->extraCore->Get("tuic")};
 
             QJsonObject relay;
 
@@ -147,7 +147,7 @@ namespace NekoGui_fmt {
 
             return result;
         } else if (proxy_type == proxy_Hysteria2) {
-            ExternalBuildResult result{NekoGui::dataStore->extraCore->Get("hysteria2")};
+            ExternalBuildResult result{ProxorGui::dataStore->extraCore->Get("hysteria2")};
 
             QJsonObject config;
 
@@ -221,7 +221,7 @@ namespace NekoGui_fmt {
     }
 
     ExternalBuildResult CustomBean::BuildExternal(int mapping_port, int socks_port, int external_stat) {
-        ExternalBuildResult result{NekoGui::dataStore->extraCore->Get(core)};
+        ExternalBuildResult result{ProxorGui::dataStore->extraCore->Get(core)};
 
         result.arguments = command; // TODO split?
 
@@ -262,4 +262,4 @@ namespace NekoGui_fmt {
         return result;
     }
 
-} // namespace NekoGui_fmt
+} // namespace ProxorGui_fmt

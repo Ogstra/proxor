@@ -2,30 +2,21 @@
 set -e
 
 source libs/env_deploy.sh
-ENV_NEKORAY=1
 source libs/get_source_env.sh
 pushd ..
 
 ####
 
 if [ ! -d "sing-box" ]; then
-  git clone --no-checkout https://github.com/MatsuriDayo/sing-box.git
+  if [ -z "${SING_BOX_REPO_URL:-}" ]; then
+    echo "Missing local sing-box source and SING_BOX_REPO_URL is not set." >&2
+    echo "Provide your fork URL in SING_BOX_REPO_URL or place sing-box next to this repository." >&2
+    exit 1
+  fi
+  git clone --no-checkout "$SING_BOX_REPO_URL" sing-box
 fi
 pushd sing-box
 git checkout "$COMMIT_SING_BOX"
 
 popd
-
-####
-
-if [ ! -d "libneko" ]; then
-  git clone --no-checkout https://github.com/MatsuriDayo/libneko.git
-fi
-pushd libneko
-git checkout "$COMMIT_LIBNEKO"
-
-popd
-
-####
-
 popd

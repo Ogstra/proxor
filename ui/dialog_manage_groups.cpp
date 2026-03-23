@@ -12,7 +12,7 @@
 #include <QMessageBox>
 
 #define AddGroupToListIfExist(_id)                       \
-    auto __ent = NekoGui::profileManager->GetGroup(_id); \
+    auto __ent = ProxorGui::profileManager->GetGroup(_id); \
     if (__ent != nullptr) {                              \
         auto wI = new QListWidgetItem();                 \
         auto w = new GroupItem(this, __ent, wI);         \
@@ -24,7 +24,7 @@
 DialogManageGroups::DialogManageGroups(QWidget *parent) : QDialog(parent), ui(new Ui::DialogManageGroups) {
     ui->setupUi(this);
 
-    for (auto id: NekoGui::profileManager->groupsTabOrder) {
+    for (auto id: ProxorGui::profileManager->groupsTabOrder) {
         AddGroupToListIfExist(id)
     }
 
@@ -39,13 +39,13 @@ DialogManageGroups::~DialogManageGroups() {
 }
 
 void DialogManageGroups::on_add_clicked() {
-    auto ent = NekoGui::ProfileManager::NewGroup();
+    auto ent = ProxorGui::ProfileManager::NewGroup();
     auto dialog = new DialogEditGroup(ent, this);
     int ret = dialog->exec();
     dialog->deleteLater();
 
     if (ret == QDialog::Accepted) {
-        NekoGui::profileManager->AddGroup(ent);
+        ProxorGui::profileManager->AddGroup(ent);
         AddGroupToListIfExist(ent->id);
         MW_dialog_message(Dialog_DialogManageGroups, "refresh-1");
     }

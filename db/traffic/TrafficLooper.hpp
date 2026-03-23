@@ -6,7 +6,7 @@
 
 #include "TrafficData.hpp"
 
-namespace NekoGui_traffic {
+namespace ProxorGui_traffic {
     class TrafficLooper {
     public:
         bool loop_enabled = false;
@@ -29,4 +29,4 @@ namespace NekoGui_traffic {
     };
 
     extern TrafficLooper *trafficLooper;
-} // namespace NekoGui_traffic
+} // namespace ProxorGui_traffic

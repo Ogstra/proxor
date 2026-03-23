@@ -3,7 +3,7 @@
 #include <memory>
 #include <QProcess>
 
-namespace NekoGui_sys {
+namespace ProxorGui_sys {
     class ExternalProcess : public QProcess {
     public:
         QString tag;
@@ -48,4 +48,4 @@ namespace NekoGui_sys {
     inline std::list<std::shared_ptr<ExternalProcess>> running_ext;
 
     inline QAtomicInt logCounter;
-} // namespace NekoGui_sys
+} // namespace ProxorGui_sys
