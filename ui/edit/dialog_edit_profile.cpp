@@ -19,7 +19,7 @@
 #include <QInputDialog>
 
 #define ADJUST_SIZE runOnUiThread([=] { adjustSize(); adjustPosition(mainwindow); }, this);
-#define LOAD_TYPE(a) ui->type->addItem(NekoGui::ProfileManager::NewProxyEntity(a)->bean->DisplayType(), a);
+#define LOAD_TYPE(a) ui->type->addItem(ProxorGui::ProfileManager::NewProxyEntity(a)->bean->DisplayType(), a);
 
 DialogEditProfile::DialogEditProfile(const QString &_type, int profileOrGroupId, QWidget *parent)
     : QDialog(parent), ui(new Ui::DialogEditProfile) {
@@ -73,7 +73,7 @@ DialogEditProfile::DialogEditProfile(const QString &_type, int profileOrGroupId,
             ui->ws_early_data_name->setVisible(false);
             ui->ws_early_data_name_l->setVisible(false);
         }
-        // 传输设置 for NekoBox
+        // 传输设置 for Proxor
         if (!ui->utlsFingerprint->count()) ui->utlsFingerprint->addItems(Preset::SingBox::UtlsFingerPrint);
         // 传输设置 是否可见
         int networkBoxVisible = 0;
@@ -128,7 +128,7 @@ DialogEditProfile::DialogEditProfile(const QString &_type, int profileOrGroupId,
 
         ui->apply_to_group->hide();
     } else {
-        this->ent = NekoGui::profileManager->GetProfile(profileOrGroupId);
+        this->ent = ProxorGui::profileManager->GetProfile(profileOrGroupId);
         if (this->ent == nullptr) return;
         this->type = ent->type;
         ui->type->setVisible(false);
@@ -192,7 +192,7 @@ void DialogEditProfile::typeSelected(const QString &newType) {
     }
 
     if (newEnt) {
-        this->ent = NekoGui::ProfileManager::NewProxyEntity(type);
+        this->ent = ProxorGui::ProfileManager::NewProxyEntity(type);
         this->ent->gid = groupId;
     }
 
@@ -215,7 +215,7 @@ void DialogEditProfile::typeSelected(const QString &newType) {
         ui->sni->setText(stream->sni);
         ui->alpn->setText(stream->alpn);
         if (newEnt) {
-            ui->utlsFingerprint->setCurrentText(NekoGui::dataStore->utlsFingerprint);
+            ui->utlsFingerprint->setCurrentText(ProxorGui::dataStore->utlsFingerprint);
         } else {
             ui->utlsFingerprint->setCurrentText(stream->utlsFingerprint);
         }
@@ -274,7 +274,7 @@ void DialogEditProfile::typeSelected(const QString &newType) {
     // 星号
     ADD_ASTERISK(this)
 
-    // 设置 for NekoBox
+    // 设置 for Proxor
     if (type == "vmess" || type == "vless") {
         ui->packet_encoding->setVisible(true);
         ui->packet_encoding_l->setVisible(true);
@@ -377,13 +377,13 @@ void DialogEditProfile::accept() {
     QStringList msg = {"accept"};
 
     if (newEnt) {
-        auto ok = NekoGui::profileManager->AddProfile(ent);
+        auto ok = ProxorGui::profileManager->AddProfile(ent);
         if (!ok) {
             MessageBoxWarning("???", "id exists");
         }
     } else {
         auto changed = ent->Save();
-        if (changed && NekoGui::dataStore->started_id == ent->id) msg << "restart";
+        if (changed && ProxorGui::dataStore->started_id == ent->id) msg << "restart";
     }
 
     MW_dialog_message(Dialog_DialogEditProfile, msg.join(","));
@@ -452,7 +452,7 @@ void DialogEditProfile::on_apply_to_group_clicked() {
         apply_to_group_ui[ui->custom_outbound_edit] = new FloatCheckBox(ui->custom_outbound_edit, this);
         ui->apply_to_group->setText(tr("Confirm"));
     } else {
-        auto group = NekoGui::profileManager->GetGroup(ent->gid);
+        auto group = ProxorGui::profileManager->GetGroup(ent->gid);
         if (group == nullptr) {
             MessageBoxWarning("failed", "unknown group");
             return;
@@ -476,7 +476,7 @@ void DialogEditProfile::on_apply_to_group_clicked() {
     }
 }
 
-void DialogEditProfile::do_apply_to_group(const std::shared_ptr<NekoGui::Group> &group, QWidget *key) {
+void DialogEditProfile::do_apply_to_group(const std::shared_ptr<ProxorGui::Group> &group, QWidget *key) {
     auto stream = GetStreamSettings(ent->bean.get());
 
     auto copyStream = [=](void *p) {

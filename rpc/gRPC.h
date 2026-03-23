@@ -9,7 +9,7 @@ namespace QtGrpc {
     class Http2GrpcChannelPrivate;
 }
 
-namespace NekoGui_rpc {
+namespace ProxorGui_rpc {
     class Client {
     public:
         explicit Client(std::function<void(const QString &)> onError, const QString &target, const QString &token);
@@ -39,5 +39,5 @@ namespace NekoGui_rpc {
     };
 
     inline Client *defaultClient;
-} // namespace NekoGui_rpc
+} // namespace ProxorGui_rpc
 #endif

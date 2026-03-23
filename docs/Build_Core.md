@@ -1,13 +1,12 @@
-# Build `nekobox_core`
+# Build `proxor_core`
 
 ## Expected Workspace Layout
 
 The repository expects the desktop project and the forked Go workspaces to live side by side:
 
 ```text
-nekoray/
+proxor/
   go/cmd/*
-libneko/
 sing-box/
 sing-box-extra/
 ```
@@ -58,6 +57,6 @@ These tags are defined in `libs/build_go.sh`.
 
 ## Notes
 
-- `nekobox_core` and `updater` are built from the Go workspace.
+- `proxor_core` and `updater` are built from the Go workspace.
 - The updater is renamed to `launcher` on Linux by `libs/build_go.sh`.
 - If you are doing a fork-specific build, keep the local `replace` directives and `go.work` entries aligned with your sibling repositories.

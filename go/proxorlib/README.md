@@ -1,3 +1,3 @@
-# libneko
+# proxorlib
 
-Golang base helper library for NekoRay & NekoBox
+Golang base helper library for Proxor.

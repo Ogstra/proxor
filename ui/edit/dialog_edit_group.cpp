@@ -8,7 +8,7 @@
 
 #define ADJUST_SIZE runOnUiThread([=] { adjustSize(); adjustPosition(mainwindow); }, this);
 
-DialogEditGroup::DialogEditGroup(const std::shared_ptr<NekoGui::Group> &ent, QWidget *parent) : QDialog(parent), ui(new Ui::DialogEditGroup) {
+DialogEditGroup::DialogEditGroup(const std::shared_ptr<ProxorGui::Group> &ent, QWidget *parent) : QDialog(parent), ui(new Ui::DialogEditGroup) {
     ui->setupUi(this);
     this->ent = ent;
 
@@ -46,7 +46,7 @@ DialogEditGroup::DialogEditGroup(const std::shared_ptr<NekoGui::Group> &ent, QWi
 
     connect(ui->copy_links, &QPushButton::clicked, this, [=] {
         QStringList links;
-        for (const auto &[_, profile]: NekoGui::profileManager->profiles) {
+        for (const auto &[_, profile]: ProxorGui::profileManager->profiles) {
             if (profile->gid != ent->id) continue;
             links += profile->bean->ToShareLink();
         }
@@ -55,9 +55,9 @@ DialogEditGroup::DialogEditGroup(const std::shared_ptr<NekoGui::Group> &ent, QWi
     });
     connect(ui->copy_links_nkr, &QPushButton::clicked, this, [=] {
         QStringList links;
-        for (const auto &[_, profile]: NekoGui::profileManager->profiles) {
+        for (const auto &[_, profile]: ProxorGui::profileManager->profiles) {
             if (profile->gid != ent->id) continue;
-            links += profile->bean->ToNekorayShareLink(profile->type);
+            links += profile->bean->ToProxorShareLink(profile->type);
         }
         QApplication::clipboard()->setText(links.join("\n"));
         MessageBoxInfo(software_name, tr("Copied"));
@@ -87,7 +87,7 @@ void DialogEditGroup::accept() {
 }
 
 void DialogEditGroup::refresh_front_proxy() {
-    auto fEnt = NekoGui::profileManager->GetProfile(CACHE.front_proxy);
+    auto fEnt = ProxorGui::profileManager->GetProfile(CACHE.front_proxy);
     ui->front_proxy->setText(fEnt == nullptr ? tr("None") : fEnt->bean->DisplayTypeAndName());
 }
 

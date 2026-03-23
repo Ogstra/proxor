@@ -6,7 +6,7 @@
 #include <QDir>
 #include <QColor>
 
-namespace NekoGui {
+namespace ProxorGui {
 
     ProfileManager *profileManager = new ProfileManager();
 
@@ -77,9 +77,9 @@ namespace NekoGui {
         }
         // First setup
         if (groups.empty()) {
-            auto defaultGroup = NekoGui::ProfileManager::NewGroup();
+            auto defaultGroup = ProxorGui::ProfileManager::NewGroup();
             defaultGroup->name = QObject::tr("Default");
-            NekoGui::profileManager->AddGroup(defaultGroup);
+            ProxorGui::profileManager->AddGroup(defaultGroup);
         }
         //
         if (dataStore->flag_reorder) {
@@ -175,32 +175,32 @@ namespace NekoGui {
     //  新建的不给 fn 和 id
 
     std::shared_ptr<ProxyEntity> ProfileManager::NewProxyEntity(const QString &type) {
-        NekoGui_fmt::AbstractBean *bean;
+        ProxorGui_fmt::AbstractBean *bean;
 
         if (type == "socks") {
-            bean = new NekoGui_fmt::SocksHttpBean(NekoGui_fmt::SocksHttpBean::type_Socks5);
+            bean = new ProxorGui_fmt::SocksHttpBean(ProxorGui_fmt::SocksHttpBean::type_Socks5);
         } else if (type == "http") {
-            bean = new NekoGui_fmt::SocksHttpBean(NekoGui_fmt::SocksHttpBean::type_HTTP);
+            bean = new ProxorGui_fmt::SocksHttpBean(ProxorGui_fmt::SocksHttpBean::type_HTTP);
         } else if (type == "shadowsocks") {
-            bean = new NekoGui_fmt::ShadowSocksBean();
+            bean = new ProxorGui_fmt::ShadowSocksBean();
         } else if (type == "chain") {
-            bean = new NekoGui_fmt::ChainBean();
+            bean = new ProxorGui_fmt::ChainBean();
         } else if (type == "vmess") {
-            bean = new NekoGui_fmt::VMessBean();
+            bean = new ProxorGui_fmt::VMessBean();
         } else if (type == "trojan") {
-            bean = new NekoGui_fmt::TrojanVLESSBean(NekoGui_fmt::TrojanVLESSBean::proxy_Trojan);
+            bean = new ProxorGui_fmt::TrojanVLESSBean(ProxorGui_fmt::TrojanVLESSBean::proxy_Trojan);
         } else if (type == "vless") {
-            bean = new NekoGui_fmt::TrojanVLESSBean(NekoGui_fmt::TrojanVLESSBean::proxy_VLESS);
+            bean = new ProxorGui_fmt::TrojanVLESSBean(ProxorGui_fmt::TrojanVLESSBean::proxy_VLESS);
         } else if (type == "naive") {
-            bean = new NekoGui_fmt::NaiveBean();
+            bean = new ProxorGui_fmt::NaiveBean();
         } else if (type == "hysteria2") {
-            bean = new NekoGui_fmt::QUICBean(NekoGui_fmt::QUICBean::proxy_Hysteria2);
+            bean = new ProxorGui_fmt::QUICBean(ProxorGui_fmt::QUICBean::proxy_Hysteria2);
         } else if (type == "tuic") {
-            bean = new NekoGui_fmt::QUICBean(NekoGui_fmt::QUICBean::proxy_TUIC);
+            bean = new ProxorGui_fmt::QUICBean(ProxorGui_fmt::QUICBean::proxy_TUIC);
         } else if (type == "custom") {
-            bean = new NekoGui_fmt::CustomBean();
+            bean = new ProxorGui_fmt::CustomBean();
         } else {
-            bean = new NekoGui_fmt::AbstractBean(-114514);
+            bean = new ProxorGui_fmt::AbstractBean(-114514);
         }
 
         auto ent = std::make_shared<ProxyEntity>(bean, type);
@@ -214,7 +214,7 @@ namespace NekoGui {
 
     // ProxyEntity
 
-    ProxyEntity::ProxyEntity(NekoGui_fmt::AbstractBean *bean, const QString &type_) {
+    ProxyEntity::ProxyEntity(ProxorGui_fmt::AbstractBean *bean, const QString &type_) {
         if (type_ != nullptr) this->type = type_;
 
         _add(new configItem("type", &type, itemType::string));
@@ -225,7 +225,7 @@ namespace NekoGui {
 
         // 可以不关联 bean，只加载 ProxyEntity 的信息
         if (bean != nullptr) {
-            this->bean = std::shared_ptr<NekoGui_fmt::AbstractBean>(bean);
+            this->bean = std::shared_ptr<ProxorGui_fmt::AbstractBean>(bean);
             // 有虚函数就要在这里 dynamic_cast
             _add(new configItem("bean", dynamic_cast<JsonStore *>(bean), itemType::jsonStore));
             _add(new configItem("traffic", dynamic_cast<JsonStore *>(traffic_data.get()), itemType::jsonStore));
@@ -415,4 +415,4 @@ namespace NekoGui {
         }
     }
 
-} // namespace NekoGui
+} // namespace ProxorGui

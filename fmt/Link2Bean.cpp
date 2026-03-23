@@ -3,7 +3,7 @@
 
 #include <QUrlQuery>
 
-namespace NekoGui_fmt {
+namespace ProxorGui_fmt {
 
 #define DECODE_V2RAY_N_1                                                                                                        \
     QString linkN = DecodeB64IfValid(SubStrBefore(SubStrAfter(link, "://"), "#"), QByteArray::Base64Option::Base64UrlEncoding); \
@@ -77,7 +77,7 @@ namespace NekoGui_fmt {
         stream->reality_spx = GetQueryValue(query, "spx", "");
         stream->utlsFingerprint = GetQueryValue(query, "fp", "");
         if (stream->utlsFingerprint.isEmpty()) {
-            stream->utlsFingerprint = NekoGui::dataStore->utlsFingerprint;
+            stream->utlsFingerprint = ProxorGui::dataStore->utlsFingerprint;
         }
 
         // type
@@ -207,7 +207,7 @@ namespace NekoGui_fmt {
             stream->reality_spx = GetQueryValue(query, "spx", "");
             stream->utlsFingerprint = GetQueryValue(query, "fp", "");
             if (stream->utlsFingerprint.isEmpty()) {
-                stream->utlsFingerprint = NekoGui::dataStore->utlsFingerprint;
+                stream->utlsFingerprint = ProxorGui::dataStore->utlsFingerprint;
             }
 
             // type
@@ -294,4 +294,4 @@ namespace NekoGui_fmt {
         return true;
     }
 
-} // namespace NekoGui_fmt
+} // namespace ProxorGui_fmt

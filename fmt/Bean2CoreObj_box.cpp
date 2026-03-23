@@ -1,7 +1,7 @@
 #include "db/ProxyEntity.hpp"
 #include "fmt/includes.h"
 
-namespace NekoGui_fmt {
+namespace ProxorGui_fmt {
     void V2rayStreamSettings::BuildStreamSettingsSingBox(QJsonObject *outbound) {
         // https://sing-box.sagernet.org/configuration/shared/v2ray-transport
 
@@ -47,7 +47,7 @@ namespace NekoGui_fmt {
         // 对应字段 tls
         if (security == "tls") {
             QJsonObject tls{{"enabled", true}};
-            if (allow_insecure || NekoGui::dataStore->skip_cert) tls["insecure"] = true;
+            if (allow_insecure || ProxorGui::dataStore->skip_cert) tls["insecure"] = true;
             if (!sni.trimmed().isEmpty()) tls["server_name"] = sni;
             if (!certificate.trimmed().isEmpty()) {
                 tls["certificate"] = certificate.trimmed();
@@ -234,4 +234,4 @@ namespace NekoGui_fmt {
 
         return result;
     }
-} // namespace NekoGui_fmt
+} // namespace ProxorGui_fmt

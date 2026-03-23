@@ -1,9 +1,9 @@
 #pragma once
 
-#include "main/NekoGui.hpp"
+#include "main/ProxorGui.hpp"
 #include "ProxyEntity.hpp"
 
-namespace NekoGui {
+namespace ProxorGui {
     class Group : public JsonStore {
     public:
         int id = -1;
@@ -29,4 +29,4 @@ namespace NekoGui {
         // 按 显示 顺序
         [[nodiscard]] QList<std::shared_ptr<ProxyEntity>> ProfilesWithOrder() const;
     };
-} // namespace NekoGui
+} // namespace ProxorGui

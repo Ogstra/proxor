@@ -81,6 +81,6 @@ void ThemeManager::ApplyTheme(const QString &theme) {
     };
     internal();
 
-    auto nekoray_css = ReadFileText(":/neko/neko.css");
-    qApp->setStyleSheet(qApp->styleSheet().append("\n").append(nekoray_css));
+    auto proxor_css = ReadFileText(":/proxor/proxor.css");
+    qApp->setStyleSheet(qApp->styleSheet().append("\n").append(proxor_css));
 }

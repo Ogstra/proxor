@@ -4,7 +4,7 @@
 #include <QDir>
 
 #include "3rdparty/fix_old_qt.h"
-#include "main/NekoGui.hpp"
+#include "main/ProxorGui.hpp"
 
 // macOS headers (possibly OBJ-c)
 #if defined(Q_OS_MACOS)
@@ -170,7 +170,7 @@ void AutoRun_SetEnabled(bool enable) {
     QString desktopFileLocation = userAutoStartPath + appName + QLatin1String(".desktop");
     QStringList appCmdList;
 
-    // nekoray: launcher
+    // Launcher mode
     if (qEnvironmentVariable("NKR_FROM_LAUNCHER") == "1") {
         appCmdList << QApplication::applicationDirPath() + "/launcher"
                    << "--";
@@ -184,7 +184,7 @@ void AutoRun_SetEnabled(bool enable) {
 
     appCmdList << "-tray";
 
-    if (NekoGui::dataStore->flag_use_appdata) {
+    if (ProxorGui::dataStore->flag_use_appdata) {
         appCmdList << "-appdata";
     }
 

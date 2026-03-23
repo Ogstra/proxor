@@ -17,7 +17,7 @@ class ProxyItem : public QWidget {
     Q_OBJECT
 
 public:
-    explicit ProxyItem(QWidget *parent, const std::shared_ptr<NekoGui::ProxyEntity> &ent, QListWidgetItem *item);
+    explicit ProxyItem(QWidget *parent, const std::shared_ptr<ProxorGui::ProxyEntity> &ent, QListWidgetItem *item);
 
     ~ProxyItem() override;
 
@@ -25,7 +25,7 @@ public:
 
     QPushButton *get_change_button();
 
-    std::shared_ptr<NekoGui::ProxyEntity> ent;
+    std::shared_ptr<ProxorGui::ProxyEntity> ent;
     QListWidgetItem *item;
     bool remove_confirm = false;
 

@@ -3,7 +3,7 @@
 #include "fmt/AbstractBean.hpp"
 #include "fmt/V2RayStreamSettings.hpp"
 
-namespace NekoGui_fmt {
+namespace ProxorGui_fmt {
     class SocksHttpBean : public AbstractBean {
     public:
         static constexpr int type_HTTP = -80;
@@ -32,4 +32,4 @@ namespace NekoGui_fmt {
 
         QString ToShareLink() override;
     };
-} // namespace NekoGui_fmt
+} // namespace ProxorGui_fmt

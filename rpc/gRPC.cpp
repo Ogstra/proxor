@@ -5,7 +5,7 @@
 
 #ifndef NKR_NO_GRPC
 
-#include "main/NekoGui.hpp"
+#include "main/ProxorGui.hpp"
 
 #include <QCoreApplication>
 #include <QNetworkAccessManager>
@@ -161,7 +161,7 @@ namespace QtGrpc {
         QNetworkReply::NetworkError Call(const QString &methodName,
                                          const google::protobuf::Message &req, google::protobuf::Message *rsp,
                                          int timeout_ms = 0) {
-            if (!NekoGui::dataStore->core_running) return QNetworkReply::NetworkError(-1919);
+            if (!ProxorGui::dataStore->core_running) return QNetworkReply::NetworkError(-1919);
 
             std::string reqStr;
             req.SerializeToString(&reqStr);
@@ -195,7 +195,7 @@ namespace QtGrpc {
     };
 } // namespace QtGrpc
 
-namespace NekoGui_rpc {
+namespace ProxorGui_rpc {
 
     Client::Client(std::function<void(const QString &)> onError, const QString &target, const QString &token) {
         this->make_grpc_channel = [=]() { return std::make_unique<QtGrpc::Http2GrpcChannelPrivate>(target, token, "libcore.LibcoreService"); };
@@ -261,7 +261,7 @@ namespace NekoGui_rpc {
         auto status = default_grpc_channel->Call("ListConnections", request, &reply, 500);
 
         if (status == QNetworkReply::NoError) {
-            return reply.nekoray_connections_json();
+            return reply.connection_statistics_json();
         } else {
             return "";
         }
@@ -294,6 +294,6 @@ namespace NekoGui_rpc {
             return reply;
         }
     }
-} // namespace NekoGui_rpc
+} // namespace ProxorGui_rpc
 
 #endif

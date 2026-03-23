@@ -1,16 +1,17 @@
-# NekoBox For PC
+# Proxor
 
-Qt-based cross-platform proxy manager for Windows and Linux.
+Qt-based proxy client for managing sing-box profiles, subscriptions, routing, and system proxy integration.
 
-This fork ships the desktop GUI as `nekobox` / `nekobox.exe` and the backend core as `nekobox_core` on top of the current sing-box integration used by this repository.
+This fork ships the desktop GUI as `proxor` / `proxor.exe` and the backend core as `proxor_core` on top of the current sing-box integration used by this repository.
 
-Current version: `4.0.4-2026-03-22`
+Current version: `1.0.0`
 
-<img width="801" height="631" alt="nekobox" src="https://github.com/user-attachments/assets/ca508369-cb98-485b-b8e4-dc942b423d9c" />
+![Proxor main window](docs/images/proxor-main-window.png)
 
 ## Highlights
 
-- Windows and Linux desktop builds
+- Windows desktop builds
+- Manual Linux build path
 - sing-box based core workflow
 - Profile management, subscriptions, routing, and traffic stats
 - TUN mode and system proxy integration
@@ -48,6 +49,7 @@ If the application reports missing runtime DLLs, install the [Microsoft Visual C
 ### Linux
 
 Linux packaging and deployment vary by distribution. Use the local build and runtime guides in [`docs/`](docs/readme.md) instead of old third-party package references.
+Linux remains manual-build only for now. `.deb`, AppImage, and CI-produced Linux release artifacts are not currently supported.
 
 ## Dependencies
 
@@ -63,13 +65,13 @@ Linux packaging and deployment vary by distribution. Use the local build and run
 
 - Go `1.26.x`
 - sing-box fork from the local workspace
-- libneko from the local workspace
+- proxorlib from the local workspace
 - gRPC `v1.79.3`
 - protobuf-go `v1.36.11`
 
 ## Credits
 
 - Original desktop project lineage: [MatsuriDayo/nekoray](https://github.com/MatsuriDayo/nekoray)
-- Current backend foundation: `sing-box`, `sing`, and `libneko`
+- Current backend foundation: `sing-box`, `sing`, and `proxorlib`
 - UI/editor components adapted from [Qv2ray](https://github.com/Qv2ray/Qv2ray)
 - Native libraries: Qt, protobuf, yaml-cpp, zxing-cpp, QHotkey

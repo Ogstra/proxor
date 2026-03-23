@@ -4,7 +4,7 @@
 #include <QHostInfo>
 #include <QUrl>
 
-namespace NekoGui_fmt {
+namespace ProxorGui_fmt {
     AbstractBean::AbstractBean(int version) {
         this->version = version;
         _add(new configItem("_v", &this->version, itemType::integer));
@@ -15,10 +15,10 @@ namespace NekoGui_fmt {
         _add(new configItem("c_out", &custom_outbound, itemType::string));
     }
 
-    QString AbstractBean::ToNekorayShareLink(const QString &type) {
+    QString AbstractBean::ToProxorShareLink(const QString &type) {
         auto b = ToJson();
         QUrl url;
-        url.setScheme("nekoray");
+        url.setScheme("proxor");
         url.setHost(type);
         url.setFragment(QJsonObject2QString(b, true)
                             .toUtf8()
@@ -76,4 +76,4 @@ namespace NekoGui_fmt {
         });
 #endif
     }
-} // namespace NekoGui_fmt
+} // namespace ProxorGui_fmt

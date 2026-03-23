@@ -44,7 +44,7 @@
         </sizepolicy>
        </property>
        <property name="icon">
-        <iconset resource="../../res/neko.qrc">
+        <iconset resource="../../res/proxor.qrc">
          <normaloff>:/icon/material/swap-horizontal.svg</normaloff>:/icon/material/swap-horizontal.svg</iconset>
        </property>
       </widget>
@@ -58,7 +58,7 @@
         </sizepolicy>
        </property>
        <property name="icon">
-        <iconset resource="../../res/neko.qrc">
+        <iconset resource="../../res/proxor.qrc">
          <normaloff>:/icon/material/delete.svg</normaloff>:/icon/material/delete.svg</iconset>
        </property>
       </widget>
@@ -140,7 +140,7 @@
   </layout>
  </widget>
  <resources>
-  <include location="../../res/neko.qrc"/>
+  <include location="../../res/proxor.qrc"/>
  </resources>
  <connections/>
 </ui>

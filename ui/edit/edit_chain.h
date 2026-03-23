@@ -19,13 +19,13 @@ public:
 
     ~EditChain() override;
 
-    void onStart(std::shared_ptr<NekoGui::ProxyEntity> _ent) override;
+    void onStart(std::shared_ptr<ProxorGui::ProxyEntity> _ent) override;
 
     bool onEnd() override;
 
 private:
     Ui::EditChain *ui;
-    std::shared_ptr<NekoGui::ProxyEntity> ent;
+    std::shared_ptr<ProxorGui::ProxyEntity> ent;
 
     void AddProfileToListIfExist(int profileId);
 

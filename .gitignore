@@ -70,7 +70,6 @@ Thumbs.db
 *.exe
 
 # Custom
-/nekoray
 /build
 CMakeLists.txt.user*
 /cmake-build-*
@@ -81,7 +80,6 @@ CMakeLists.txt.user*
 # Deploy
 /deployment
 /release-assets
-/neko*.sh
 /qtsdk
 
 .vs

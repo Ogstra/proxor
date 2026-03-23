@@ -9,7 +9,7 @@
 
 #define BOX_UNDERLYING_DNS dataStore->core_box_underlying_dns.isEmpty() ? "local" : dataStore->core_box_underlying_dns
 
-namespace NekoGui {
+namespace ProxorGui {
 
     QStringList getAutoBypassExternalProcessPaths(const std::shared_ptr<BuildConfigResult> &result) {
         QStringList paths;
@@ -22,7 +22,7 @@ namespace NekoGui {
     }
 
     QString genTunName() {
-        auto tun_name = "neko-tun";
+        auto tun_name = "proxor-tun";
 #ifdef Q_OS_MACOS
         tun_name = "utun9";
 #endif
@@ -78,7 +78,7 @@ namespace NekoGui {
         status->forTest = forTest;
         status->forExport = forExport;
 
-        auto customBean = dynamic_cast<NekoGui_fmt::CustomBean *>(ent->bean.get());
+        auto customBean = dynamic_cast<ProxorGui_fmt::CustomBean *>(ent->bean.get());
         if (customBean != nullptr && customBean->core == "internal-full") {
             result->coreConfig = QString2QJsonObject(customBean->config_simple);
         } else {
@@ -299,7 +299,7 @@ namespace NekoGui {
                     return {};
                 }
                 extR.tag = ent->bean->DisplayType();
-                status->result->extRs.emplace_back(std::make_shared<NekoGui_fmt::ExternalBuildResult>(extR));
+                status->result->extRs.emplace_back(std::make_shared<ProxorGui_fmt::ExternalBuildResult>(extR));
 
                 // SOCKS OUTBOUND
                 outbound["type"] = "socks";
@@ -365,7 +365,7 @@ namespace NekoGui {
             // Bypass Lookup for the first profile
             auto serverAddress = ent->bean->serverAddress;
 
-            auto customBean = dynamic_cast<NekoGui_fmt::CustomBean *>(ent->bean.get());
+            auto customBean = dynamic_cast<ProxorGui_fmt::CustomBean *>(ent->bean.get());
             if (customBean != nullptr && customBean->core == "internal") {
                 auto server = QString2QJsonObject(customBean->config_simple)["server"].toString();
                 if (!server.isEmpty()) serverAddress = server;
@@ -747,8 +747,8 @@ namespace NekoGui {
 
     QString WriteVPNSingBoxConfig() {
         // tun user rule
-        auto match_out = dataStore->vpn_rule_white ? "neko-socks" : "direct";
-        auto no_match_out = dataStore->vpn_rule_white ? "direct" : "neko-socks";
+        auto match_out = dataStore->vpn_rule_white ? "proxor-socks" : "direct";
+        auto no_match_out = dataStore->vpn_rule_white ? "direct" : "proxor-socks";
 
         QString process_name_rule = dataStore->vpn_rule_process.trimmed();
         if (!process_name_rule.isEmpty()) {
@@ -775,7 +775,7 @@ namespace NekoGui {
             socks_user_pass = socks_user_pass.arg(dataStore->inbound_auth->username, dataStore->inbound_auth->password);
         }
         // gen config
-        auto configFn = ":/neko/vpn/sing-box-vpn.json";
+        auto configFn = ":/proxor/vpn/sing-box-vpn.json";
         if (QFile::exists("vpn/sing-box-vpn.json")) configFn = "vpn/sing-box-vpn.json";
         auto config = ReadFileText(configFn)
                           .replace("//%IPV6_ADDRESS%", dataStore->vpn_ipv6 ? R"("inet6_address": "fdfe:dcba:9876::1/126",)" : "")
@@ -804,10 +804,10 @@ namespace NekoGui {
         return {};
 #endif
         // gen script
-        auto scriptFn = ":/neko/vpn/vpn-run-root.sh";
+        auto scriptFn = ":/proxor/vpn/vpn-run-root.sh";
         if (QFile::exists("vpn/vpn-run-root.sh")) scriptFn = "vpn/vpn-run-root.sh";
         auto script = ReadFileText(scriptFn)
-                          .replace("./nekobox_core", QApplication::applicationDirPath() + "/nekobox_core")
+                          .replace("./proxor_core", QApplication::applicationDirPath() + "/proxor_core")
                           .replace("$CONFIG_PATH", configPath);
         // write script
         QFile file2;
@@ -818,4 +818,4 @@ namespace NekoGui {
         return QFileInfo(file2).absoluteFilePath();
     }
 
-} // namespace NekoGui
+} // namespace ProxorGui

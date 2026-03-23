@@ -17,11 +17,11 @@
 
 // ext core
 
-std::list<std::shared_ptr<NekoGui_sys::ExternalProcess>> CreateExtCFromExtR(const std::list<std::shared_ptr<NekoGui_fmt::ExternalBuildResult>> &extRs, bool start) {
+std::list<std::shared_ptr<ProxorGui_sys::ExternalProcess>> CreateExtCFromExtR(const std::list<std::shared_ptr<ProxorGui_fmt::ExternalBuildResult>> &extRs, bool start) {
     // plz run and start in same thread
-    std::list<std::shared_ptr<NekoGui_sys::ExternalProcess>> l;
+    std::list<std::shared_ptr<ProxorGui_sys::ExternalProcess>> l;
     for (const auto &extR: extRs) {
-        std::shared_ptr<NekoGui_sys::ExternalProcess> extC(new NekoGui_sys::ExternalProcess());
+        std::shared_ptr<ProxorGui_sys::ExternalProcess> extC(new ProxorGui_sys::ExternalProcess());
         extC->tag = extR->tag;
         extC->program = extR->program;
         extC->arguments = extR->arguments;
@@ -36,7 +36,7 @@ std::list<std::shared_ptr<NekoGui_sys::ExternalProcess>> CreateExtCFromExtR(cons
 // grpc
 
 #ifndef NKR_NO_GRPC
-using namespace NekoGui_rpc;
+using namespace ProxorGui_rpc;
 #endif
 
 void MainWindow::setup_grpc() {
@@ -46,10 +46,10 @@ void MainWindow::setup_grpc() {
         [=](const QString &errStr) {
             MW_show_log("[Error] gRPC: " + errStr);
         },
-        "127.0.0.1:" + Int2String(NekoGui::dataStore->core_port), NekoGui::dataStore->core_token);
+        "127.0.0.1:" + Int2String(ProxorGui::dataStore->core_port), ProxorGui::dataStore->core_token);
 
     // Looper
-    runOnNewThread([=] { NekoGui_traffic::trafficLooper->Loop(); });
+    runOnNewThread([=] { ProxorGui_traffic::trafficLooper->Loop(); });
 #endif
 }
 
@@ -65,9 +65,9 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
     }
 
     auto profiles = get_selected_or_group();
-    if (test_group) profiles = NekoGui::profileManager->CurrentGroup()->ProfilesWithOrder();
+    if (test_group) profiles = ProxorGui::profileManager->CurrentGroup()->ProfilesWithOrder();
     if (profiles.isEmpty()) return;
-    auto group = NekoGui::profileManager->CurrentGroup();
+    auto group = ProxorGui::profileManager->CurrentGroup();
     if (group->archive) return;
 
     // menu_stop_testing
@@ -121,7 +121,7 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
     runOnNewThread([this, profiles, mode, full_test_flags]() {
         QMutex lock_write;
         QMutex lock_return;
-        int threadN = NekoGui::dataStore->test_concurrent;
+        int threadN = ProxorGui::dataStore->test_concurrent;
         int threadN_finished = 0;
         auto profiles_test = profiles; // copy
 
@@ -152,10 +152,10 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
                     libcore::TestReq req;
                     req.set_mode((libcore::TestMode) mode);
                     req.set_timeout(10 * 1000);
-                    req.set_url(NekoGui::dataStore->test_latency_url.toStdString());
+                    req.set_url(ProxorGui::dataStore->test_latency_url.toStdString());
 
                     //
-                    std::list<std::shared_ptr<NekoGui_sys::ExternalProcess>> extCs;
+                    std::list<std::shared_ptr<ProxorGui_sys::ExternalProcess>> extCs;
                     QSemaphore extSem;
 
                     if (mode == libcore::TestMode::UrlTest || mode == libcore::FullTest) {
@@ -191,8 +191,8 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
                         req.set_full_speed(full_test_flags.contains("3"));
                         req.set_full_in_out(full_test_flags.contains("4"));
 
-                        req.set_full_speed_url(NekoGui::dataStore->test_download_url.toStdString());
-                        req.set_full_speed_timeout(NekoGui::dataStore->test_download_timeout);
+                        req.set_full_speed_url(ProxorGui::dataStore->test_download_url.toStdString());
+                        req.set_full_speed_timeout(ProxorGui::dataStore->test_download_timeout);
                     } else if (mode == libcore::TcpPing) {
                         req.set_address(profile->bean->DisplayAddress().toStdString());
                     }
@@ -216,7 +216,7 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
 
                     if (result.error().empty()) {
                         profile->latency = result.ms();
-                        if (profile->latency == 0) profile->latency = 1; // nekoray use 0 to represents not tested
+                        if (profile->latency == 0) profile->latency = 1; // legacy format uses 0 to represent not tested
                     } else {
                         profile->latency = -1;
                     }
@@ -253,7 +253,7 @@ void MainWindow::speedtest_current() {
         libcore::TestReq req;
         req.set_mode(libcore::UrlTest);
         req.set_timeout(10 * 1000);
-        req.set_url(NekoGui::dataStore->test_latency_url.toStdString());
+        req.set_url(ProxorGui::dataStore->test_latency_url.toStdString());
 
         bool rpcOK;
         auto result = defaultClient->Test(&rpcOK, req);
@@ -278,15 +278,15 @@ void MainWindow::speedtest_current() {
 
 void MainWindow::stop_core_daemon() {
 #ifndef NKR_NO_GRPC
-    NekoGui_rpc::defaultClient->Exit();
+    ProxorGui_rpc::defaultClient->Exit();
 #endif
 }
 
-void MainWindow::neko_start(int _id) {
-    if (NekoGui::dataStore->prepare_exit) return;
+void MainWindow::proxor_start(int _id) {
+    if (ProxorGui::dataStore->prepare_exit) return;
 
     auto ents = get_now_selected_list();
-    auto ent = (_id < 0 && !ents.isEmpty()) ? ents.first() : NekoGui::profileManager->GetProfile(_id);
+    auto ent = (_id < 0 && !ents.isEmpty()) ? ents.first() : ProxorGui::profileManager->GetProfile(_id);
     if (ent == nullptr) return;
 
     if (select_mode) {
@@ -296,7 +296,7 @@ void MainWindow::neko_start(int _id) {
         return;
     }
 
-    auto group = NekoGui::profileManager->GetGroup(ent->gid);
+    auto group = ProxorGui::profileManager->GetGroup(ent->gid);
     if (group == nullptr || group->archive) return;
 
     auto result = BuildConfig(ent, false, false);
@@ -305,12 +305,12 @@ void MainWindow::neko_start(int _id) {
         return;
     }
 
-    auto neko_start_stage2 = [=] {
+    auto proxor_start_stage2 = [=] {
 #ifndef NKR_NO_GRPC
         libcore::LoadConfigReq req;
         req.set_core_config(QJsonObject2QString(result->coreConfig, false).toStdString());
-        req.set_enable_nekoray_connections(NekoGui::dataStore->connection_statistics);
-        if (NekoGui::dataStore->traffic_loop_interval > 0) {
+        req.set_enable_connection_statistics(ProxorGui::dataStore->connection_statistics);
+        if (ProxorGui::dataStore->traffic_loop_interval > 0) {
             req.add_stats_outbounds("proxy");
             req.add_stats_outbounds("bypass");
         }
@@ -324,20 +324,20 @@ void MainWindow::neko_start(int _id) {
             return false;
         }
         //
-        NekoGui_traffic::trafficLooper->proxy = result->outboundStat.get();
-        NekoGui_traffic::trafficLooper->items = result->outboundStats;
-        NekoGui::dataStore->ignoreConnTag = result->ignoreConnTag;
-        NekoGui_traffic::trafficLooper->loop_enabled = true;
+        ProxorGui_traffic::trafficLooper->proxy = result->outboundStat.get();
+        ProxorGui_traffic::trafficLooper->items = result->outboundStats;
+        ProxorGui::dataStore->ignoreConnTag = result->ignoreConnTag;
+        ProxorGui_traffic::trafficLooper->loop_enabled = true;
 #endif
 
         runOnUiThread(
             [=] {
                 auto extCs = CreateExtCFromExtR(result->extRs, true);
-                NekoGui_sys::running_ext.splice(NekoGui_sys::running_ext.end(), extCs);
+                ProxorGui_sys::running_ext.splice(ProxorGui_sys::running_ext.end(), extCs);
             },
             DS_cores);
 
-        NekoGui::dataStore->UpdateStartedId(ent->id);
+        ProxorGui::dataStore->UpdateStartedId(ent->id);
         running = ent;
 
         runOnUiThread([=] {
@@ -360,7 +360,7 @@ void MainWindow::neko_start(int _id) {
     mu_stopping.unlock();
 
     // check core state
-    if (!NekoGui::dataStore->core_running) {
+    if (!ProxorGui::dataStore->core_running) {
         runOnUiThread(
             [=] {
                 MW_show_log("Try to start the config, but the core has not listened to the grpc port, so restart it...");
@@ -369,7 +369,7 @@ void MainWindow::neko_start(int _id) {
             },
             DS_cores);
         mu_starting.unlock();
-        return; // let CoreProcess call neko_start when core is up
+        return; // let CoreProcess call proxor_start when core is up
     }
 
     // timeout message
@@ -380,13 +380,13 @@ void MainWindow::neko_start(int _id) {
 
     runOnNewThread([=] {
         // stop current running
-        if (NekoGui::dataStore->started_id >= 0) {
-            runOnUiThread([=] { neko_stop(false, true); });
+        if (ProxorGui::dataStore->started_id >= 0) {
+            runOnUiThread([=] { proxor_stop(false, true); });
             sem_stopped.acquire();
         }
         // do start
         MW_show_log(">>>>>>>> " + tr("Starting profile %1").arg(ent->bean->DisplayTypeAndName()));
-        if (!neko_start_stage2()) {
+        if (!proxor_start_stage2()) {
             MW_show_log("<<<<<<<< " + tr("Failed to start profile %1").arg(ent->bean->DisplayTypeAndName()));
         }
         mu_starting.unlock();
@@ -397,7 +397,7 @@ void MainWindow::neko_start(int _id) {
             restartMsgbox->deleteLater();
 #ifdef Q_OS_LINUX
             // Check systemd-resolved
-            if (NekoGui::dataStore->spmode_vpn && NekoGui::dataStore->routing->direct_dns.startsWith("local") && ReadFileText("/etc/resolv.conf").contains("systemd-resolved")) {
+            if (ProxorGui::dataStore->spmode_vpn && ProxorGui::dataStore->routing->direct_dns.startsWith("local") && ReadFileText("/etc/resolv.conf").contains("systemd-resolved")) {
                 MW_show_log("[Warning] The default Direct DNS may not works with systemd-resolved, you may consider change your DNS settings.");
             }
 #endif
@@ -405,35 +405,35 @@ void MainWindow::neko_start(int _id) {
     });
 }
 
-void MainWindow::neko_stop(bool crash, bool sem) {
-    auto id = NekoGui::dataStore->started_id;
+void MainWindow::proxor_stop(bool crash, bool sem) {
+    auto id = ProxorGui::dataStore->started_id;
     if (id < 0) {
         if (sem) sem_stopped.release();
         return;
     }
 
-    auto neko_stop_stage2 = [=] {
+    auto proxor_stop_stage2 = [=] {
         runOnUiThread(
             [=] {
-                while (!NekoGui_sys::running_ext.empty()) {
-                    auto extC = NekoGui_sys::running_ext.front();
+                while (!ProxorGui_sys::running_ext.empty()) {
+                    auto extC = ProxorGui_sys::running_ext.front();
                     extC->Kill();
-                    NekoGui_sys::running_ext.pop_front();
+                    ProxorGui_sys::running_ext.pop_front();
                 }
             },
             DS_cores);
 
 #ifndef NKR_NO_GRPC
-        NekoGui_traffic::trafficLooper->loop_enabled = false;
-        NekoGui_traffic::trafficLooper->loop_mutex.lock();
-        if (NekoGui::dataStore->traffic_loop_interval != 0) {
-            NekoGui_traffic::trafficLooper->UpdateAll();
-            for (const auto &item: NekoGui_traffic::trafficLooper->items) {
-                NekoGui::profileManager->GetProfile(item->id)->Save();
+        ProxorGui_traffic::trafficLooper->loop_enabled = false;
+        ProxorGui_traffic::trafficLooper->loop_mutex.lock();
+        if (ProxorGui::dataStore->traffic_loop_interval != 0) {
+            ProxorGui_traffic::trafficLooper->UpdateAll();
+            for (const auto &item: ProxorGui_traffic::trafficLooper->items) {
+                ProxorGui::profileManager->GetProfile(item->id)->Save();
                 runOnUiThread([=] { refresh_proxy_list(item->id); });
             }
         }
-        NekoGui_traffic::trafficLooper->loop_mutex.unlock();
+        ProxorGui_traffic::trafficLooper->loop_mutex.unlock();
 
         if (!crash) {
             bool rpcOK;
@@ -447,8 +447,8 @@ void MainWindow::neko_stop(bool crash, bool sem) {
         }
 #endif
 
-        NekoGui::dataStore->UpdateStartedId(-1919);
-        NekoGui::dataStore->need_keep_vpn_off = false;
+        ProxorGui::dataStore->UpdateStartedId(-1919);
+        ProxorGui::dataStore->need_keep_vpn_off = false;
         running = nullptr;
 
         runOnUiThread([=] {
@@ -473,7 +473,7 @@ void MainWindow::neko_stop(bool crash, bool sem) {
     runOnNewThread([=] {
         // do stop
         MW_show_log(">>>>>>>> " + tr("Stopping profile %1").arg(running->bean->DisplayTypeAndName()));
-        if (!neko_stop_stage2()) {
+        if (!proxor_stop_stage2()) {
             MW_show_log("<<<<<<<< " + tr("Failed to stop, please restart the program."));
         }
         mu_stopping.unlock();
@@ -493,8 +493,8 @@ void MainWindow::CheckUpdate(bool silent) {
     bool ok;
     libcore::UpdateReq request;
     request.set_action(libcore::UpdateAction::Check);
-    request.set_check_pre_release(NekoGui::dataStore->check_include_pre);
-    auto response = NekoGui_rpc::defaultClient->Update(&ok, request);
+    request.set_check_pre_release(ProxorGui::dataStore->check_include_pre);
+    auto response = ProxorGui_rpc::defaultClient->Update(&ok, request);
     if (!ok) return;
 
     auto err = response.error();
@@ -515,7 +515,7 @@ void MainWindow::CheckUpdate(bool silent) {
     }
 
     runOnUiThread([=] {
-        auto allow_updater = !NekoGui::dataStore->flag_use_appdata;
+        auto allow_updater = !ProxorGui::dataStore->flag_use_appdata;
         auto notePreRelease = response.is_pre_release() ? QObject::tr("Prerelease") : QObject::tr("Release");
         auto releasePageUrl = QUrl(response.release_url().c_str());
         QString details = QObject::tr("Current version: %1\nAvailable package: %2\nChannel: %3")
@@ -541,7 +541,7 @@ void MainWindow::CheckUpdate(bool silent) {
                 bool ok2;
                 libcore::UpdateReq request2;
                 request2.set_action(libcore::UpdateAction::Download);
-                auto response2 = NekoGui_rpc::defaultClient->Update(&ok2, request2);
+                auto response2 = ProxorGui_rpc::defaultClient->Update(&ok2, request2);
                 if (!ok2) return;
 
                 runOnUiThread([=] {

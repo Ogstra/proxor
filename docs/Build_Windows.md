@@ -1,4 +1,4 @@
-# Build NekoBox on Windows
+# Build Proxor on Windows
 
 This document covers the native Windows GUI build and the companion Go core build used by this repository.
 
@@ -10,20 +10,22 @@ This document covers the native Windows GUI build and the companion Go core buil
 - Qt SDK
 - Bash available in `PATH` for the helper scripts in `libs/`
 
-The commands below are intended to run from a Visual Studio developer shell such as `x64 Native Tools Command Prompt for VS 2022`.
+The repository includes a Windows build wrapper that loads the Visual Studio toolchain automatically, so you do not need to enter a developer shell by hand.
 
 ## Clone the Repository
 
 ```powershell
-git clone https://github.com/Ogstra/nekoray.git --recursive
-cd nekoray
+git clone https://github.com/Ogstra/proxor.git --recursive
+cd proxor
 ```
 
 ## Qt SDK
 
-The current Windows package built in this repository uses Qt 6.x. Qt 5.15 can still be used for compatibility builds, but Qt 6 is the preferred path for the current fork.
+The current Windows package built in this repository uses Qt 6.x by default. Qt 5.15 can still be used for compatibility builds, but Qt 6 is the preferred path for the current fork.
 
-Make sure the Qt `bin` directory is available through `CMAKE_PREFIX_PATH` or `PATH`.
+If you place the SDK under `./qtsdk/Qt`, CMake now detects it automatically. Otherwise, make sure Qt is available through `CMAKE_PREFIX_PATH` or `Qt6_DIR`.
+
+The bundled `./qtsdk/Qt` layout is intended for the Visual Studio toolchain. Do not configure this repository with MinGW unless you also provide a MinGW-built Qt SDK and matching native dependencies.
 
 ## Build Native Dependencies
 
@@ -41,21 +43,66 @@ The produced packages are installed under `libs/deps/built` unless `NKR_PACKAGE`
 
 ## Build the GUI
 
-Adjust the Qt path to match your machine:
+If you keep Qt under `./qtsdk/Qt`, the default build wrapper is enough.
+
+PowerShell:
 
 ```powershell
-mkdir build
-cd build
-cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=C:/Qt/6.5.0/msvc2022_64 ..
-ninja
+./scripts/build_windows.ps1
 ```
 
-The GUI executable is produced as `nekobox.exe`.
+Git Bash:
+
+```bash
+./scripts/build_windows.sh
+```
+
+Both wrappers run the Go tests for `grpc_server` and `proxor_core`, then configure and build the Qt GUI with MSVC + Ninja.
+
+## Deploy a Local Windows Package
+
+PowerShell:
+
+```powershell
+./scripts/deploy_windows.ps1 -BuildGo
+```
+
+Git Bash:
+
+```bash
+./scripts/deploy_windows.sh -BuildGo
+```
+
+This stages `deployment/windows64` with:
+
+- `proxor.exe` from the GUI build output
+- `proxor_core.exe` and `updater.exe` from the Go workspace
+- Qt runtime files via `windeployqt`
+- local `deployment/public_res` contents when present
+
+To do everything in one step:
+
+```powershell
+./scripts/build_and_deploy_windows.ps1 -Clean
+```
+
+```bash
+./scripts/build_and_deploy_windows.sh -Clean
+```
+
+If your Qt SDK lives elsewhere, point CMake at it explicitly through the environment before running the wrapper:
+
+```powershell
+$env:Qt6_DIR = "C:/Qt/6.7.2/msvc2022_64/lib/cmake/Qt6"
+./scripts/build_windows.ps1
+```
+
+The GUI executable is produced as `proxor.exe`.
 
 To stage the required Qt runtime files next to the executable:
 
 ```powershell
-windeployqt nekobox.exe
+windeployqt proxor.exe
 ```
 
 ## Build the Go Core
@@ -76,8 +123,8 @@ The repository uses `deployment/windows64` as the assembled Windows output direc
 
 After building:
 
-- `build/nekobox.exe` is the GUI artifact
-- `deployment/windows64/nekobox_core.exe` is the backend core
+- `build/proxor.exe` is the GUI artifact
+- `deployment/windows64/proxor_core.exe` is the backend core
 - `deployment/windows64/updater.exe` is the updater
 
 If you need a full local test package, copy or deploy the GUI into `deployment/windows64` and include the required Qt runtime files and geodata assets.

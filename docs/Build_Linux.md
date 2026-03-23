@@ -1,6 +1,16 @@
-# Build NekoBox on Linux
+# Build Proxor on Linux
 
 This document covers native Linux builds for the GUI application.
+
+## Status
+
+Linux is currently supported as a manual build path only.
+
+Official release packaging is not available right now:
+
+- no supported `.deb` output
+- no supported AppImage output
+- no supported CI-produced Linux artifacts
 
 ## Prerequisites
 
@@ -15,8 +25,8 @@ Optional in-tree native dependencies can be built from `libs/build_deps_all.sh` 
 ## Clone the Repository
 
 ```bash
-git clone https://github.com/Ogstra/nekoray.git --recursive
-cd nekoray
+git clone https://github.com/Ogstra/proxor.git --recursive
+cd proxor
 ```
 
 ## Basic Build
@@ -30,7 +40,7 @@ cmake -GNinja ..
 ninja
 ```
 
-The GUI executable is produced as `nekobox`.
+The GUI executable is produced as `proxor`.
 
 ## Build with In-Tree Native Dependencies
 
@@ -50,7 +60,7 @@ By default the build looks for local dependencies in `./libs/deps/built`. That p
 
 | Option | Default | Meaning |
 |---|---|---|
-| `QT_VERSION_MAJOR` | `5` | Selects Qt major version |
+| `QT_VERSION_MAJOR` | `6` | Selects Qt major version |
 | `NKR_NO_EXTERNAL` | unset | Disables all optional native external dependencies |
 | `NKR_NO_YAML` | unset | Disables yaml-cpp support |
 | `NKR_NO_QHOTKEY` | unset | Disables QHotkey |
@@ -62,4 +72,4 @@ By default the build looks for local dependencies in `./libs/deps/built`. That p
 
 ## Go Core
 
-The GUI build does not produce `nekobox_core`. For the backend build, see [Build_Core.md](./Build_Core.md).
+The GUI build does not produce `proxor_core`. For the backend build, see [Build_Core.md](./Build_Core.md).
