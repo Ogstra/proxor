@@ -832,17 +832,25 @@ namespace ProxorGui {
             routeObj.remove("geosite");
             routeObj.remove("auto_detect_interface");
         }
+        if (!status->forTest) {
+            routeObj["find_process"] = true;
+        }
         status->result->coreConfig.insert("route", routeObj);
 
         // experimental
         QJsonObject experimentalObj;
 
-        if (!status->forTest && dataStore->core_box_clash_api > 0) {
+        if (!status->forTest) {
             QJsonObject clash_api = {
-                {"external_controller", "127.0.0.1:" + Int2String(dataStore->core_box_clash_api)},
-                {"secret", dataStore->core_box_clash_api_secret},
-                {"external_ui", "dashboard"},
+                {"default_mode", ""},
             };
+            if (dataStore->core_box_clash_api > 0) {
+                clash_api = {
+                    {"external_controller", "127.0.0.1:" + Int2String(dataStore->core_box_clash_api)},
+                    {"secret", dataStore->core_box_clash_api_secret},
+                    {"external_ui", "dashboard"},
+                };
+            }
             experimentalObj["clash_api"] = clash_api;
         }
 

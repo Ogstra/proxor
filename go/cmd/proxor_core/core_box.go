@@ -15,11 +15,11 @@ import (
 var instance *box.Box
 var instance_cancel context.CancelFunc
 
-func setupCore() {
-	boxmain.SetDisableColor(true)
+func setupCore(disableColor bool) {
+	boxmain.SetDisableColor(disableColor)
 	proxor_log.SetupLog(50*1024, "./proxor.log")
 	// Do NOT set a platform log writer — sing-box logs via its regular logger
-	// (stderr, DisableColor=true → plain text). Using a platform writer caused
+	// (stderr only). Using a platform writer caused
 	// duplicate lines: once via the platform writer (stdout) and once via the
 	// regular logger (stderr). Thunder uses the same approach.
 	proxor_common.GetCurrentInstance = func() interface{} {
