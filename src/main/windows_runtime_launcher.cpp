@@ -84,6 +84,44 @@ void ShowLaunchError(const std::wstring &message) {
     MessageBoxW(nullptr, message.c_str(), L"Proxor", MB_OK | MB_ICONERROR);
 }
 
+// Silently delete a file or directory tree (no-op if the path does not exist).
+void DeletePathSilently(const std::wstring &path) {
+    const DWORD attrs = GetFileAttributesW(path.c_str());
+    if (attrs == INVALID_FILE_ATTRIBUTES) return; // does not exist
+
+    if (attrs & FILE_ATTRIBUTE_DIRECTORY) {
+        // Recurse into directory before removing it.
+        const std::wstring pattern = path + L"\\*";
+        WIN32_FIND_DATAW fd{};
+        HANDLE h = FindFirstFileW(pattern.c_str(), &fd);
+        if (h != INVALID_HANDLE_VALUE) {
+            do {
+                if (wcscmp(fd.cFileName, L".") == 0 || wcscmp(fd.cFileName, L"..") == 0) continue;
+                DeletePathSilently(path + L"\\" + fd.cFileName);
+            } while (FindNextFileW(h, &fd));
+            FindClose(h);
+        }
+        RemoveDirectoryW(path.c_str());
+    } else {
+        SetFileAttributesW(path.c_str(), FILE_ATTRIBUTE_NORMAL);
+        DeleteFileW(path.c_str());
+    }
+}
+
+// Remove directories and files left behind by pre-v1.2.0 installs.
+void RemoveLegacyPaths(const std::wstring &root) {
+    static const wchar_t *legacy[] = {
+        L"platforms", L"styles", L"tls", L"iconengines",
+        L"imageformats", L"networkinformation", L"sqldrivers",
+        L"translations", L"generic", L"public_res", L"runtime",
+        L"proxor.png", L"proxor_gui.exe", L"app.exe",
+        nullptr
+    };
+    for (int i = 0; legacy[i]; ++i) {
+        DeletePathSilently(JoinPath(root, legacy[i]));
+    }
+}
+
 } // namespace
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
@@ -103,6 +141,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         ShowLaunchError(L"config\\runtime\\app.exe was not found. Reinstall or redeploy Proxor.");
         return 1;
     }
+
+    RemoveLegacyPaths(packageRoot);
 
     SetEnvironmentVariableW(L"NKR_FROM_LAUNCHER", L"1");
     SetEnvironmentVariableW(L"PROXOR_PACKAGE_ROOT", packageRoot.c_str());
