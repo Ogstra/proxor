@@ -771,6 +771,13 @@ namespace ProxorGui {
             {"source_ip_cidr", QJsonArray{"224.0.0.0/3", "ff00::/8"}},
             {"action", "reject"},
         };
+        // reject traffic destined for the TUN's own subnet — any software sending to TUN-local
+        // addresses must not reach the proxy outbound (would crash it); covers all configured
+        // TUN addresses including IPv6, regardless of process or port
+        status->routingRules += QJsonObject{
+            {"ip_cidr", BuildTunAddressArray(dataStore->vpn_ipv6)},
+            {"action", "reject"},
+        };
 
         // tun user rule
         if (dataStore->vpn_internal_tun && dataStore->spmode_vpn && !status->forTest) {
