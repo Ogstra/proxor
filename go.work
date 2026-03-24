@@ -6,6 +6,4 @@ use (
 	./go/grpc_server
 )
 
-replace github.com/sagernet/sing => ./3rdparty/sing
-
 replace github.com/sagernet/sing-box => ../sing-box

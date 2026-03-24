@@ -55,6 +55,7 @@ func preCleanup() {
 		os.RemoveAll("./usr")
 	}
 	os.RemoveAll(updateExtractDir)
+	removeObsoleteDeploymentPaths()
 }
 
 func postCleanup() {
@@ -175,5 +176,33 @@ func removeAll(glob string) {
 	files, _ := filepath.Glob(glob)
 	for _, f := range files {
 		os.RemoveAll(f)
+	}
+}
+
+func removeObsoleteDeploymentPaths() {
+	obsoletePaths := []string{
+		"./geoip.dat",
+		"./geoip.db",
+		"./geosite.dat",
+		"./geosite.db",
+		"./config/plugins",
+		"./generic",
+		"./iconengines",
+		"./imageformats",
+		"./networkinformation",
+		"./platforms",
+		"./proxor_gui.exe",
+		"./app.exe",
+		"./proxor.png",
+		"./runtime",
+		"./config/runtime",
+		"./sqldrivers",
+		"./styles",
+		"./tls",
+		"./translations",
+		"./public_res",
+	}
+	for _, path := range obsoletePaths {
+		os.RemoveAll(path)
 	}
 }

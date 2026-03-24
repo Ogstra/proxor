@@ -1,8 +1,8 @@
-set(PLATFORM_SOURCES 3rdparty/WinCommander.cpp sys/windows/guihelper.cpp sys/windows/MiniDump.cpp)
+set(PLATFORM_SOURCES 3rdparty/WinCommander.cpp src/sys/windows/guihelper.cpp src/sys/windows/MiniDump.cpp)
 set(PLATFORM_LIBRARIES wininet wsock32 ws2_32 user32 rasapi32 iphlpapi)
 
 include(cmake/windows/generate_product_version.cmake)
-file(STRINGS "${CMAKE_SOURCE_DIR}/proxor_version.txt" NKR_WINDOWS_VERSION LIMIT_COUNT 1)
+file(STRINGS "${CMAKE_SOURCE_DIR}/VERSION" NKR_WINDOWS_VERSION LIMIT_COUNT 1)
 string(REGEX MATCH "^([0-9]+)\\.([0-9]+)\\.([0-9]+)" NKR_WINDOWS_VERSION_MATCH "${NKR_WINDOWS_VERSION}")
 set(NKR_VERSION_MAJOR "${CMAKE_MATCH_1}")
 set(NKR_VERSION_MINOR "${CMAKE_MATCH_2}")
@@ -18,7 +18,7 @@ if (NOT NKR_VERSION_PATCH)
 endif ()
 generate_product_version(
         QV2RAY_RC
-        ICON "${CMAKE_SOURCE_DIR}/res/proxor.ico"
+        ICON "${CMAKE_SOURCE_DIR}/assets/res/proxor.ico"
         NAME "Proxor"
         BUNDLE "proxor"
         VERSION_MAJOR "${NKR_VERSION_MAJOR}"
