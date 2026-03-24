@@ -108,6 +108,19 @@ void DeletePathSilently(const std::wstring &path) {
     }
 }
 
+// Delete all files in root matching a glob prefix (e.g. L"qtbase").
+void DeleteByPrefix(const std::wstring &root, const std::wstring &prefix) {
+    const std::wstring pattern = JoinPath(root, prefix + L"*");
+    WIN32_FIND_DATAW fd{};
+    HANDLE h = FindFirstFileW(pattern.c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+        DeletePathSilently(JoinPath(root, fd.cFileName));
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+}
+
 // Remove directories and files left behind by pre-v1.2.0 installs.
 void RemoveLegacyPaths(const std::wstring &root) {
     static const wchar_t *legacy[] = {
@@ -115,11 +128,13 @@ void RemoveLegacyPaths(const std::wstring &root) {
         L"imageformats", L"networkinformation", L"sqldrivers",
         L"translations", L"generic", L"public_res", L"runtime",
         L"proxor.png", L"proxor_gui.exe", L"app.exe",
+        L"geoip.dat", L"geoip.db", L"geosite.dat", L"geosite.db",
         nullptr
     };
     for (int i = 0; legacy[i]; ++i) {
         DeletePathSilently(JoinPath(root, legacy[i]));
     }
+    DeleteByPrefix(root, L"qtbase");
 }
 
 } // namespace
