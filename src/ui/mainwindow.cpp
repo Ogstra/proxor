@@ -19,7 +19,6 @@
 
 #include "3rdparty/fix_old_qt.h"
 #include "3rdparty/qrcodegen.hpp"
-#include "3rdparty/VT100Parser.hpp"
 #include "3rdparty/qv2ray/v2/components/proxy/QvProxyConfigurator.hpp"
 
 #ifndef NKR_NO_ZXING
@@ -264,7 +263,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         runOnUiThread([=] { show_log_impl("[" + tag + "] " + log); });
     };
     MW_show_log_ext_vt100 = [=](const QString &log) {
-        runOnUiThread([=] { show_log_impl(cleanVT100String(log)); });
+        runOnUiThread([=] { show_log_impl(log); });
     };
 
     // table UI
@@ -328,6 +327,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->tableWidget_conn->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     ui->tableWidget_conn->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     ui->tableWidget_conn->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+    ui->tableWidget_conn->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+    ui->tableWidget_conn->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
+    ui->tableWidget_conn->horizontalHeader()->setSectionResizeMode(5, QHeaderView::ResizeToContents);
     ui->proxyListTable->verticalHeader()->setDefaultSectionSize(24);
 
     // search box
@@ -532,6 +534,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     args.push_back("proxor");
     args.push_back("-port");
     args.push_back(Int2String(ProxorGui::dataStore->core_port));
+    if (!ProxorGui::dataStore->core_enable_color) args.push_back("-disable-color");
     if (ProxorGui::dataStore->flag_debug) args.push_back("-debug");
 
     // Start core
@@ -662,7 +665,7 @@ void MainWindow::show_group(int gid) {
         ui->proxyListTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
         ui->proxyListTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
         ui->proxyListTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
-        ui->proxyListTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::ResizeToContents);
+        ui->proxyListTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Interactive);
     }
 
     // show proxies
@@ -999,8 +1002,9 @@ void MainWindow::refresh_status(const QString &traffic_update) {
     }
 
     if (last_test_time.addSecs(2) < QTime::currentTime()) {
-        auto txt = running == nullptr ? tr("Not Running")
-                                      : QStringLiteral("[%1] %2").arg(group_name, running->bean->DisplayName()).left(30);
+        auto txt = running == nullptr
+                       ? (start_pending ? tr("Starting...") : tr("Not Running"))
+                       : QStringLiteral("[%1] %2").arg(group_name, running->bean->DisplayName()).left(30);
         ui->label_running->setText(txt);
     }
     //
@@ -1010,9 +1014,10 @@ void MainWindow::refresh_status(const QString &traffic_update) {
     //
     ui->checkBox_VPN->setChecked(ProxorGui::dataStore->spmode_vpn);
     ui->checkBox_SystemProxy->setChecked(ProxorGui::dataStore->spmode_system_proxy);
-    ui->toolButton_toggle_proxy->setText(running == nullptr ? tr("Start") : tr("Stop"));
-    ui->toolButton_toggle_proxy->setIcon(running == nullptr ? makeToggleProxyIcon(QColor(52, 199, 89))
-                                                            : makeToggleProxyIcon(QColor(255, 59, 48)));
+    const bool showStopState = running != nullptr || start_pending;
+    ui->toolButton_toggle_proxy->setText(showStopState ? tr("Stop") : tr("Start"));
+    ui->toolButton_toggle_proxy->setIcon(showStopState ? makeToggleProxyIcon(QColor(255, 59, 48))
+                                                       : makeToggleProxyIcon(QColor(52, 199, 89)));
     if (select_mode) {
         ui->label_running->setText(tr("Select") + " *");
         ui->label_running->setToolTip(tr("Select mode, double-click or press Enter to select a profile, press ESC to exit."));
@@ -1270,6 +1275,15 @@ void MainWindow::refresh_proxy_list_impl_refresh_data(const int &id) {
         f = f0->clone();
         f->setText(profile->traffic_data->DisplayTraffic());
         ui->proxyListTable->setItem(row, 5, f);
+    }
+
+    if (group != nullptr && !group->manually_column_width) {
+        auto header = ui->proxyListTable->horizontalHeader();
+        if (header->count() > 5) {
+            ui->proxyListTable->resizeColumnToContents(5);
+            const int trafficWidth = std::max(120, header->sectionSize(5));
+            header->resizeSection(5, trafficWidth);
+        }
     }
 }
 
@@ -1765,6 +1779,41 @@ static QColor ansiParamToColor(const QString &param) {
     return {};
 }
 
+static void applyAnsiParams(const QString &param, QColor &foreground) {
+    if (param.isEmpty()) {
+        foreground = {};
+        return;
+    }
+
+    const auto parts = param.split(';', Qt::KeepEmptyParts);
+    for (int i = 0; i < parts.size(); ++i) {
+        bool ok = false;
+        const int code = parts[i].toInt(&ok);
+        if (!ok) continue;
+
+        switch (code) {
+        case 0:
+            foreground = {};
+            break;
+        case 39:
+            foreground = {};
+            break;
+        case 38:
+            if (i + 2 < parts.size() && parts[i + 1] == u"5") {
+                QColor col = ansiParamToColor(QStringLiteral("38;5;") + parts[i + 2]);
+                if (col.isValid()) foreground = col;
+                i += 2;
+            }
+            break;
+        default: {
+            QColor col = ansiParamToColor(parts[i]);
+            if (col.isValid()) foreground = col;
+            break;
+        }
+        }
+    }
+}
+
 // Append one log line (may contain ANSI escape codes) to the document with color.
 static void appendAnsiLine(const QString &line, QTextDocument *doc) {
     QTextCursor cursor(doc);
@@ -1772,12 +1821,21 @@ static void appendAnsiLine(const QString &line, QTextDocument *doc) {
     cursor.beginEditBlock();
     cursor.insertBlock();
 
-    QTextCharFormat fmt;
+    QColor foreground;
     int i = 0;
     QString seg;
+    QString html;
 
     auto flush = [&]() {
-        if (!seg.isEmpty()) { cursor.insertText(seg, fmt); seg.clear(); }
+        if (seg.isEmpty()) return;
+        const auto escaped = seg.toHtmlEscaped();
+        if (foreground.isValid()) {
+            html += QStringLiteral("<span style=\"color:%1;\">%2</span>")
+                        .arg(foreground.name(QColor::HexRgb), escaped);
+        } else {
+            html += escaped;
+        }
+        seg.clear();
     };
 
     while (i < line.size()) {
@@ -1787,12 +1845,7 @@ static void appendAnsiLine(const QString &line, QTextDocument *doc) {
             if (j < line.size()) {
                 flush();
                 QString param = line.mid(i + 2, j - i - 2);
-                if (param == u"0" || param.isEmpty()) {
-                    fmt = QTextCharFormat();
-                } else {
-                    QColor col = ansiParamToColor(param);
-                    if (col.isValid()) fmt.setForeground(col);
-                }
+                applyAnsiParams(param, foreground);
                 i = j + 1;
                 continue;
             }
@@ -1800,6 +1853,7 @@ static void appendAnsiLine(const QString &line, QTextDocument *doc) {
         seg += line[i++];
     }
     flush();
+    cursor.insertHtml(html);
     cursor.endEditBlock();
 }
 
@@ -2011,6 +2065,29 @@ void MainWindow::refresh_connection_list(const QJsonArray &arr) {
         }
         f->setText("[" + target1 + "] " + target2);
         ui->tableWidget_conn->setItem(row, 2, f);
+
+        // C3: Process
+        f = f0->clone();
+        const auto process = item["Process"].toString();
+        f->setText(process.isEmpty() ? QStringLiteral("-") : process);
+        ui->tableWidget_conn->setItem(row, 3, f);
+
+        // C4: Protocol
+        f = f0->clone();
+        auto protocol = item["Network"].toString();
+        const auto protocolDetail = item["Protocol"].toString();
+        if (!protocolDetail.isEmpty()) {
+            protocol += " (" + protocolDetail + ")";
+        }
+        f->setText(protocol);
+        ui->tableWidget_conn->setItem(row, 4, f);
+
+        // C5: Traffic
+        f = f0->clone();
+        const auto upload = item["Upload"].toVariant().toLongLong();
+        const auto download = item["Download"].toVariant().toLongLong();
+        f->setText(ReadableSize(upload) + "↑ " + ReadableSize(download) + "↓");
+        ui->tableWidget_conn->setItem(row, 5, f);
     }
 }
 
