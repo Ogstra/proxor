@@ -1,3 +1,6 @@
 [submodule "3rdparty/QHotkey"]
 	path = 3rdparty/QHotkey
 	url = https://github.com/Skycoder42/QHotkey.git
+[submodule "3rdparty/SQLiteCpp"]
+	path = 3rdparty/SQLiteCpp
+	url = https://github.com/SRombauts/SQLiteCpp.git

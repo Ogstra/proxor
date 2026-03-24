@@ -9,6 +9,8 @@ endif ()
 project(proxor VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
+set(PROXOR_SRC_DIR "${CMAKE_SOURCE_DIR}/src")
+set(PROXOR_ASSETS_DIR "${CMAKE_SOURCE_DIR}/assets")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -91,6 +93,7 @@ find_package(Threads)
 
 if (NKR_NO_EXTERNAL)
     set(NKR_NO_GRPC 1)
+    set(NKR_NO_SQLITECPP 1)
     set(NKR_NO_YAML 1)
     set(NKR_NO_ZXING 1)
     set(NKR_NO_QHOTKEY 1)
@@ -132,6 +135,18 @@ else ()
     list(APPEND NKR_EXTERNAL_TARGETS qhotkey)
 endif ()
 
+# SQLiteCpp (static submodule)
+if (NKR_NO_SQLITECPP)
+    nkr_add_compile_definitions(NKR_NO_SQLITECPP)
+else ()
+    set(SQLITECPP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(SQLITECPP_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(SQLITECPP_RUN_CPPLINT OFF CACHE BOOL "" FORCE)
+    set(BUILD_SHARED_LIBS OFF)
+    add_subdirectory(3rdparty/SQLiteCpp)
+    list(APPEND NKR_EXTERNAL_TARGETS SQLiteCpp)
+endif ()
+
 #### debug print ####
 
 if (DBG_CMAKE)
@@ -147,10 +162,10 @@ endif ()
 set(PROJECT_SOURCES
         ${PLATFORM_SOURCES}
 
-        main/main.cpp
-        main/ProxorGui.cpp
-        main/ProxorGui_Utils.cpp
-        main/HTTPRequestHelper.cpp
+        src/main/main.cpp
+        src/main/ProxorGui.cpp
+        src/main/ProxorGui_Utils.cpp
+        src/main/HTTPRequestHelper.cpp
 
         3rdparty/base64.cpp
         3rdparty/qrcodegen.cpp
@@ -166,103 +181,108 @@ set(PROJECT_SOURCES
         3rdparty/qv2ray/v3/components/GeositeReader/GeositeReader.cpp
         3rdparty/qv2ray/v3/components/GeositeReader/picoproto.cpp
 
-        rpc/gRPC.cpp
+        src/rpc/gRPC.cpp
 
-        db/Database.cpp
-        db/traffic/TrafficLooper.cpp
-        db/ProfileFilter.cpp
-        db/ConfigBuilder.cpp
+        src/db/Database.cpp
+        src/db/traffic/TrafficLooper.cpp
+        src/db/ProfileFilter.cpp
+        src/db/ConfigBuilder.cpp
 
-        fmt/AbstractBean.cpp
-        fmt/Bean2CoreObj_box.cpp
-        fmt/Bean2External.cpp
-        fmt/Bean2Link.cpp
-        fmt/Link2Bean.cpp
-        fmt/ChainBean.hpp # translate
+        src/fmt/AbstractBean.cpp
+        src/fmt/Bean2CoreObj_box.cpp
+        src/fmt/Bean2External.cpp
+        src/fmt/Bean2Link.cpp
+        src/fmt/Link2Bean.cpp
+        src/fmt/ChainBean.hpp # translate
 
-        sub/GroupUpdater.cpp
+        src/sub/GroupUpdater.cpp
 
-        sys/ExternalProcess.cpp
-        sys/AutoRun.cpp
+        src/sys/ExternalProcess.cpp
+        src/sys/AutoRun.cpp
 
-        ui/ThemeManager.cpp
-        ui/Icon.cpp
+        src/ui/ThemeManager.cpp
+        src/ui/Icon.cpp
 
-        ui/mainwindow_grpc.cpp
-        ui/mainwindow.cpp
-        ui/mainwindow.h
-        ui/mainwindow.ui
+        src/ui/mainwindow_grpc.cpp
+        src/ui/mainwindow.cpp
+        src/ui/mainwindow.h
+        src/ui/mainwindow.ui
 
-        ui/edit/dialog_edit_profile.h
-        ui/edit/dialog_edit_profile.cpp
-        ui/edit/dialog_edit_profile.ui
-        ui/edit/dialog_edit_group.h
-        ui/edit/dialog_edit_group.cpp
-        ui/edit/dialog_edit_group.ui
+        src/ui/edit/dialog_edit_profile.h
+        src/ui/edit/dialog_edit_profile.cpp
+        src/ui/edit/dialog_edit_profile.ui
+        src/ui/edit/dialog_edit_group.h
+        src/ui/edit/dialog_edit_group.cpp
+        src/ui/edit/dialog_edit_group.ui
 
-        ui/edit/edit_chain.h
-        ui/edit/edit_chain.cpp
-        ui/edit/edit_chain.ui
-        ui/edit/edit_socks_http.h
-        ui/edit/edit_socks_http.cpp
-        ui/edit/edit_socks_http.ui
-        ui/edit/edit_shadowsocks.h
-        ui/edit/edit_shadowsocks.cpp
-        ui/edit/edit_shadowsocks.ui
-        ui/edit/edit_vmess.h
-        ui/edit/edit_vmess.cpp
-        ui/edit/edit_vmess.ui
-        ui/edit/edit_trojan_vless.h
-        ui/edit/edit_trojan_vless.cpp
-        ui/edit/edit_trojan_vless.ui
+        src/ui/edit/edit_chain.h
+        src/ui/edit/edit_chain.cpp
+        src/ui/edit/edit_chain.ui
+        src/ui/edit/edit_socks_http.h
+        src/ui/edit/edit_socks_http.cpp
+        src/ui/edit/edit_socks_http.ui
+        src/ui/edit/edit_shadowsocks.h
+        src/ui/edit/edit_shadowsocks.cpp
+        src/ui/edit/edit_shadowsocks.ui
+        src/ui/edit/edit_vmess.h
+        src/ui/edit/edit_vmess.cpp
+        src/ui/edit/edit_vmess.ui
+        src/ui/edit/edit_trojan_vless.h
+        src/ui/edit/edit_trojan_vless.cpp
+        src/ui/edit/edit_trojan_vless.ui
 
-        ui/edit/edit_naive.h
-        ui/edit/edit_naive.cpp
-        ui/edit/edit_naive.ui
+        src/ui/edit/edit_naive.h
+        src/ui/edit/edit_naive.cpp
+        src/ui/edit/edit_naive.ui
 
-        ui/edit/edit_quic.h
-        ui/edit/edit_quic.cpp
-        ui/edit/edit_quic.ui
+        src/ui/edit/edit_quic.h
+        src/ui/edit/edit_quic.cpp
+        src/ui/edit/edit_quic.ui
 
-        ui/edit/edit_custom.h
-        ui/edit/edit_custom.cpp
-        ui/edit/edit_custom.ui
+        src/ui/edit/edit_custom.h
+        src/ui/edit/edit_custom.cpp
+        src/ui/edit/edit_custom.ui
 
-        ui/dialog_basic_settings.cpp
-        ui/dialog_basic_settings.h
-        ui/dialog_basic_settings.ui
+        src/ui/dialog_basic_settings.cpp
+        src/ui/dialog_basic_settings.h
+        src/ui/dialog_basic_settings.ui
 
-        ui/dialog_manage_groups.cpp
-        ui/dialog_manage_groups.h
-        ui/dialog_manage_groups.ui
+        src/ui/dialog_manage_groups.cpp
+        src/ui/dialog_manage_groups.h
+        src/ui/dialog_manage_groups.ui
 
-        ui/dialog_manage_routes.cpp
-        ui/dialog_manage_routes.h
-        ui/dialog_manage_routes.ui
+        src/ui/dialog_manage_routes.cpp
+        src/ui/dialog_manage_routes.h
+        src/ui/dialog_manage_routes.ui
 
-        ui/dialog_vpn_settings.cpp
-        ui/dialog_vpn_settings.h
-        ui/dialog_vpn_settings.ui
+        src/ui/dialog_vpn_settings.cpp
+        src/ui/dialog_vpn_settings.h
+        src/ui/dialog_vpn_settings.ui
 
-        ui/dialog_hotkey.cpp
-        ui/dialog_hotkey.h
-        ui/dialog_hotkey.ui
+        src/ui/dialog_hotkey.cpp
+        src/ui/dialog_hotkey.h
+        src/ui/dialog_hotkey.ui
 
-        ui/widget/ProxyItem.cpp
-        ui/widget/ProxyItem.h
-        ui/widget/ProxyItem.ui
-        ui/widget/GroupItem.cpp
-        ui/widget/GroupItem.h
-        ui/widget/GroupItem.ui
+        src/ui/widget/ProxyItem.cpp
+        src/ui/widget/ProxyItem.h
+        src/ui/widget/ProxyItem.ui
+        src/ui/widget/GroupItem.cpp
+        src/ui/widget/GroupItem.h
+        src/ui/widget/GroupItem.ui
 
-        res/proxor.qrc
-        res/theme/feiyangqingyun/qss.qrc
+        assets/res/proxor.qrc
+        assets/res/qdarkstyle/darkstyle.qrc
         ${QV2RAY_RC}
-)
+  )
+
+set(PROXOR_GUI_TARGET proxor)
 
 # Qt exe
 if (${QT_VERSION_MAJOR} GREATER_EQUAL 6)
-    qt_add_executable(proxor
+    if (WIN32)
+        set(PROXOR_GUI_TARGET proxor_gui)
+    endif ()
+    qt_add_executable(${PROXOR_GUI_TARGET}
             MANUAL_FINALIZATION
             ${PROJECT_SOURCES}
     )
@@ -272,13 +292,13 @@ if (${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     # For more information, see https://doc.qt.io/qt-6/qt-add-executable.html#target-creation
 else ()
     if (ANDROID)
-        add_library(proxor SHARED
+        add_library(${PROXOR_GUI_TARGET} SHARED
                 ${PROJECT_SOURCES}
         )
         # Define properties for Android with Qt 5 after find_package() calls as:
         #    set(ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android")
     else ()
-        add_executable(proxor
+        add_executable(${PROXOR_GUI_TARGET}
                 ${PROJECT_SOURCES}
         )
     endif ()
@@ -286,24 +306,50 @@ endif ()
 
 # Target
 
-set_property(TARGET proxor PROPERTY AUTOUIC ON)
-set_property(TARGET proxor PROPERTY AUTOMOC ON)
-set_property(TARGET proxor PROPERTY AUTORCC ON)
+set_property(TARGET ${PROXOR_GUI_TARGET} PROPERTY AUTOUIC ON)
+set_property(TARGET ${PROXOR_GUI_TARGET} PROPERTY AUTOMOC ON)
+set_property(TARGET ${PROXOR_GUI_TARGET} PROPERTY AUTORCC ON)
 
-set_target_properties(proxor PROPERTIES
+set_target_properties(${PROXOR_GUI_TARGET} PROPERTIES
         WIN32_EXECUTABLE TRUE
 )
 
+if (WIN32)
+    set_target_properties(${PROXOR_GUI_TARGET} PROPERTIES OUTPUT_NAME "app")
+
+    add_executable(proxor WIN32
+            src/main/windows_runtime_launcher.cpp
+            ${QV2RAY_RC}
+    )
+    set_target_properties(proxor PROPERTIES
+            WIN32_EXECUTABLE TRUE
+    )
+    if (MSVC)
+        set_property(TARGET proxor PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    endif ()
+endif ()
 
 # Target Link
 
-target_link_libraries(proxor PRIVATE
+target_link_libraries(${PROXOR_GUI_TARGET} PRIVATE
         Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Network Qt${QT_VERSION_MAJOR}::Svg
         Threads::Threads
         ${NKR_EXTERNAL_TARGETS}
         ${PLATFORM_LIBRARIES}
 )
 
+target_include_directories(${PROXOR_GUI_TARGET} PRIVATE
+        ${PROXOR_SRC_DIR}
+        ${CMAKE_SOURCE_DIR}
+)
+
+if (WIN32)
+    target_link_libraries(proxor PRIVATE
+            ${PLATFORM_LIBRARIES}
+            shell32
+    )
+endif ()
+
 if (QT_VERSION_MAJOR EQUAL 6)
-    qt_finalize_executable(proxor)
+    qt_finalize_executable(${PROXOR_GUI_TARGET})
 endif ()

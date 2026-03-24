@@ -23,6 +23,25 @@ type server struct {
 	grpc_server.BaseServer
 }
 
+func (s *server) Validate(ctx context.Context, in *gen.LoadConfigReq) (out *gen.ErrorResp, _ error) {
+	var err error
+
+	defer func() {
+		out = &gen.ErrorResp{}
+		if err != nil {
+			out.Error = err.Error()
+		}
+	}()
+
+	i, cancel, err := boxmain.Create([]byte(in.CoreConfig))
+	if i != nil {
+		defer i.Close()
+		defer cancel()
+	}
+
+	return
+}
+
 func (s *server) Start(ctx context.Context, in *gen.LoadConfigReq) (out *gen.ErrorResp, _ error) {
 	var err error
 

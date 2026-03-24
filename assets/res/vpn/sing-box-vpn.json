@@ -1,0 +1,136 @@
+{
+    "log": {
+        "level": "info"
+    },
+    "dns": {
+        "fakeip": {
+            "enabled": true,
+            "inet4_range": "198.18.0.0/15",
+            "inet6_range": "fc00::/18"
+        },
+        "servers": [
+            %DNS_REMOTE_SERVER%,
+            %DNS_DIRECT_SERVER%,
+            %DNS_LOCAL_SERVER%,
+            {
+                "type": "fakeip",
+                "tag": "dns-fake"
+            },
+            {
+                "address": "rcode://success",
+                "tag": "dns-block"
+            }
+        ],
+        "rules": [
+            {
+                "query_type": [
+                    32,
+                    33
+                ],
+                "server": "dns-block"
+            },
+            {
+                "domain_suffix": [
+                    ".lan"
+                ],
+                "server": "dns-block"
+            },
+            {
+                "process_name": [
+                    "proxor_core",
+                    "proxor_core.exe"
+                ],
+                "server": "dns-direct"
+            },
+            {
+                "inbound": "%FAKE_DNS_INBOUND%",
+                "server": "dns-fake"
+            }
+        ]
+    },
+    "inbounds": [
+        {
+            "type": "tun",
+            "tag": "tun-in",
+            "interface_name": "%TUN_NAME%",
+            "address": %TUN_ADDRESSES%,
+            "mtu": %MTU%,
+            "auto_route": true,
+            "strict_route": %STRICT_ROUTE%,
+            "stack": "%STACK%",
+            "endpoint_independent_nat": true,
+            "sniff": false
+        }
+    ],
+    "outbounds": [
+        {
+            "type": "socks",
+            "tag": "proxor-socks",
+            "udp_fragment": true,
+            //%SOCKS_USER_PASS%
+            "server": "127.0.0.1",
+            "server_port": %PORT%
+        },
+        {
+            "type": "direct",
+            "tag": "direct"
+        },
+        {
+            "type": "direct",
+            "tag": "bypass"
+        }
+    ],
+    "route": {
+        "final": "%FINAL_OUT%",
+        "auto_detect_interface": true,
+        "rules": [
+            {
+                "network": "udp",
+                "port": [
+                    135,
+                    137,
+                    138,
+                    139,
+                    5353
+                ],
+                "action": "reject"
+            },
+            {
+                "ip_cidr": [
+                    "224.0.0.0/3",
+                    "ff00::/8"
+                ],
+                "action": "reject"
+            },
+            {
+                "source_ip_cidr": [
+                    "224.0.0.0/3",
+                    "ff00::/8"
+                ],
+                "action": "reject"
+            },
+            {
+                "port": 53,
+                "process_name": [
+                    "proxor_core",
+                    "proxor_core.exe"
+                ],
+                "action": "hijack-dns"
+            },
+            {
+                "process_name": [
+                    "proxor_core",
+                    "proxor_core.exe"
+                ],
+                "outbound": "direct"
+            }
+            //%PROCESS_NAME_RULE%
+            //%CIDR_RULE%
+            ,
+            {
+                "port": 53,
+                "action": "hijack-dns"
+            }
+        ]
+    }
+}

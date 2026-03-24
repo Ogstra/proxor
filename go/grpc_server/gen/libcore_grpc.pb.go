@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	LibcoreService_Exit_FullMethodName            = "/libcore.LibcoreService/Exit"
 	LibcoreService_Update_FullMethodName          = "/libcore.LibcoreService/Update"
+	LibcoreService_Validate_FullMethodName        = "/libcore.LibcoreService/Validate"
 	LibcoreService_Start_FullMethodName           = "/libcore.LibcoreService/Start"
 	LibcoreService_Stop_FullMethodName            = "/libcore.LibcoreService/Stop"
 	LibcoreService_Test_FullMethodName            = "/libcore.LibcoreService/Test"
@@ -34,6 +35,7 @@ const (
 type LibcoreServiceClient interface {
 	Exit(ctx context.Context, in *EmptyReq, opts ...grpc.CallOption) (*EmptyResp, error)
 	Update(ctx context.Context, in *UpdateReq, opts ...grpc.CallOption) (*UpdateResp, error)
+	Validate(ctx context.Context, in *LoadConfigReq, opts ...grpc.CallOption) (*ErrorResp, error)
 	Start(ctx context.Context, in *LoadConfigReq, opts ...grpc.CallOption) (*ErrorResp, error)
 	Stop(ctx context.Context, in *EmptyReq, opts ...grpc.CallOption) (*ErrorResp, error)
 	Test(ctx context.Context, in *TestReq, opts ...grpc.CallOption) (*TestResp, error)
@@ -63,6 +65,16 @@ func (c *libcoreServiceClient) Update(ctx context.Context, in *UpdateReq, opts .
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(UpdateResp)
 	err := c.cc.Invoke(ctx, LibcoreService_Update_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *libcoreServiceClient) Validate(ctx context.Context, in *LoadConfigReq, opts ...grpc.CallOption) (*ErrorResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ErrorResp)
+	err := c.cc.Invoke(ctx, LibcoreService_Validate_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -125,6 +137,7 @@ func (c *libcoreServiceClient) ListConnections(ctx context.Context, in *EmptyReq
 type LibcoreServiceServer interface {
 	Exit(context.Context, *EmptyReq) (*EmptyResp, error)
 	Update(context.Context, *UpdateReq) (*UpdateResp, error)
+	Validate(context.Context, *LoadConfigReq) (*ErrorResp, error)
 	Start(context.Context, *LoadConfigReq) (*ErrorResp, error)
 	Stop(context.Context, *EmptyReq) (*ErrorResp, error)
 	Test(context.Context, *TestReq) (*TestResp, error)
@@ -145,6 +158,9 @@ func (UnimplementedLibcoreServiceServer) Exit(context.Context, *EmptyReq) (*Empt
 }
 func (UnimplementedLibcoreServiceServer) Update(context.Context, *UpdateReq) (*UpdateResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method Update not implemented")
+}
+func (UnimplementedLibcoreServiceServer) Validate(context.Context, *LoadConfigReq) (*ErrorResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method Validate not implemented")
 }
 func (UnimplementedLibcoreServiceServer) Start(context.Context, *LoadConfigReq) (*ErrorResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method Start not implemented")
@@ -214,6 +230,24 @@ func _LibcoreService_Update_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(LibcoreServiceServer).Update(ctx, req.(*UpdateReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _LibcoreService_Validate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LoadConfigReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LibcoreServiceServer).Validate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LibcoreService_Validate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LibcoreServiceServer).Validate(ctx, req.(*LoadConfigReq))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -322,6 +356,10 @@ var LibcoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Update",
 			Handler:    _LibcoreService_Update_Handler,
+		},
+		{
+			MethodName: "Validate",
+			Handler:    _LibcoreService_Validate_Handler,
 		},
 		{
 			MethodName: "Start",

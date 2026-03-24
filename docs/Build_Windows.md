@@ -2,6 +2,17 @@
 
 This document covers the native Windows GUI build and the companion Go core build used by this repository.
 
+Repository layout note:
+- `src/` holds the Qt/C++ application code.
+- `assets/` holds Qt resources and release-owned assets.
+- `go/` remains the Go workspace root.
+- `3rdparty/` and `libs/` remain the vendored/dependency helper roots.
+- `scripts/` and `cmake/` remain the build-tooling roots.
+- `build/` remains the default native GUI build root.
+- `.tmp/` and `.cache/` are the default package/transient output roots for local work.
+- `deployment/` remains a supported legacy output location.
+- dependency helper scripts remain under `libs/`.
+
 ## Prerequisites
 
 - Visual Studio 2022 with the C++ desktop workload
@@ -57,7 +68,7 @@ Git Bash:
 ./scripts/build_windows.sh
 ```
 
-Both wrappers run the Go tests for `grpc_server` and `proxor_core`, then configure and build the Qt GUI with MSVC + Ninja.
+Both wrappers run the Go tests for `grpc_server` and `proxor_core`, then configure and build the Qt GUI with MSVC + Ninja into `build/` by default. Override it with `-BuildDir` if you want a different build tree.
 
 ## Deploy a Local Windows Package
 
@@ -73,12 +84,14 @@ Git Bash:
 ./scripts/deploy_windows.sh -BuildGo
 ```
 
-This stages `deployment/windows64` with:
+This stages `.tmp/deployment/windows64` with:
 
 - `proxor.exe` from the GUI build output
 - `proxor_core.exe` and `updater.exe` from the Go workspace
 - Qt runtime files via `windeployqt`
-- local `deployment/public_res` contents when present
+- local `.tmp/deployment/public_res` contents when present
+
+The default PowerShell deployment target is now `.tmp/deployment/windows64`, and the shared geodata cache lives under `.tmp/deployment/public_res`. Pass `-OutputDir deployment/windows64` if you explicitly want the old root-level layout.
 
 To do everything in one step:
 
@@ -119,12 +132,12 @@ For details on workspace layout, source forks, and build tags, see [Build_Core.m
 
 ## Final Windows Package
 
-The repository uses `deployment/windows64` as the assembled Windows output directory for local testing.
+The repository uses `.tmp/deployment/windows64` as the default assembled Windows output directory for local testing.
 
 After building:
 
 - `build/proxor.exe` is the GUI artifact
-- `deployment/windows64/proxor_core.exe` is the backend core
-- `deployment/windows64/updater.exe` is the updater
+- `.tmp/deployment/windows64/proxor_core.exe` is the backend core
+- `.tmp/deployment/windows64/updater.exe` is the updater
 
-If you need a full local test package, copy or deploy the GUI into `deployment/windows64` and include the required Qt runtime files and geodata assets.
+If you need a full local test package, copy or deploy the GUI into `.tmp/deployment/windows64` and include the required Qt runtime files and geodata assets.
