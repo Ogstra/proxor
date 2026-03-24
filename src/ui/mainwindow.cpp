@@ -307,6 +307,16 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     connect(ui->proxyListTable->horizontalHeader(), &QHeaderView::sectionResized, this, [=](int logicalIndex, int oldSize, int newSize) {
         auto group = ProxorGui::profileManager->CurrentGroup();
         if (ProxorGui::dataStore->refreshing_group || group == nullptr || !group->manually_column_width) return;
+        // per-column minimum widths: name=-25%, address=-25%, traffic=+20% (baseline 100px)
+        static const int colMinWidths[] = {0, 75, 0, 75, 0, 120};
+        int minW = (logicalIndex < 6) ? colMinWidths[logicalIndex] : 0;
+        if (minW > 0 && newSize < minW) {
+            auto header = ui->proxyListTable->horizontalHeader();
+            header->blockSignals(true);
+            header->resizeSection(logicalIndex, minW);
+            header->blockSignals(false);
+            newSize = minW;
+        }
         // save manually column width
         group->column_width.clear();
         for (int i = 0; i < ui->proxyListTable->horizontalHeader()->count(); i++) {
@@ -635,10 +645,14 @@ void MainWindow::show_group(int gid) {
     if (group->manually_column_width) {
         ui->proxyListTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
         ui->proxyListTable->horizontalHeader()->resizeSection(0, toggleColumnWidth);
+        static const int defaultColWidths[] = {0, 75, 0, 75, 0, 120};
         for (int i = 1; i <= 5; i++) {
             ui->proxyListTable->horizontalHeader()->setSectionResizeMode(i, QHeaderView::Interactive);
             auto size = group->column_width.value(i);
-            if (size <= 0) size = ui->proxyListTable->horizontalHeader()->defaultSectionSize();
+            if (size <= 0) {
+                int defW = (i < 6) ? defaultColWidths[i] : 0;
+                size = (defW > 0) ? defW : ui->proxyListTable->horizontalHeader()->defaultSectionSize();
+            }
             ui->proxyListTable->horizontalHeader()->resizeSection(i, size);
         }
     } else {
