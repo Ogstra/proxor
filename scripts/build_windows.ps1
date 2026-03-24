@@ -2,6 +2,7 @@ param(
     [string]$BuildDir = "build",
     [string]$Configuration = "Release",
     [string]$Generator,
+    [string]$Version,
     [switch]$Clean,
     [switch]$SkipGoTests,
     [switch]$SkipGuiBuild
@@ -169,6 +170,9 @@ if (-not $SkipGuiBuild) {
         "-DCMAKE_BUILD_TYPE=$Configuration",
         "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
     )
+    if ($Version) {
+        $configureArgs += "-DAPP_VERSION_OVERRIDE=$Version"
+    }
 
     & cmake @configureArgs
     if ($LASTEXITCODE -ne 0) {

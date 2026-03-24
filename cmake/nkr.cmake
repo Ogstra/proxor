@@ -1,5 +1,9 @@
 # Release
-file(STRINGS VERSION.txt NKR_VERSION)
+if (DEFINED APP_VERSION_OVERRIDE AND NOT "${APP_VERSION_OVERRIDE}" STREQUAL "")
+    set(NKR_VERSION "${APP_VERSION_OVERRIDE}")
+else()
+    file(STRINGS VERSION.txt NKR_VERSION)
+endif()
 add_compile_definitions(NKR_VERSION=\"${NKR_VERSION}\")
 
 # Debug
