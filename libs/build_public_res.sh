@@ -12,5 +12,3 @@ curl -fLso $DEST/geosite.dat "https://github.com/v2fly/domain-list-community/rel
 curl -fLso $DEST/geoip.db "https://github.com/SagerNet/sing-geoip/releases/latest/download/geoip.db"
 curl -fLso $DEST/geosite.db "https://github.com/SagerNet/sing-geosite/releases/latest/download/geosite.db"
 
-#### copy res/public ####
-cp res/public/* $DEST

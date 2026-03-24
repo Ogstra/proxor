@@ -2,20 +2,9 @@
 
 Qt-based proxy client for managing sing-box profiles, subscriptions, routing, and system proxy integration.
 
-This fork ships the desktop GUI as `proxor` / `proxor.exe` and the backend core as `proxor_core` on top of the current sing-box integration used by this repository.
-
-Current version: `1.0.0`
+Current version: `1.1.0-beta.1`
 
 ![Proxor main window](docs/images/proxor-main-window.png)
-
-## Highlights
-
-- Windows desktop builds
-- Manual Linux build path
-- sing-box based core workflow
-- Profile management, subscriptions, routing, and traffic stats
-- TUN mode and system proxy integration
-- gRPC-based GUI/core communication
 
 ## Supported Proxy Types
 
@@ -39,6 +28,17 @@ Current version: `1.0.0`
 - [Build Core](docs/Build_Core.md)
 - [Linux Runtime Guide](docs/Run_Linux.md)
 - [Run Flags](docs/RunFlags.md)
+
+## Repository Layout
+
+- `src/` contains the Qt/C++ product source tree.
+- `assets/` contains Qt resources and release-owned assets.
+- `go/` remains the dedicated Go core and updater workspace root.
+- `3rdparty/` and `libs/` remain the dedicated vendored-code and dependency helper roots.
+- `scripts/` and `cmake/` remain the dedicated build and tooling roots.
+- `build/` remains the default GUI build root.
+- `.tmp/` and `.cache/` are the default generated-output roots for local deployment bundles and transient artifacts; `qtsdk/` remains the local toolchain root.
+- `deployment/` remains a legacy local output location still accepted when passed explicitly to the scripts.
 
 ## Runtime Notes
 
@@ -64,7 +64,7 @@ Linux remains manual-build only for now. `.deb`, AppImage, and CI-produced Linux
 ### Core and Go Toolchain
 
 - Go `1.26.x`
-- sing-box fork from the local workspace
+- sing-box from the local workspace (`../sing-box`, base `v1.13.3`, local version string `1.13.3-proxor-1`)
 - proxorlib from the local workspace
 - gRPC `v1.79.3`
 - protobuf-go `v1.36.11`
