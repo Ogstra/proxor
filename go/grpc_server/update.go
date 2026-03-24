@@ -132,9 +132,6 @@ func matchingReleaseAsset(releases []githubRelease, currentVersion string, suffi
 				if !strings.HasSuffix(asset.Name, suffix) {
 					continue
 				}
-				if strings.Contains(asset.Name, currentVersion) || release.TagName == currentVersion {
-					return nil, nil, updateSelectionCurrent
-				}
 
 				if !hasCurrentVersion {
 					if bestRelease == nil {
@@ -151,19 +148,23 @@ func matchingReleaseAsset(releases []githubRelease, currentVersion string, suffi
 					continue
 				}
 
-				switch compareReleaseVersions(candidateVersion, currentParsed) {
-				case 0:
-					return nil, nil, updateSelectionCurrent
-				case -1:
+				cmp := compareReleaseVersions(candidateVersion, currentParsed)
+				if cmp < 0 {
 					continue
-				default:
-					if bestRelease == nil || compareReleaseVersions(candidateVersion, bestVersion) > 0 {
-						releaseCopy := release
-						assetCopy := asset
-						bestRelease = &releaseCopy
-						bestAsset = &assetCopy
-						bestVersion = candidateVersion
+				}
+				if cmp == 0 {
+					// found a release matching current version — no older release can be an update
+					if bestRelease == nil {
+						return nil, nil, updateSelectionCurrent
 					}
+					continue
+				}
+				if bestRelease == nil || compareReleaseVersions(candidateVersion, bestVersion) > 0 {
+					releaseCopy := release
+					assetCopy := asset
+					bestRelease = &releaseCopy
+					bestAsset = &assetCopy
+					bestVersion = candidateVersion
 				}
 			}
 		}
