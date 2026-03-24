@@ -110,6 +110,10 @@
                 "action": "reject"
             },
             {
+                "ip_cidr": %TUN_ADDRESSES%,
+                "action": "reject"
+            },
+            {
                 "port": 53,
                 "process_name": [
                     "proxor_core",
