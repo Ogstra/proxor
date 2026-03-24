@@ -1,5 +1,5 @@
 # Release
-file(STRINGS VERSION NKR_VERSION)
+file(STRINGS VERSION.txt NKR_VERSION)
 add_compile_definitions(NKR_VERSION=\"${NKR_VERSION}\")
 
 # Debug

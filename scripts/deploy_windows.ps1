@@ -86,7 +86,7 @@ function Get-MsvcRuntimeDir {
 }
 
 if ($BuildGo) {
-    $versionStandalone = "proxor-" + (Get-Content (Join-Path $repoRoot "VERSION") -TotalCount 1).Trim()
+    $versionStandalone = "proxor-" + (Get-Content (Join-Path $repoRoot "VERSION.txt") -TotalCount 1).Trim()
 
     if (Test-Path $resolvedOutputDir) {
         Remove-Item -Recurse -Force $resolvedOutputDir
