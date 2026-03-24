@@ -2,7 +2,7 @@
 
 Qt-based proxy client for managing sing-box profiles, subscriptions, routing, and system proxy integration.
 
-Current version: `1.1.0-beta.1`
+Current version: `1.0.0`
 
 ![Proxor main window](docs/images/proxor-main-window.png)
 
