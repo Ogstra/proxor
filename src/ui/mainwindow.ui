@@ -382,12 +382,27 @@
                 <string>Outbound</string>
                </property>
               </column>
-              <column>
-               <property name="text">
-                <string>Destination</string>
-               </property>
-              </column>
-             </widget>
+               <column>
+                 <property name="text">
+                  <string>Destination</string>
+                 </property>
+                </column>
+                <column>
+                 <property name="text">
+                  <string>Process</string>
+                 </property>
+                </column>
+                <column>
+                 <property name="text">
+                  <string>Protocol</string>
+                 </property>
+                </column>
+                <column>
+                 <property name="text">
+                  <string>Traffic</string>
+                 </property>
+                </column>
+               </widget>
             </item>
            </layout>
           </widget>

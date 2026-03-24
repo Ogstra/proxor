@@ -2,21 +2,27 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"strings"
 
 	"grpc_server"
 	"grpc_server/gen"
 
 	"github.com/Ogstra/proxorlib/proxor_common"
 	"github.com/Ogstra/proxorlib/speedtest"
+	"github.com/sagernet/sing-box/adapter"
 	box "github.com/sagernet/sing-box"
 	"github.com/sagernet/sing-box/boxapi"
+	"github.com/sagernet/sing-box/experimental/clashapi"
 	boxmain "proxor_core/boxmain"
 
 	"log"
 
 	"github.com/sagernet/sing-box/option"
+	"github.com/sagernet/sing/service"
 )
 
 type server struct {
@@ -165,8 +171,60 @@ func (s *server) QueryStats(ctx context.Context, in *gen.QueryStatsReq) (out *ge
 }
 
 func (s *server) ListConnections(ctx context.Context, in *gen.EmptyReq) (*gen.ListConnectionsResp, error) {
-	out := &gen.ListConnectionsResp{
-		// TODO upstream api
+	out := &gen.ListConnectionsResp{}
+	if instance == nil {
+		return out, nil
 	}
+	clashServer := service.FromContext[adapter.ClashServer](boxmain.CurrentInstanceContext())
+	if clashServer == nil {
+		return out, nil
+	}
+	clash, ok := clashServer.(*clashapi.Server)
+	if !ok {
+		return out, nil
+	}
+
+	connections := clash.TrafficManager().Connections()
+	items := make([]map[string]any, 0, len(connections))
+	for index, c := range connections {
+		dest := c.Metadata.Destination.String()
+		resolvedDest := c.Metadata.Domain
+		if resolvedDest == "" || resolvedDest == c.Metadata.Destination.Fqdn {
+			resolvedDest = ""
+		}
+		process := ""
+		if c.Metadata.ProcessInfo != nil {
+			if c.Metadata.ProcessInfo.ProcessPath != "" {
+				parts := strings.Split(c.Metadata.ProcessInfo.ProcessPath, string(os.PathSeparator))
+				process = parts[len(parts)-1]
+			} else if c.Metadata.ProcessInfo.AndroidPackageName != "" {
+				process = c.Metadata.ProcessInfo.AndroidPackageName
+			} else if c.Metadata.ProcessInfo.UserName != "" {
+				process = c.Metadata.ProcessInfo.UserName
+			} else if c.Metadata.ProcessInfo.UserId >= 0 {
+				process = fmt.Sprintf("uid:%d", c.Metadata.ProcessInfo.UserId)
+			} else if c.Metadata.ProcessInfo.ProcessID > 0 {
+				process = fmt.Sprintf("pid:%d", c.Metadata.ProcessInfo.ProcessID)
+			}
+		}
+		items = append(items, map[string]any{
+			"ID":      index + 1,
+			"Tag":     c.Outbound,
+			"Start":   c.CreatedAt.Unix(),
+			"End":     0,
+			"Dest":    dest,
+			"RDest":   resolvedDest,
+			"Process": process,
+			"Upload":  c.Upload.Load(),
+			"Download": c.Download.Load(),
+			"Network": c.Metadata.Network,
+			"Protocol": c.Metadata.Protocol,
+		})
+	}
+	data, err := json.Marshal(items)
+	if err != nil {
+		return nil, err
+	}
+	out.ConnectionStatisticsJson = string(data)
 	return out, nil
 }

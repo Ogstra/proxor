@@ -24,6 +24,7 @@ import (
 var disableColor bool
 var platformWriter boxlog.PlatformWriter
 var logMinLevel = boxlog.LevelInfo
+var currentInstanceContext context.Context
 
 func SetDisableColor(value bool) {
 	disableColor = value
@@ -35,6 +36,10 @@ func SetLogWriter(writer io.Writer) {
 		return
 	}
 	platformWriter = stdPlatformWriter{writer: writer}
+}
+
+func CurrentInstanceContext() context.Context {
+	return currentInstanceContext
 }
 
 func Create(configContent []byte) (*box.Box, context.CancelFunc, error) {
@@ -204,6 +209,7 @@ func createWithOptions(ctx context.Context, options option.Options) (*box.Box, c
 		}
 	}
 	runCtx, cancel := context.WithCancel(ctx)
+	currentInstanceContext = runCtx
 	instance, err := box.New(box.Options{
 		Context:           runCtx,
 		Options:           options,
@@ -211,10 +217,12 @@ func createWithOptions(ctx context.Context, options option.Options) (*box.Box, c
 	})
 	if err != nil {
 		cancel()
+		currentInstanceContext = nil
 		return nil, nil, E.Cause(err, "create service")
 	}
 	if err := instance.Start(); err != nil {
 		cancel()
+		currentInstanceContext = nil
 		instance.Close()
 		return nil, nil, E.Cause(err, "start service")
 	}

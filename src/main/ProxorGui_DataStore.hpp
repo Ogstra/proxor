@@ -165,6 +165,7 @@ namespace ProxorGui {
         int core_box_clash_api = -9090;
         QString core_box_clash_api_secret = "";
         QString core_box_underlying_dns = "";
+        bool core_enable_color = true;
 
         // Other Core
         ExtraCore *extraCore = new ExtraCore;

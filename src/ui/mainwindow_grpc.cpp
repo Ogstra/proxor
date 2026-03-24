@@ -301,6 +301,8 @@ void MainWindow::proxor_start(int _id) {
 
     auto result = BuildConfig(ent, false, false);
     if (!result->error.isEmpty()) {
+        start_pending = false;
+        refresh_status();
         MessageBoxWarning("BuildConfig return error", result->error);
         return;
     }
@@ -319,9 +321,15 @@ void MainWindow::proxor_start(int _id) {
         bool rpcOK;
         QString error = defaultClient->Start(&rpcOK, req);
         if (rpcOK && !error.isEmpty()) {
-            runOnUiThread([=] { MessageBoxWarning("LoadConfig return error", error); });
+            start_pending = false;
+            runOnUiThread([=] {
+                refresh_status();
+                MessageBoxWarning("LoadConfig return error", error);
+            });
             return false;
         } else if (!rpcOK) {
+            start_pending = false;
+            runOnUiThread([=] { refresh_status(); });
             return false;
         }
         //
@@ -342,6 +350,7 @@ void MainWindow::proxor_start(int _id) {
         running = ent;
 
         runOnUiThread([=] {
+            start_pending = false;
             refresh_status();
             refresh_proxy_list(ent->id);
         });
@@ -350,15 +359,18 @@ void MainWindow::proxor_start(int _id) {
     };
 
     if (!mu_starting.tryLock()) {
-        MessageBoxWarning(software_name, "Another profile is starting...");
         return;
     }
     if (!mu_stopping.tryLock()) {
+        start_pending = false;
+        refresh_status();
         MessageBoxWarning(software_name, "Another profile is stopping...");
         mu_starting.unlock();
         return;
     }
     mu_stopping.unlock();
+    start_pending = true;
+    refresh_status();
 
     // check core state
     if (!ProxorGui::dataStore->core_running) {
@@ -389,8 +401,10 @@ void MainWindow::proxor_start(int _id) {
         if (validateRpcOK && !validateError.isEmpty()) {
             MW_show_log("<<<<<<<< " + tr("Config validation failed for %1: %2").arg(ent->bean->DisplayTypeAndName(), validateError));
             runOnUiThread([=] { MessageBoxWarning("Validate return error", validateError); });
+            start_pending = false;
             mu_starting.unlock();
             runOnUiThread([=] {
+                refresh_status();
                 restartMsgboxTimer->cancel();
                 restartMsgboxTimer->deleteLater();
                 restartMsgbox->deleteLater();
@@ -398,8 +412,10 @@ void MainWindow::proxor_start(int _id) {
             return;
         } else if (!validateRpcOK) {
             MW_show_log("<<<<<<<< " + tr("Config validation RPC failed for %1").arg(ent->bean->DisplayTypeAndName()));
+            start_pending = false;
             mu_starting.unlock();
             runOnUiThread([=] {
+                refresh_status();
                 restartMsgboxTimer->cancel();
                 restartMsgboxTimer->deleteLater();
                 restartMsgbox->deleteLater();
@@ -416,11 +432,13 @@ void MainWindow::proxor_start(int _id) {
         // do start
         MW_show_log(">>>>>>>> " + tr("Starting profile %1").arg(ent->bean->DisplayTypeAndName()));
         if (!proxor_start_stage2()) {
+            start_pending = false;
             MW_show_log("<<<<<<<< " + tr("Failed to start profile %1").arg(ent->bean->DisplayTypeAndName()));
         }
         mu_starting.unlock();
         // cancel timeout
         runOnUiThread([=] {
+            refresh_status();
             restartMsgboxTimer->cancel();
             restartMsgboxTimer->deleteLater();
             restartMsgbox->deleteLater();
