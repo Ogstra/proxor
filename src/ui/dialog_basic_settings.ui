@@ -620,6 +620,13 @@
                </item>
               </layout>
              </item>
+             <item row="2" column="0" colspan="2">
+              <widget class="QCheckBox" name="core_enable_color">
+               <property name="text">
+                <string>Enable colored logs</string>
+               </property>
+              </widget>
+             </item>
             </layout>
            </widget>
           </item>

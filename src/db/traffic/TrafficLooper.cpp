@@ -82,7 +82,6 @@ namespace ProxorGui_traffic {
             auto sleep_ms = ProxorGui::dataStore->traffic_loop_interval;
             if (sleep_ms < 500 || sleep_ms > 5000) sleep_ms = 1000;
             QThread::msleep(sleep_ms);
-            if (ProxorGui::dataStore->traffic_loop_interval == 0) continue; // user disabled
 
             // profile start and stop
             if (!loop_enabled) {
@@ -105,29 +104,28 @@ namespace ProxorGui_traffic {
             // do update
             loop_mutex.lock();
 
-            UpdateAll();
-
-            // do conn list update
-            QJsonArray conn_list;
-            if (ProxorGui::dataStore->connection_statistics) {
-                conn_list = get_connection_list();
+            if (ProxorGui::dataStore->traffic_loop_interval != 0) {
+                UpdateAll();
             }
+
+            // Keep connection updates independent from traffic refresh settings.
+            QJsonArray conn_list = get_connection_list();
 
             loop_mutex.unlock();
 
             // post to UI
             runOnUiThread([=] {
                 auto m = GetMainWindow();
-                if (proxy != nullptr) {
+                if (proxy != nullptr && ProxorGui::dataStore->traffic_loop_interval != 0) {
                     m->refresh_status(QObject::tr("Proxy: %1\nDirect: %2").arg(proxy->DisplaySpeed(), bypass->DisplaySpeed()));
                 }
-                for (const auto &item: items) {
-                    if (item->id < 0) continue;
-                    m->refresh_proxy_list(item->id);
+                if (ProxorGui::dataStore->traffic_loop_interval != 0) {
+                    for (const auto &item: items) {
+                        if (item->id < 0) continue;
+                        m->refresh_proxy_list(item->id);
+                    }
                 }
-                if (ProxorGui::dataStore->connection_statistics) {
-                    m->refresh_connection_list(conn_list);
-                }
+                m->refresh_connection_list(conn_list);
             });
         }
     }

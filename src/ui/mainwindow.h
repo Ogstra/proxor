@@ -155,6 +155,7 @@ private:
     QString title_error;
     int icon_status = -1;
     std::shared_ptr<ProxorGui::ProxyEntity> running;
+    bool start_pending = false;
     QString traffic_update_cache;
     QTime last_test_time;
     //

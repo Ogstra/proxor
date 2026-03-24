@@ -34,10 +34,11 @@ func (s *BaseServer) Exit(ctx context.Context, in *gen.EmptyReq) (out *gen.Empty
 	return
 }
 
-func RunCore(setupCore func(), server gen.LibcoreServiceServer) {
+func RunCore(setupCore func(disableColor bool), server gen.LibcoreServiceServer) {
 	_token := flag.String("token", "", "")
 	_port := flag.Int("port", 19810, "")
 	_debug := flag.Bool("debug", false, "")
+	_disableColor := flag.Bool("disable-color", false, "")
 	flag.CommandLine.Parse(os.Args[2:])
 
 	proxor_common.Debug = *_debug
@@ -62,7 +63,7 @@ func RunCore(setupCore func(), server gen.LibcoreServiceServer) {
 	}()
 
 	// Libcore
-	setupCore()
+	setupCore(*_disableColor)
 
 	// GRPC
 	lis, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(*_port))

@@ -93,8 +93,6 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
 #endif
 
     // Style
-    ui->connection_statistics_box->setDisabled(true);
-    //
     D_LOAD_BOOL(check_update_on_start)
     D_LOAD_BOOL(check_include_pre)
     D_LOAD_BOOL(connection_statistics)
@@ -151,6 +149,7 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     // Core
 
     ui->groupBox_core->setTitle(software_core_name);
+    D_LOAD_BOOL(core_enable_color)
     //
     CACHE.extraCore = QString2QJsonObject(ProxorGui::dataStore->extraCore->core_map);
     if (!CACHE.extraCore.contains("naive")) CACHE.extraCore.insert("naive", "");
@@ -263,7 +262,7 @@ void DialogBasicSettings::accept() {
     D_SAVE_INT_ENABLE(sub_auto_update, sub_auto_update_enable)
 
     // Core
-
+    D_SAVE_BOOL(core_enable_color)
     ProxorGui::dataStore->extraCore->core_map = QJsonObject2QString(CACHE.extraCore, true);
 
     // Mux
