@@ -638,7 +638,7 @@ namespace ProxorGui {
         const auto directDnsAddress = dataStore->vpn_internal_tun && dataStore->spmode_vpn && !status->forTest
                                           ? QStringLiteral("local")
                                           : dataStore->routing->direct_dns;
-        QJsonObject directObj = BuildTypedDnsServer("dns-direct", directDnsAddress, "direct", dataStore->routing->direct_dns_strategy);
+        QJsonObject directObj = BuildTypedDnsServer("dns-direct", directDnsAddress, status->forTest ? QString{} : QStringLiteral("direct"), dataStore->routing->direct_dns_strategy);
         if (dataStore->routing->dns_final_out == "bypass") {
             dnsServers.prepend(directObj);
         } else {
@@ -667,7 +667,7 @@ namespace ProxorGui {
         }
 
         // Underlying 100% Working DNS ?
-        dnsServers += BuildTypedDnsServer("dns-local", BOX_UNDERLYING_DNS, "direct");
+        dnsServers += BuildTypedDnsServer("dns-local", BOX_UNDERLYING_DNS, status->forTest ? QString{} : QStringLiteral("direct"));
 
         // sing-box dns rule object
         auto add_rule_dns = [&](const QStringList &list, const QString &server) {
@@ -709,6 +709,25 @@ namespace ProxorGui {
         status->result->coreConfig.insert("dns", dns);
 
         // Routing
+
+        // Reject QUIC (UDP 443) BEFORE sniff: port-based rules need no protocol identification.
+        // Placing this first avoids the 300ms sniff timeout on fragmented QUIC client hellos.
+        // VLESS+Reality+Vision only supports TCP; UDP through VLESS causes "flow mismatch" on server.
+        if (!status->forTest) {
+            status->routingRules += QJsonObject{
+                {"network", "udp"},
+                {"port", 443},
+                {"action", "reject"},
+            };
+        }
+
+        // sniff (sing-box 1.13+: sniffing is no longer automatic from inbound options,
+        // requires explicit sniff action in routing rules before protocol-based rules)
+        if (!status->forTest) {
+            status->routingRules += QJsonObject{
+                {"action", "sniff"},
+            };
+        }
 
         // dns hijack
         if (!status->forTest) {
