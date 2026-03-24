@@ -1720,12 +1720,72 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
 
 // Log
 
-inline void FastAppendTextDocument(const QString &message, QTextDocument *doc) {
+// Map an ANSI SGR parameter string to a QColor.
+// Handles standard colors (30-37, 90-97) and 256-color "38;5;N".
+static QColor ansiParamToColor(const QString &param) {
+    static const QColor std16[] = {
+        {85,85,85},{204,0,0},{0,204,0},{204,204,0},{0,0,204},{204,0,204},{0,204,204},{204,204,204},
+        {136,136,136},{255,68,68},{68,255,68},{255,255,68},{68,68,255},{255,68,255},{68,255,255},{255,255,255},
+    };
+    if (param.startsWith(QStringLiteral("38;5;"))) {
+        bool ok = false;
+        int n = param.mid(5).toInt(&ok);
+        if (!ok || n < 0 || n > 255) return {};
+        if (n < 16) return std16[n];
+        if (n < 232) {
+            n -= 16;
+            int b = n % 6; n /= 6;
+            int g = n % 6; n /= 6;
+            int r = n;
+            auto c = [](int v) { return v == 0 ? 0 : 55 + v * 40; };
+            return {c(r), c(g), c(b)};
+        }
+        int v = 8 + (n - 232) * 10;
+        return {v, v, v};
+    }
+    bool ok = false;
+    int code = param.toInt(&ok);
+    if (!ok) return {};
+    if (code >= 30 && code <= 37) return std16[code - 30];
+    if (code >= 90 && code <= 97) return std16[code - 90 + 8];
+    return {};
+}
+
+// Append one log line (may contain ANSI escape codes) to the document with color.
+static void appendAnsiLine(const QString &line, QTextDocument *doc) {
     QTextCursor cursor(doc);
     cursor.movePosition(QTextCursor::End);
     cursor.beginEditBlock();
     cursor.insertBlock();
-    cursor.insertText(message);
+
+    QTextCharFormat fmt;
+    int i = 0;
+    QString seg;
+
+    auto flush = [&]() {
+        if (!seg.isEmpty()) { cursor.insertText(seg, fmt); seg.clear(); }
+    };
+
+    while (i < line.size()) {
+        if (line[i] == u'\x1b' && i + 1 < line.size() && line[i + 1] == u'[') {
+            int j = i + 2;
+            while (j < line.size() && line[j] != u'm') ++j;
+            if (j < line.size()) {
+                flush();
+                QString param = line.mid(i + 2, j - i - 2);
+                if (param == u"0" || param.isEmpty()) {
+                    fmt = QTextCharFormat();
+                } else {
+                    QColor col = ansiParamToColor(param);
+                    if (col.isValid()) fmt.setForeground(col);
+                }
+                i = j + 1;
+                continue;
+            }
+        }
+        seg += line[i++];
+    }
+    flush();
     cursor.endEditBlock();
 }
 
@@ -1747,7 +1807,9 @@ void MainWindow::show_log_impl(const QString &log) {
     }
     if (newLines.isEmpty()) return;
 
-    FastAppendTextDocument(newLines.join("\n"), qvLogDocument);
+    for (const auto &line: newLines) {
+        appendAnsiLine(line, qvLogDocument);
+    }
     // qvLogDocument->setPlainText(qvLogDocument->toPlainText() + log);
     // From https://gist.github.com/jemyzhang/7130092
     auto block = qvLogDocument->begin();
