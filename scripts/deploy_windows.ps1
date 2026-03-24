@@ -2,7 +2,7 @@ param(
     [string]$BuildDir = "build",
     [string]$LauncherExePath,
     [string]$GuiExePath,
-    [string]$OutputDir = ".tmp/deployment/windows64",
+    [string]$OutputDir = "deployment/windows64",
     [string]$Version,
     [switch]$BuildGo,
     [switch]$SkipQtDeploy,
