@@ -2,7 +2,11 @@ set(PLATFORM_SOURCES 3rdparty/WinCommander.cpp src/sys/windows/guihelper.cpp src
 set(PLATFORM_LIBRARIES wininet wsock32 ws2_32 user32 rasapi32 iphlpapi)
 
 include(cmake/windows/generate_product_version.cmake)
-file(STRINGS "${CMAKE_SOURCE_DIR}/VERSION.txt" NKR_WINDOWS_VERSION LIMIT_COUNT 1)
+if (DEFINED APP_VERSION_OVERRIDE AND NOT "${APP_VERSION_OVERRIDE}" STREQUAL "")
+    set(NKR_WINDOWS_VERSION "${APP_VERSION_OVERRIDE}")
+else()
+    file(STRINGS "${CMAKE_SOURCE_DIR}/VERSION.txt" NKR_WINDOWS_VERSION LIMIT_COUNT 1)
+endif()
 string(REGEX MATCH "^([0-9]+)\\.([0-9]+)\\.([0-9]+)" NKR_WINDOWS_VERSION_MATCH "${NKR_WINDOWS_VERSION}")
 set(NKR_VERSION_MAJOR "${CMAKE_MATCH_1}")
 set(NKR_VERSION_MINOR "${CMAKE_MATCH_2}")
