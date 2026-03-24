@@ -67,10 +67,14 @@ func (s *server) Start(ctx context.Context, in *gen.LoadConfigReq) (out *gen.Err
 	if instance != nil {
 		// V2ray Service
 		if in.StatsOutbounds != nil {
-			instance.Router().SetV2RayServer(boxapi.NewSbV2rayServer(option.V2RayStatsServiceOptions{
+			v2rayServer := boxapi.NewSbV2rayServer(option.V2RayStatsServiceOptions{
 				Enabled:   true,
 				Outbounds: in.StatsOutbounds,
-			}))
+			})
+			instance.Router().SetV2RayServer(v2rayServer)
+			if v2rayServer.StatsService() != nil {
+				instance.Router().AppendTracker(v2rayServer.StatsService())
+			}
 		}
 	}
 
