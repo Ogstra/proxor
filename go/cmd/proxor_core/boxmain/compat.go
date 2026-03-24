@@ -23,6 +23,7 @@ import (
 
 var disableColor bool
 var platformWriter boxlog.PlatformWriter
+var logMinLevel = boxlog.LevelInfo
 
 func SetDisableColor(value bool) {
 	disableColor = value
@@ -197,6 +198,11 @@ func createWithOptions(ctx context.Context, options option.Options) (*box.Box, c
 		}
 		options.Log.DisableColor = true
 	}
+	if options.Log != nil && options.Log.Level != "" {
+		if parsed, err := boxlog.ParseLevel(options.Log.Level); err == nil {
+			logMinLevel = parsed
+		}
+	}
 	runCtx, cancel := context.WithCancel(ctx)
 	instance, err := box.New(box.Options{
 		Context:           runCtx,
@@ -242,6 +248,9 @@ func (w stdPlatformWriter) DisableColors() bool {
 }
 
 func (w stdPlatformWriter) WriteMessage(level boxlog.Level, message string) {
+	if level > logMinLevel {
+		return
+	}
 	if isNilWriter(w.writer) {
 		return
 	}
