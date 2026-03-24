@@ -3,6 +3,7 @@ param(
     [string]$LauncherExePath,
     [string]$GuiExePath,
     [string]$OutputDir = ".tmp/deployment/windows64",
+    [string]$Version,
     [switch]$BuildGo,
     [switch]$SkipQtDeploy,
     [switch]$SkipPublicRes
@@ -86,7 +87,7 @@ function Get-MsvcRuntimeDir {
 }
 
 if ($BuildGo) {
-    $versionStandalone = "proxor-" + (Get-Content (Join-Path $repoRoot "VERSION.txt") -TotalCount 1).Trim()
+    $versionStandalone = "proxor-" + $(if ($Version) { $Version } else { (Get-Content (Join-Path $repoRoot "VERSION.txt") -TotalCount 1).Trim() })
 
     if (Test-Path $resolvedOutputDir) {
         Remove-Item -Recurse -Force $resolvedOutputDir
