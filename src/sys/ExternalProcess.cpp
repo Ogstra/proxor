@@ -85,22 +85,31 @@ namespace ProxorGui_sys {
         ExternalProcess::arguments = args;
 
         connect(this, &QProcess::readyReadStandardOutput, this, [&]() {
-            auto log = readAllStandardOutput();
+            auto raw = readAllStandardOutput();
             if (!ProxorGui::dataStore->core_running) {
-                if (log.contains("grpc server listening")) {
+                if (raw.contains("grpc server listening")) {
                     // The core really started
                     ProxorGui::dataStore->core_running = true;
                     if (start_profile_when_core_is_up >= 0) {
                         MW_dialog_message("ExternalProcess", "CoreStarted," + Int2String(start_profile_when_core_is_up));
                         start_profile_when_core_is_up = -1;
                     }
-                } else if (log.contains("failed to serve")) {
+                } else if (raw.contains("failed to serve")) {
                     // The core failed to start
                     QProcess::kill();
                 }
             }
-            if (logCounter.fetchAndAddRelaxed(log.count("\n")) > ProxorGui::dataStore->max_log_line) return;
-            MW_show_log(log);
+            if (logCounter.fetchAndAddRelaxed(raw.count("\n")) > ProxorGui::dataStore->max_log_line) return;
+            // Filter router process-lookup lines — redundant with the Connection tab
+            auto lines = QString::fromUtf8(raw).split('\n');
+            QStringList kept;
+            for (const auto &line : lines) {
+                if (!line.contains("router: found process path") &&
+                    !line.contains("router: failed to search process"))
+                    kept << line;
+            }
+            auto log = kept.join('\n').toUtf8();
+            if (!log.isEmpty()) MW_show_log(log);
         });
         connect(this, &QProcess::readyReadStandardError, this, [&]() {
             auto log = readAllStandardError().trimmed();

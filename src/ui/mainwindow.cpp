@@ -1228,17 +1228,30 @@ void MainWindow::refresh_proxy_list_impl_refresh_data(const int &id) {
         ui->proxyListTable->setCellWidget(row, 0, makeCenteredCheckboxCell(
             ui->proxyListTable,
             toggleProxyIds.contains(profileId),
-            [profileId](bool enabled) {
+            [profileId, table = ui->proxyListTable](bool enabled) {
                 auto group = ProxorGui::profileManager->CurrentGroup();
                 if (group == nullptr) return;
 
-                auto toggleProxyIds = group->toggle_proxy_ids;
-                toggleProxyIds.removeAll(profileId);
-                if (enabled) toggleProxyIds << profileId;
-                if (toggleProxyIds != group->toggle_proxy_ids) {
-                    group->toggle_proxy_ids = toggleProxyIds;
-                    ProxorGui::profileManager->SaveGroup(group);
+                if (enabled) {
+                    // Single-select: uncheck every other row visually
+                    for (int i = 0; i < table->rowCount(); i++) {
+                        auto *w = table->cellWidget(i, 0);
+                        if (!w) continue;
+                        auto *cb = w->findChild<QCheckBox *>();
+                        if (cb && cb->isChecked()) {
+                            auto *item = table->item(i, 0);
+                            if (item && item->data(114514).toInt() != profileId) {
+                                cb->blockSignals(true);
+                                cb->setChecked(false);
+                                cb->blockSignals(false);
+                            }
+                        }
+                    }
+                    group->toggle_proxy_ids = {profileId};
+                } else {
+                    group->toggle_proxy_ids.removeAll(profileId);
                 }
+                ProxorGui::profileManager->SaveGroup(group);
             }
         ));
 
