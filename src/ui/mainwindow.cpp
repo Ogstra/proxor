@@ -1309,15 +1309,23 @@ void MainWindow::on_proxyListTable_itemChanged(QTableWidgetItem *item) {
     if (group == nullptr) return;
 
     auto profileId = item->data(114514).toInt();
-    auto toggleProxyIds = group->toggle_proxy_ids;
-    toggleProxyIds.removeAll(profileId);
+
     if (item->checkState() == Qt::Checked) {
-        toggleProxyIds << profileId;
+        // Single-select: uncheck every other row before updating the model
+        ui->proxyListTable->blockSignals(true);
+        for (int i = 0; i < ui->proxyListTable->rowCount(); i++) {
+            auto *other = ui->proxyListTable->item(i, 0);
+            if (other && other != item && other->checkState() == Qt::Checked)
+                other->setCheckState(Qt::Unchecked);
+        }
+        ui->proxyListTable->blockSignals(false);
+
+        group->toggle_proxy_ids = {profileId};
+    } else {
+        group->toggle_proxy_ids.removeAll(profileId);
     }
-    if (toggleProxyIds != group->toggle_proxy_ids) {
-        group->toggle_proxy_ids = toggleProxyIds;
-        ProxorGui::profileManager->SaveGroup(group);
-    }
+
+    ProxorGui::profileManager->SaveGroup(group);
 }
 
 void MainWindow::on_menu_add_from_input_triggered() {
