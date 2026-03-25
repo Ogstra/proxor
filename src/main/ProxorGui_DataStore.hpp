@@ -144,7 +144,7 @@ namespace ProxorGui {
         QString active_routing = "Default";
 
         // VPN
-        bool fake_dns = false;
+        bool fake_dns = true;
         bool vpn_internal_tun = true;
         int vpn_implementation = 0;
         int vpn_mtu = 9000;
