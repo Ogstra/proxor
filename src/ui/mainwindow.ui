@@ -559,9 +559,6 @@
     <addaction name="menu_add_from_input"/>
     <addaction name="menu_add_from_clipboard"/>
     <addaction name="separator"/>
-    <addaction name="menu_start"/>
-    <addaction name="menu_stop"/>
-    <addaction name="separator"/>
     <addaction name="menu_select_all"/>
     <addaction name="menu_move"/>
     <addaction name="menu_clone"/>
