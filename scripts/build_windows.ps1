@@ -172,6 +172,8 @@ if (-not $SkipGuiBuild) {
     )
     if ($Version) {
         $configureArgs += "-DAPP_VERSION_OVERRIDE=$Version"
+    } else {
+        $configureArgs += "-UAPP_VERSION_OVERRIDE"
     }
 
     & cmake @configureArgs
