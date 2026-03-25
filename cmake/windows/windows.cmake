@@ -24,7 +24,7 @@ generate_product_version(
         QV2RAY_RC
         ICON "${CMAKE_SOURCE_DIR}/assets/res/proxor.ico"
         NAME "Proxor"
-        BUNDLE "proxor"
+        BUNDLE "Proxor"
         VERSION_MAJOR "${NKR_VERSION_MAJOR}"
         VERSION_MINOR "${NKR_VERSION_MINOR}"
         VERSION_PATCH "${NKR_VERSION_PATCH}"
