@@ -319,7 +319,15 @@ void MainWindow::proxor_start(int _id) {
         }
         //
         bool rpcOK;
-        QString error = defaultClient->Start(&rpcOK, req);
+        QString error;
+        // Retry on port-bind errors: Windows releases sockets with a brief delay after Stop(),
+        // so a fast restart can see "address already in use" on the first attempt.
+        for (int attempt = 0; attempt <= 3; attempt++) {
+            if (attempt > 0) QThread::msleep(200);
+            error = defaultClient->Start(&rpcOK, req);
+            if (!rpcOK || error.isEmpty()) break;       // RPC failure or success — don't retry
+            if (!error.contains("bind:")) break;        // unrelated error — don't retry
+        }
         if (rpcOK && !error.isEmpty()) {
             start_pending = false;
             runOnUiThread([=] {
