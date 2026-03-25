@@ -165,6 +165,12 @@ int main(int argc, char* argv[]) {
     auto isLoaded = ProxorGui::dataStore->Load();
     if (!isLoaded) {
         ProxorGui::dataStore->Save();
+    } else if (!ProxorGui::dataStore->fake_dns_migrated) {
+        // One-time migration: enable fake-dns for existing installs upgrading from pre-1.2.3.
+        // Without fake-dns, every new connection incurs a 400ms-1.3s DNS round-trip through the proxy.
+        ProxorGui::dataStore->fake_dns = true;
+        ProxorGui::dataStore->fake_dns_migrated = true;
+        ProxorGui::dataStore->Save();
     }
 
     // Datastore & Flags
