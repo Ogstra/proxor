@@ -162,7 +162,7 @@ replace grpc_server => ../../grpc_server
 
 replace github.com/Ogstra/proxorlib => ../../proxorlib
 
-replace github.com/sagernet/sing-box => ../../../../sing-box
+replace github.com/sagernet/sing-box => ../../../3rdparty/sing-box
 
 // replace github.com/sagernet/sing => ../../../../sing
 
