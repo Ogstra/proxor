@@ -509,6 +509,7 @@ void MainWindow::proxor_stop(bool crash, bool sem) {
         runOnUiThread([=] {
             refresh_status();
             refresh_proxy_list(id);
+            refresh_connection_list({});
         });
 
         return true;
