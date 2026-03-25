@@ -37,7 +37,15 @@ namespace ProxorGui_sys {
                 if (!log.isEmpty()) MW_show_log_ext_vt100(log);
             });
             connect(this, &QProcess::readyReadStandardError, this, [&]() {
-                MW_show_log_ext_vt100(readAllStandardError().trimmed());
+                auto lines = QString::fromUtf8(readAllStandardError()).split('\n');
+                QStringList kept;
+                for (const auto &line : lines) {
+                    if (!line.contains("router: found process path") &&
+                        !line.contains("router: failed to search process"))
+                        kept << line;
+                }
+                auto log = kept.join('\n').trimmed();
+                if (!log.isEmpty()) MW_show_log_ext_vt100(log);
             });
             connect(this, &QProcess::errorOccurred, this, [&](QProcess::ProcessError error) {
                 if (!killed) {
@@ -112,11 +120,20 @@ namespace ProxorGui_sys {
             if (!log.isEmpty()) MW_show_log(log);
         });
         connect(this, &QProcess::readyReadStandardError, this, [&]() {
-            auto log = readAllStandardError().trimmed();
+            auto raw = readAllStandardError();
             if (show_stderr) {
-                MW_show_log(log);
+                auto lines = QString::fromUtf8(raw).split('\n');
+                QStringList kept;
+                for (const auto &line : lines) {
+                    if (!line.contains("router: found process path") &&
+                        !line.contains("router: failed to search process"))
+                        kept << line;
+                }
+                auto log = kept.join('\n').toUtf8().trimmed();
+                if (!log.isEmpty()) MW_show_log(log);
                 return;
             }
+            auto log = raw.trimmed();
             if (log.contains("token is set")) {
                 show_stderr = true;
             }
