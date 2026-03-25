@@ -135,6 +135,8 @@ namespace ProxorGui {
 
         if (address.compare("fakeip", Qt::CaseInsensitive) == 0) {
             dnsServer["type"] = "fakeip";
+            dnsServer["inet4_range"] = "198.18.0.0/15";
+            dnsServer["inet6_range"] = "fc00::/18";
             return dnsServer;
         }
 
@@ -661,11 +663,6 @@ namespace ProxorGui {
         // Fakedns
         if (dataStore->fake_dns && dataStore->vpn_internal_tun && dataStore->spmode_vpn && !status->forTest) {
             dnsServers += BuildTypedDnsServer("dns-fake", "fakeip");
-            dns["fakeip"] = QJsonObject{
-                {"enabled", true},
-                {"inet4_range", "198.18.0.0/15"},
-                {"inet6_range", "fc00::/18"},
-            };
         }
 
         // Underlying 100% Working DNS ?
