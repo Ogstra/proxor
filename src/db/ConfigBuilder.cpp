@@ -21,6 +21,8 @@ namespace ProxorGui {
             if (path.trimmed().isEmpty()) continue;
             paths << path.replace("\\", "/");
         }
+        // Auto-bypass known VPN clients to prevent VPN-over-VPN routing
+        paths << "wireguard.exe" << "openvpn.exe" << "tailscaled.exe";
         return paths;
     }
 
