@@ -23,9 +23,18 @@ namespace ProxorGui_sys {
 
         if (managed) {
             connect(this, &QProcess::readyReadStandardOutput, this, [&]() {
-                auto log = readAllStandardOutput();
-                if (logCounter.fetchAndAddRelaxed(log.count("\n")) > ProxorGui::dataStore->max_log_line) return;
-                MW_show_log_ext_vt100(log);
+                auto raw = readAllStandardOutput();
+                if (logCounter.fetchAndAddRelaxed(raw.count("\n")) > ProxorGui::dataStore->max_log_line) return;
+                // Filter router process-lookup lines — redundant with the Connection tab
+                auto lines = QString::fromUtf8(raw).split('\n');
+                QStringList kept;
+                for (const auto &line : lines) {
+                    if (!line.contains("router: found process path") &&
+                        !line.contains("router: failed to search process"))
+                        kept << line;
+                }
+                auto log = kept.join('\n');
+                if (!log.isEmpty()) MW_show_log_ext_vt100(log);
             });
             connect(this, &QProcess::readyReadStandardError, this, [&]() {
                 MW_show_log_ext_vt100(readAllStandardError().trimmed());

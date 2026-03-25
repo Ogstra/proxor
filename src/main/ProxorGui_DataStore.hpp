@@ -145,6 +145,7 @@ namespace ProxorGui {
 
         // VPN
         bool fake_dns = true;
+        bool fake_dns_migrated = false; // one-time migration: forces fake_dns=true for pre-1.2.3 installs
         bool vpn_internal_tun = true;
         int vpn_implementation = 0;
         int vpn_mtu = 9000;
