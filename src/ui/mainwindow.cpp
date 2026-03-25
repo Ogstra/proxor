@@ -1417,9 +1417,8 @@ void MainWindow::on_menu_profile_debug_info_triggered() {
     if (ents.count() != 1) return;
     auto btn = QMessageBox::information(this, software_name, ents.first()->ToJsonBytes(), "OK", "Edit", "Reload", 0, 0);
     if (btn == 1) {
-        const auto legacyPath = QFileInfo(QStringLiteral("profiles/%1.json").arg(ents.first()->id)).absoluteFilePath();
-        const auto debugPath = QFile::exists(legacyPath) ? legacyPath : QFileInfo(QStringLiteral("proxor.db")).absoluteFilePath();
-        QDesktopServices::openUrl(QUrl::fromLocalFile(debugPath));
+        auto dialog = new DialogEditProfile("", ents.first()->id, this);
+        connect(dialog, &QDialog::finished, dialog, &QDialog::deleteLater);
     } else if (btn == 2) {
         ProxorGui::dataStore->Load();
         ProxorGui::profileManager->LoadManager();
