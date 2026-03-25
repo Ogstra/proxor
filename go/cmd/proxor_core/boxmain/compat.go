@@ -51,6 +51,27 @@ func Create(configContent []byte) (*box.Box, context.CancelFunc, error) {
 	return createWithOptions(ctx, options)
 }
 
+// Check validates a config by creating a box instance without starting it (no port binding).
+func Check(configContent []byte) error {
+	ctx := baseContext()
+	options, err := json.UnmarshalExtendedContext[option.Options](ctx, configContent)
+	if err != nil {
+		return E.Cause(err, "decode config")
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	instance, err := box.New(box.Options{
+		Context:           runCtx,
+		Options:           options,
+		PlatformLogWriter: platformWriter,
+	})
+	if err != nil {
+		return E.Cause(err, "create service")
+	}
+	instance.Close()
+	return nil
+}
+
 func Main() {
 	if err := runMain(os.Args[1:]); err != nil {
 		boxlog.Fatal(err)
