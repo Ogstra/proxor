@@ -557,7 +557,7 @@ namespace ProxorGui {
 
         auto group = GetGroup(ent->gid);
         if (group != nullptr) {
-            if (!group->toggle_proxy_ids.contains(ent->id)) {
+            if (group->toggle_proxy_ids.isEmpty()) {
                 group->toggle_proxy_ids.push_back(ent->id);
             }
             SaveGroup(group);
@@ -612,7 +612,7 @@ namespace ProxorGui {
             if (!newGroup->order.isEmpty()) {
                 newGroup->order.push_back(ent->id);
             }
-            if (!newGroup->toggle_proxy_ids.contains(ent->id)) {
+            if (newGroup->toggle_proxy_ids.isEmpty()) {
                 newGroup->toggle_proxy_ids.push_back(ent->id);
             }
             SaveGroup(newGroup);
