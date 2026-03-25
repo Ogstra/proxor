@@ -39,12 +39,7 @@ func (s *server) Validate(ctx context.Context, in *gen.LoadConfigReq) (out *gen.
 		}
 	}()
 
-	i, cancel, err := boxmain.Create([]byte(in.CoreConfig))
-	if i != nil {
-		defer i.Close()
-		defer cancel()
-	}
-
+	err = boxmain.Check([]byte(in.CoreConfig))
 	return
 }
 
