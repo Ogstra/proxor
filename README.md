@@ -4,7 +4,7 @@ Qt-based proxy client for managing sing-box profiles, subscriptions, routing, an
 
 Current version: `1.3.0`
 
-![Proxor main window](docs/images/proxor-main-window.png)
+<img width="804" height="634" alt="image" src="https://github.com/user-attachments/assets/67d27033-e809-4b89-a5dc-2dcd800163de" />
 
 ## Supported Proxy Types
 
