@@ -11,6 +11,7 @@
 #include "ui/ThemeManager.hpp"
 #include "ui/Icon.hpp"
 #include "ui/edit/dialog_edit_profile.h"
+#include "ui/edit/dialog_edit_group.h"
 #include "ui/dialog_basic_settings.h"
 #include "ui/dialog_manage_groups.h"
 #include "ui/dialog_manage_routes.h"
@@ -1644,6 +1645,20 @@ void MainWindow::on_menu_select_all_triggered() {
         return;
     }
     ui->proxyListTable->selectAll();
+}
+
+void MainWindow::on_menu_add_subscription_triggered() {
+    auto ent = ProxorGui::ProfileManager::NewGroup();
+    ent->url = " "; // non-empty: forces DialogEditGroup to show Subscription type with URL field
+    auto dialog = new DialogEditGroup(ent, this);
+    connect(dialog, &QDialog::finished, this, [=] {
+        if (dialog->result() == QDialog::Accepted) {
+            ProxorGui::profileManager->AddGroup(ent);
+            refresh_groups();
+        }
+        dialog->deleteLater();
+    });
+    dialog->show();
 }
 
 void MainWindow::on_menu_delete_repeat_triggered() {
