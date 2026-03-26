@@ -321,6 +321,16 @@
              <number>0</number>
             </property>
             <item>
+             <widget class="QLineEdit" name="log_filter">
+              <property name="placeholderText">
+               <string>Filter log…</string>
+              </property>
+              <property name="clearButtonEnabled">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item>
              <widget class="QTextBrowser" name="masterLogBrowser">
               <property name="contextMenuPolicy">
                <enum>Qt::CustomContextMenu</enum>
@@ -352,6 +362,16 @@
             <property name="bottomMargin">
              <number>0</number>
             </property>
+            <item>
+             <widget class="QLineEdit" name="conn_filter">
+              <property name="placeholderText">
+               <string>Filter connections…</string>
+              </property>
+              <property name="clearButtonEnabled">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
             <item>
              <widget class="QTableWidget" name="tableWidget_conn">
               <property name="contextMenuPolicy">
