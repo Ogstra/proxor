@@ -244,22 +244,19 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         ui->masterLogBrowser->setFont(font);
         qvLogDocument->setDefaultFont(font);
     }
-    // Force a terminal-style dark palette so ANSI colors are legible on any theme.
+    // Force log text to be black.
     {
         QPalette p = ui->masterLogBrowser->palette();
-        p.setColor(QPalette::Base,        QColor(30, 30, 30));
-        p.setColor(QPalette::Text,        QColor(204, 204, 204));
-        p.setColor(QPalette::Window,      QColor(30, 30, 30));
-        p.setColor(QPalette::WindowText,  QColor(204, 204, 204));
+        p.setColor(QPalette::Text, Qt::black);
         ui->masterLogBrowser->setPalette(p);
     }
     {
         QTextCharFormat defaultFmt;
-        defaultFmt.setForeground(QColor(204, 204, 204));
+        defaultFmt.setForeground(Qt::black);
         QTextCursor c(qvLogDocument);
         c.select(QTextCursor::Document);
         c.setCharFormat(defaultFmt);
-        qvLogDocument->setDefaultStyleSheet("body { color: #cccccc; background-color: #1e1e1e; }");
+        qvLogDocument->setDefaultStyleSheet("body { color: black; }");
     }
     ui->log_filter->setFont(ui->masterLogBrowser->font());
     connect(ui->log_filter, &QLineEdit::textChanged, this, [=](const QString &text) {
