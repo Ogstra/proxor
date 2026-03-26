@@ -347,6 +347,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->tableWidget_conn->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
     ui->tableWidget_conn->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
     ui->tableWidget_conn->horizontalHeader()->setSectionResizeMode(5, QHeaderView::ResizeToContents);
+    ui->tableWidget_conn->setSortingEnabled(true);
+    ui->tableWidget_conn->horizontalHeader()->setSectionsClickable(true);
+    ui->tableWidget_conn->horizontalHeader()->setSortIndicatorShown(true);
+    // Default sort: descending by Status col so active connections appear first
+    ui->tableWidget_conn->sortByColumn(0, Qt::DescendingOrder);
     ui->proxyListTable->verticalHeader()->setDefaultSectionSize(24);
 
     // search box
@@ -1894,6 +1899,15 @@ static void appendAnsiLine(const QString &line, QTextDocument *doc) {
     cursor.endEditBlock();
 }
 
+void MainWindow::rebuildLogDocument(const QString &filter) {
+    qvLogDocument->clear();
+    const bool hasFilter = !filter.isEmpty();
+    for (const auto &line : m_logLines) {
+        if (hasFilter && !line.contains(filter, Qt::CaseInsensitive)) continue;
+        appendAnsiLine(line, qvLogDocument);
+    }
+}
+
 void MainWindow::show_log_impl(const QString &log) {
     auto lines = SplitLines(log.trimmed());
     if (lines.isEmpty()) return;
@@ -2052,6 +2066,7 @@ void MainWindow::refresh_connection_list(const QJsonArray &arr) {
         return;
     }
     last_arr = arr;
+    ui->tableWidget_conn->setSortingEnabled(false);
 
     if (ProxorGui::dataStore->flag_debug) qDebug() << arr;
 
@@ -2086,6 +2101,9 @@ void MainWindow::refresh_connection_list(const QJsonArray &arr) {
         c0->setAlignment(Qt::AlignCenter);
         c0->setToolTip(tr("Start: %1\nEnd: %2").arg(DisplayTime(start_t), end_t > 0 ? DisplayTime(end_t) : ""));
         ui->tableWidget_conn->setCellWidget(row, 0, c0);
+        auto f_status = f0->clone();
+        f_status->setData(Qt::DisplayRole, static_cast<int>(item["Start"].toVariant().toLongLong()));
+        ui->tableWidget_conn->setItem(row, 0, f_status);
 
         // C1: Outbound
         auto f = f0->clone();
@@ -2126,6 +2144,7 @@ void MainWindow::refresh_connection_list(const QJsonArray &arr) {
         f->setText(ReadableSize(upload) + "↑ " + ReadableSize(download) + "↓");
         ui->tableWidget_conn->setItem(row, 5, f);
     }
+    ui->tableWidget_conn->setSortingEnabled(true);
 }
 
 // Hotkey
