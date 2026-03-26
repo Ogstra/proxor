@@ -2,7 +2,7 @@
 
 Qt-based proxy client for managing sing-box profiles, subscriptions, routing, and system proxy integration.
 
-Current version: `1.2.3`
+Current version: `1.3.0`
 
 ![Proxor main window](docs/images/proxor-main-window.png)
 
@@ -64,7 +64,7 @@ Linux remains manual-build only for now. `.deb`, AppImage, and CI-produced Linux
 ### Core and Go Toolchain
 
 - Go `1.26.x`
-- sing-box from the local workspace (`../sing-box`, base `v1.13.3`, local version string `1.13.3-proxor-1`)
+- sing-box from the local git submodule (`3rdparty/sing-box`, base `v1.13.3`, fork `Ogstra/sing-box`)
 - proxorlib from the local workspace
 - gRPC `v1.79.3`
 - protobuf-go `v1.36.11`
