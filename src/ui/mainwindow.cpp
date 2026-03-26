@@ -1890,7 +1890,9 @@ static void appendAnsiLine(const QString &line, QTextDocument *doc) {
     QTextCursor cursor(doc);
     cursor.movePosition(QTextCursor::End);
     cursor.beginEditBlock();
-    cursor.insertBlock();
+    if (!doc->isEmpty()) {
+        cursor.insertBlock();
+    }
 
     QColor foreground;
     int i = 0;
