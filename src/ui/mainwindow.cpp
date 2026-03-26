@@ -244,20 +244,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         ui->masterLogBrowser->setFont(font);
         qvLogDocument->setDefaultFont(font);
     }
-    // Force log text to be black.
-    {
-        QPalette p = ui->masterLogBrowser->palette();
-        p.setColor(QPalette::Text, Qt::black);
-        ui->masterLogBrowser->setPalette(p);
-    }
-    {
-        QTextCharFormat defaultFmt;
-        defaultFmt.setForeground(Qt::black);
-        QTextCursor c(qvLogDocument);
-        c.select(QTextCursor::Document);
-        c.setCharFormat(defaultFmt);
-        qvLogDocument->setDefaultStyleSheet("body { color: black; }");
-    }
+    // Log color palette follows system theme automatically.
     ui->log_filter->setFont(ui->masterLogBrowser->font());
     connect(ui->log_filter, &QLineEdit::textChanged, this, [=](const QString &text) {
         rebuildLogDocument(text);
@@ -1898,9 +1885,21 @@ static void appendAnsiLine(const QString &line, QTextDocument *doc) {
     auto flush = [&]() {
         if (seg.isEmpty()) return;
         const auto escaped = seg.toHtmlEscaped();
-        if (foreground.isValid()) {
+        bool useSpan = foreground.isValid();
+        QColor renderColor = foreground;
+
+        if (useSpan && qApp) {
+            bool isDarkTheme = qApp->palette().color(QPalette::Base).lightness() < 128;
+            if (!isDarkTheme && renderColor.lightness() > 170) {
+                useSpan = false; // Fallback to native black
+            } else if (isDarkTheme && renderColor.lightness() < 80) {
+                useSpan = false; // Fallback to native white
+            }
+        }
+
+        if (useSpan) {
             html += QStringLiteral("<span style=\"color:%1;\">%2</span>")
-                        .arg(foreground.name(QColor::HexRgb), escaped);
+                        .arg(renderColor.name(QColor::HexRgb), escaped);
         } else {
             html += escaped;
         }
