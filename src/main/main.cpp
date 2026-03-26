@@ -115,6 +115,8 @@ int main(int argc, char* argv[]) {
                 return 0;
             }
             qDebug() << "connected to local server, try to raise another program";
+            socket.write("1");
+            socket.waitForBytesWritten(500);
             return 0;
         }
         // Some Bad System
