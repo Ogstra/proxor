@@ -117,6 +117,7 @@ int main(int argc, char* argv[]) {
             qDebug() << "connected to local server, try to raise another program";
             socket.write("1");
             socket.waitForBytesWritten(500);
+            socket.waitForDisconnected(500);
             return 0;
         }
         // Some Bad System
@@ -201,6 +202,7 @@ int main(int argc, char* argv[]) {
     QLocalServer server;
     auto server_name = LOCAL_SERVER_PREFIX + Int2String(guard_data_in);
     QLocalServer::removeServer(server_name);
+    server.setSocketOptions(QLocalServer::WorldAccessOption);
     server.listen(server_name);
     QObject::connect(&server, &QLocalServer::newConnection, &a, [&] {
         auto socket = server.nextPendingConnection();
