@@ -261,6 +261,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         c.setCharFormat(defaultFmt);
         qvLogDocument->setDefaultStyleSheet("body { color: #cccccc; background-color: #1e1e1e; }");
     }
+    ui->log_filter->setFont(ui->masterLogBrowser->font());
+    connect(ui->log_filter, &QLineEdit::textChanged, this, [=](const QString &text) {
+        rebuildLogDocument(text);
+        if (qvLogAutoScoll) {
+            auto bar = ui->masterLogBrowser->verticalScrollBar();
+            bar->setValue(bar->maximum());
+        }
+    });
     connect(ui->masterLogBrowser->verticalScrollBar(), &QSlider::valueChanged, this, [=](int value) {
         if (ui->masterLogBrowser->verticalScrollBar()->maximum() == value)
             qvLogAutoScoll = true;
@@ -352,6 +360,28 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->tableWidget_conn->horizontalHeader()->setSortIndicatorShown(true);
     // Default sort: descending by Status col so active connections appear first
     ui->tableWidget_conn->sortByColumn(0, Qt::DescendingOrder);
+    // Connection tab filter
+    auto applyConnFilter = [=](const QString &text) {
+        const bool hasFilter = !text.isEmpty();
+        const int rows = ui->tableWidget_conn->rowCount();
+        for (int r = 0; r < rows; ++r) {
+            if (!hasFilter) {
+                ui->tableWidget_conn->setRowHidden(r, false);
+                continue;
+            }
+            bool match = false;
+            // Search columns 1 (Outbound), 2 (Destination), 3 (Process), 4 (Protocol)
+            for (int c = 1; c <= 4; ++c) {
+                auto *item = ui->tableWidget_conn->item(r, c);
+                if (item && item->text().contains(text, Qt::CaseInsensitive)) {
+                    match = true;
+                    break;
+                }
+            }
+            ui->tableWidget_conn->setRowHidden(r, !match);
+        }
+    };
+    connect(ui->conn_filter, &QLineEdit::textChanged, this, applyConnFilter);
     ui->proxyListTable->verticalHeader()->setDefaultSectionSize(24);
 
     // search box
@@ -1926,23 +1956,36 @@ void MainWindow::show_log_impl(const QString &log) {
     }
     if (newLines.isEmpty()) return;
 
-    for (const auto &line: newLines) {
+    // Append to buffer
+    for (const auto &line : newLines) {
+        m_logLines.append(line);
+    }
+    while (m_logLines.size() > ProxorGui::dataStore->max_log_line) {
+        m_logLines.removeFirst();
+    }
+
+    // Append to document (respecting active filter)
+    const QString filterText = ui->log_filter->text();
+    for (const auto &line : newLines) {
+        if (!filterText.isEmpty() && !line.contains(filterText, Qt::CaseInsensitive))
+            continue;
         appendAnsiLine(line, qvLogDocument);
     }
-    // qvLogDocument->setPlainText(qvLogDocument->toPlainText() + log);
-    // From https://gist.github.com/jemyzhang/7130092
-    auto block = qvLogDocument->begin();
-
-    while (block.isValid()) {
-        if (qvLogDocument->blockCount() > ProxorGui::dataStore->max_log_line) {
-            QTextCursor cursor(block);
-            block = block.next();
-            cursor.select(QTextCursor::BlockUnderCursor);
-            cursor.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor);
-            cursor.removeSelectedText();
-            continue;
+    // Trim document to max_log_line when no filter is active
+    if (filterText.isEmpty()) {
+        // From https://gist.github.com/jemyzhang/7130092
+        auto block = qvLogDocument->begin();
+        while (block.isValid()) {
+            if (qvLogDocument->blockCount() > ProxorGui::dataStore->max_log_line) {
+                QTextCursor cursor(block);
+                block = block.next();
+                cursor.select(QTextCursor::BlockUnderCursor);
+                cursor.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor);
+                cursor.removeSelectedText();
+                continue;
+            }
+            break;
         }
-        break;
     }
 }
 
@@ -2022,6 +2065,7 @@ void MainWindow::on_masterLogBrowser_customContextMenuRequested(const QPoint &po
     connect(action_clear, &QAction::triggered, this, [=] {
         qvLogDocument->clear();
         ui->masterLogBrowser->clear();
+        m_logLines.clear();
     });
     menu->addAction(action_clear);
 
@@ -2145,6 +2189,22 @@ void MainWindow::refresh_connection_list(const QJsonArray &arr) {
         ui->tableWidget_conn->setItem(row, 5, f);
     }
     ui->tableWidget_conn->setSortingEnabled(true);
+    // Re-apply active connection filter after refresh
+    const QString connFilterText = ui->conn_filter->text();
+    if (!connFilterText.isEmpty()) {
+        const int rows = ui->tableWidget_conn->rowCount();
+        for (int r = 0; r < rows; ++r) {
+            bool match = false;
+            for (int c = 1; c <= 4; ++c) {
+                auto *itm = ui->tableWidget_conn->item(r, c);
+                if (itm && itm->text().contains(connFilterText, Qt::CaseInsensitive)) {
+                    match = true;
+                    break;
+                }
+            }
+            ui->tableWidget_conn->setRowHidden(r, !match);
+        }
+    }
 }
 
 // Hotkey
