@@ -151,6 +151,7 @@ private:
     //
     bool qvLogAutoScoll = true;
     QTextDocument *qvLogDocument = new QTextDocument(this);
+    QVector<QString> m_logLines; // raw lines fed to show_log_impl, for filter re-render
     //
     QString title_error;
     int icon_status = -1;
@@ -166,6 +167,8 @@ private:
     QMutex mu_exit;
     QSemaphore sem_stopped;
     int exit_reason = 0;
+
+    void rebuildLogDocument(const QString &filter);
 
     QList<std::shared_ptr<ProxorGui::ProxyEntity>> get_now_selected_list();
 
