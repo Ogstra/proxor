@@ -244,6 +244,23 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         ui->masterLogBrowser->setFont(font);
         qvLogDocument->setDefaultFont(font);
     }
+    // Force a terminal-style dark palette so ANSI colors are legible on any theme.
+    {
+        QPalette p = ui->masterLogBrowser->palette();
+        p.setColor(QPalette::Base,        QColor(30, 30, 30));
+        p.setColor(QPalette::Text,        QColor(204, 204, 204));
+        p.setColor(QPalette::Window,      QColor(30, 30, 30));
+        p.setColor(QPalette::WindowText,  QColor(204, 204, 204));
+        ui->masterLogBrowser->setPalette(p);
+    }
+    {
+        QTextCharFormat defaultFmt;
+        defaultFmt.setForeground(QColor(204, 204, 204));
+        QTextCursor c(qvLogDocument);
+        c.select(QTextCursor::Document);
+        c.setCharFormat(defaultFmt);
+        qvLogDocument->setDefaultStyleSheet("body { color: #cccccc; background-color: #1e1e1e; }");
+    }
     connect(ui->masterLogBrowser->verticalScrollBar(), &QSlider::valueChanged, this, [=](int value) {
         if (ui->masterLogBrowser->verticalScrollBar()->maximum() == value)
             qvLogAutoScoll = true;
