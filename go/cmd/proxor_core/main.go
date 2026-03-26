@@ -13,8 +13,11 @@ import (
 )
 
 func main() {
-	fmt.Println("sing-box:", constant.Version, "Proxor:", proxor_common.Version_proxor)
-	fmt.Println()
+	versionSBox := constant.Version
+	if versionSBox == "unknown" {
+		versionSBox = "1.13.3"
+	}
+	fmt.Printf("proxor-core %s (sing-box %s)\n", proxor_common.Version_proxor, versionSBox)
 
 	// proxor_core
 	if len(os.Args) > 1 && os.Args[1] == "proxor" {
