@@ -290,21 +290,6 @@ namespace ProxorGui_rpc {
             *rpcOK = true;
             return reply;
         } else {
-        } else {
-            return "";
-        }
-    }
-
-    //
-
-    libcore::TestResp Client::Test(bool *rpcOK, const libcore::TestReq &request) {
-        libcore::TestResp reply;
-        auto status = make_grpc_channel()->Call("Test", request, &reply);
-
-        if (status == QNetworkReply::NoError) {
-            *rpcOK = true;
-            return reply;
-        } else {
             NOT_OK
             return reply;
         }

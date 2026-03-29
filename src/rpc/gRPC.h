@@ -26,6 +26,22 @@ namespace ProxorGui_rpc {
 
         QString Stop(bool *rpcOK);
 
+        long long QueryStats(const std::string &tag, const std::string &direct);
+
+        std::string ListConnections();
+
+        libcore::TestResp Test(bool *rpcOK, const libcore::TestReq &request);
+
+        libcore::UpdateResp Update(bool *rpcOK, const libcore::UpdateReq &request);
+
+        static libcore::UpdateResp QueryUpdateProgress(bool *ok);
+
+    private:
+        std::function<std::unique_ptr<QtGrpc::Http2GrpcChannelPrivate>()> make_grpc_channel;
+        std::unique_ptr<QtGrpc::Http2GrpcChannelPrivate> default_grpc_channel;
+        std::function<void(const QString &)> onError;
+    };
+
     inline Client *defaultClient;
 } // namespace ProxorGui_rpc
 #endif
