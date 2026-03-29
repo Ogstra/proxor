@@ -73,8 +73,9 @@ func (TestMode) EnumDescriptor() ([]byte, []int) {
 type UpdateAction int32
 
 const (
-	UpdateAction_Check    UpdateAction = 0
-	UpdateAction_Download UpdateAction = 1
+	UpdateAction_Check         UpdateAction = 0
+	UpdateAction_Download      UpdateAction = 1
+	UpdateAction_QueryProgress UpdateAction = 2
 )
 
 // Enum value maps for UpdateAction.
@@ -82,10 +83,12 @@ var (
 	UpdateAction_name = map[int32]string{
 		0: "Check",
 		1: "Download",
+		2: "QueryProgress",
 	}
 	UpdateAction_value = map[string]int32{
-		"Check":    0,
-		"Download": 1,
+		"Check":         0,
+		"Download":      1,
+		"QueryProgress": 2,
 	}
 )
 
@@ -654,15 +657,18 @@ func (x *UpdateReq) GetCheckPreRelease() bool {
 }
 
 type UpdateResp struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Error         string                 `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
-	AssetsName    string                 `protobuf:"bytes,2,opt,name=assets_name,json=assetsName,proto3" json:"assets_name,omitempty"`
-	DownloadUrl   string                 `protobuf:"bytes,3,opt,name=download_url,json=downloadUrl,proto3" json:"download_url,omitempty"`
-	ReleaseUrl    string                 `protobuf:"bytes,4,opt,name=release_url,json=releaseUrl,proto3" json:"release_url,omitempty"`
-	ReleaseNote   string                 `protobuf:"bytes,5,opt,name=release_note,json=releaseNote,proto3" json:"release_note,omitempty"`
-	IsPreRelease  bool                   `protobuf:"varint,6,opt,name=is_pre_release,json=isPreRelease,proto3" json:"is_pre_release,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Error            string                 `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
+	AssetsName       string                 `protobuf:"bytes,2,opt,name=assets_name,json=assetsName,proto3" json:"assets_name,omitempty"`
+	DownloadUrl      string                 `protobuf:"bytes,3,opt,name=download_url,json=downloadUrl,proto3" json:"download_url,omitempty"`
+	ReleaseUrl       string                 `protobuf:"bytes,4,opt,name=release_url,json=releaseUrl,proto3" json:"release_url,omitempty"`
+	ReleaseNote      string                 `protobuf:"bytes,5,opt,name=release_note,json=releaseNote,proto3" json:"release_note,omitempty"`
+	IsPreRelease     bool                   `protobuf:"varint,6,opt,name=is_pre_release,json=isPreRelease,proto3" json:"is_pre_release,omitempty"`
+	ProgressTotal    int64                  `protobuf:"varint,7,opt,name=progress_total,json=progressTotal,proto3" json:"progress_total,omitempty"`
+	ProgressReceived int64                  `protobuf:"varint,8,opt,name=progress_received,json=progressReceived,proto3" json:"progress_received,omitempty"`
+	ProgressComplete bool                   `protobuf:"varint,9,opt,name=progress_complete,json=progressComplete,proto3" json:"progress_complete,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *UpdateResp) Reset() {
@@ -733,6 +739,27 @@ func (x *UpdateResp) GetReleaseNote() string {
 func (x *UpdateResp) GetIsPreRelease() bool {
 	if x != nil {
 		return x.IsPreRelease
+	}
+	return false
+}
+
+func (x *UpdateResp) GetProgressTotal() int64 {
+	if x != nil {
+		return x.ProgressTotal
+	}
+	return 0
+}
+
+func (x *UpdateResp) GetProgressReceived() int64 {
+	if x != nil {
+		return x.ProgressReceived
+	}
+	return 0
+}
+
+func (x *UpdateResp) GetProgressComplete() bool {
+	if x != nil {
+		return x.ProgressComplete
 	}
 	return false
 }
@@ -826,7 +853,7 @@ const file_libcore_proto_rawDesc = "" +
 	"\atraffic\x18\x01 \x01(\x03R\atraffic\"f\n" +
 	"\tUpdateReq\x12-\n" +
 	"\x06action\x18\x01 \x01(\x0e2\x15.libcore.UpdateActionR\x06action\x12*\n" +
-	"\x11check_pre_release\x18\x02 \x01(\bR\x0fcheckPreRelease\"\xd0\x01\n" +
+	"\x11check_pre_release\x18\x02 \x01(\bR\x0fcheckPreRelease\"\xd1\x02\n" +
 	"\n" +
 	"UpdateResp\x12\x14\n" +
 	"\x05error\x18\x01 \x01(\tR\x05error\x12\x1f\n" +
@@ -836,16 +863,20 @@ const file_libcore_proto_rawDesc = "" +
 	"\vrelease_url\x18\x04 \x01(\tR\n" +
 	"releaseUrl\x12!\n" +
 	"\frelease_note\x18\x05 \x01(\tR\vreleaseNote\x12$\n" +
-	"\x0eis_pre_release\x18\x06 \x01(\bR\fisPreRelease\"S\n" +
+	"\x0eis_pre_release\x18\x06 \x01(\bR\fisPreRelease\x12%\n" +
+	"\x0eprogress_total\x18\a \x01(\x03R\rprogressTotal\x12+\n" +
+	"\x11progress_received\x18\b \x01(\x03R\x10progressReceived\x12+\n" +
+	"\x11progress_complete\x18\t \x01(\bR\x10progressComplete\"S\n" +
 	"\x13ListConnectionsResp\x12<\n" +
 	"\x1aconnection_statistics_json\x18\x01 \x01(\tR\x18connectionStatisticsJson*2\n" +
 	"\bTestMode\x12\v\n" +
 	"\aTcpPing\x10\x00\x12\v\n" +
 	"\aUrlTest\x10\x01\x12\f\n" +
-	"\bFullTest\x10\x02*'\n" +
+	"\bFullTest\x10\x02*:\n" +
 	"\fUpdateAction\x12\t\n" +
 	"\x05Check\x10\x00\x12\f\n" +
-	"\bDownload\x10\x012\xce\x03\n" +
+	"\bDownload\x10\x01\x12\x11\n" +
+	"\rQueryProgress\x10\x022\xce\x03\n" +
 	"\x0eLibcoreService\x12/\n" +
 	"\x04Exit\x12\x11.libcore.EmptyReq\x1a\x12.libcore.EmptyResp\"\x00\x123\n" +
 	"\x06Update\x12\x12.libcore.UpdateReq\x1a\x13.libcore.UpdateResp\"\x00\x128\n" +
