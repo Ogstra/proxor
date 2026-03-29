@@ -11,7 +11,7 @@ download_asset() {
   local asset="$1"
   local url="https://github.com/${PROXOR_QT_RUNTIME_REPO}/releases/download/${PROXOR_QT_RUNTIME_TAG}/${asset}"
 
-  if curl -fL -O "$url"; then
+  if gh release download "${PROXOR_QT_RUNTIME_TAG}" -R "${PROXOR_QT_RUNTIME_REPO}" -p "${asset}"; then
     DOWNLOADED_ASSET="$asset"
     return 0
   fi
