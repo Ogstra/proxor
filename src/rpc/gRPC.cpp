@@ -290,6 +290,21 @@ namespace ProxorGui_rpc {
             *rpcOK = true;
             return reply;
         } else {
+        } else {
+            return "";
+        }
+    }
+
+    //
+
+    libcore::TestResp Client::Test(bool *rpcOK, const libcore::TestReq &request) {
+        libcore::TestResp reply;
+        auto status = make_grpc_channel()->Call("Test", request, &reply);
+
+        if (status == QNetworkReply::NoError) {
+            *rpcOK = true;
+            return reply;
+        } else {
             NOT_OK
             return reply;
         }
@@ -306,6 +321,12 @@ namespace ProxorGui_rpc {
             NOT_OK
             return reply;
         }
+    }
+
+    libcore::UpdateResp Client::QueryUpdateProgress(bool *ok) {
+        libcore::UpdateReq req;
+        req.set_action(libcore::UpdateAction::QueryProgress);
+        return ProxorGui_rpc::defaultClient->Update(ok, req);
     }
 } // namespace ProxorGui_rpc
 
