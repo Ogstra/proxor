@@ -180,17 +180,34 @@
        </widget>
       </item>
       <item>
-       <widget class="QToolButton" name="toolButton_url_test">
-        <property name="text">
-         <string>URL Test</string>
+       <layout class="QVBoxLayout" name="verticalLayout_url_sub">
+        <property name="spacing">
+         <number>2</number>
         </property>
-        <property name="popupMode">
-         <enum>QToolButton::InstantPopup</enum>
-        </property>
-        <property name="toolButtonStyle">
-         <enum>Qt::ToolButtonTextUnderIcon</enum>
-        </property>
-       </widget>
+        <item>
+         <widget class="QToolButton" name="toolButton_url_test">
+          <property name="text">
+           <string>URL Test</string>
+          </property>
+          <property name="popupMode">
+           <enum>QToolButton::InstantPopup</enum>
+          </property>
+          <property name="toolButtonStyle">
+           <enum>Qt::ToolButtonTextOnly</enum>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QToolButton" name="toolButton_update_subscription">
+          <property name="text">
+           <string>Update Sub</string>
+          </property>
+          <property name="toolButtonStyle">
+           <enum>Qt::ToolButtonTextOnly</enum>
+          </property>
+         </widget>
+        </item>
+       </layout>
       </item>
      </layout>
     </item>
@@ -536,6 +553,7 @@
     <addaction name="menu_basic_settings"/>
     <addaction name="menu_routing_settings"/>
     <addaction name="menu_vpn_settings"/>
+    <addaction name="menu_ssid_settings"/>
     <addaction name="menu_hotkey_settings"/>
     <addaction name="menu_open_config_folder"/>
    </widget>
@@ -883,6 +901,11 @@
   <action name="menu_vpn_settings">
    <property name="text">
     <string>Tun Settings</string>
+   </property>
+  </action>
+  <action name="menu_ssid_settings">
+   <property name="text">
+    <string>On-Demand WiFi Settings</string>
    </property>
   </action>
   <action name="actionRestart_Program">
