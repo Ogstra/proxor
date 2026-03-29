@@ -1,4 +1,4 @@
-#ifdef Q_OS_WIN
+#ifdef _WIN32
 #include "WifiMonitor.hpp"
 #include <QProcess>
 #include <QStringList>
@@ -46,4 +46,4 @@ QString WifiMonitor::currentSsid() {
     }
     return QString();  // no WiFi or not connected
 }
-#endif // Q_OS_WIN
+#endif // _WIN32
