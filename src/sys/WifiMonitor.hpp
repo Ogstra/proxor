@@ -1,5 +1,4 @@
 #pragma once
-#ifdef _WIN32
 #include <QObject>
 #include <QString>
 #include <QTimer>
@@ -24,4 +23,3 @@ private:
 
     static QString currentSsid();   // runs netsh, returns SSID or "" if none
 };
-#endif // _WIN32
