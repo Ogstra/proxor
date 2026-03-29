@@ -563,6 +563,7 @@ namespace ProxorGui_sub {
                 group->url = str;
                 ProxorGui::profileManager->AddGroup(group);
                 gid = group->id;
+                ProxorGui::dataStore->current_group = gid;
                 if (onlyEmptyDefault) {
                     // Put the new Sub group first; keep Default as second tab
                     auto &order = ProxorGui::profileManager->groupsTabOrder;
