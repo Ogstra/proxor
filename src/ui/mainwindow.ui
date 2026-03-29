@@ -317,6 +317,11 @@
              <string>Traffic</string>
             </property>
            </column>
+           <column>
+            <property name="text">
+             <string>Quota</string>
+            </property>
+           </column>
           </widget>
          </item>
         </layout>
