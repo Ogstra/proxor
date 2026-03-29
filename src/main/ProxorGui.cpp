@@ -300,6 +300,8 @@ namespace ProxorGui {
         _add(new configItem("core_box_underlying_dns", &core_box_underlying_dns, itemType::string));
         _add(new configItem("core_enable_color", &core_enable_color, itemType::boolean));
         _add(new configItem("vpn_internal_tun", &vpn_internal_tun, itemType::boolean));
+        _add(new configItem("ssid_on_demand_enabled", &ssid_on_demand_enabled, itemType::boolean));
+        _add(new configItem("ssid_trigger_list", &ssid_trigger_list, itemType::stringList));
     }
 
     void DataStore::UpdateStartedId(int id) {
