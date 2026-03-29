@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Ogstra/proxorlib/proxor_common"
@@ -41,6 +42,32 @@ var (
 	updateDownloadURL string
 	updatePackagePath string
 )
+
+type downloadProgress struct {
+	totalBytes    int64
+	receivedBytes int64
+	complete      bool
+	err           string
+}
+
+var (
+	dlProgress   downloadProgress
+	dlProgressMu sync.Mutex
+)
+
+type progressWriter struct {
+	w        io.Writer
+	mu       *sync.Mutex
+	progress *downloadProgress
+}
+
+func (pw *progressWriter) Write(p []byte) (int, error) {
+	n, err := pw.w.Write(p)
+	pw.mu.Lock()
+	pw.progress.receivedBytes += int64(n)
+	pw.mu.Unlock()
+	return n, err
+}
 
 type updateSelection int
 
@@ -297,13 +324,41 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 		}
 		defer file.Close()
 
-		if _, err = io.Copy(file, resp.Body); err != nil {
+		dlProgressMu.Lock()
+		dlProgress = downloadProgress{totalBytes: resp.ContentLength}
+		dlProgressMu.Unlock()
+
+		pw := &progressWriter{w: file, mu: &dlProgressMu, progress: &dlProgress}
+		if _, err = io.Copy(pw, resp.Body); err != nil {
+			dlProgressMu.Lock()
+			dlProgress.err = err.Error()
+			dlProgressMu.Unlock()
 			ret.Error = err.Error()
 			return ret, nil
 		}
 		if err = file.Sync(); err != nil {
+			dlProgressMu.Lock()
+			dlProgress.err = err.Error()
+			dlProgressMu.Unlock()
 			ret.Error = err.Error()
 			return ret, nil
+		}
+
+		dlProgressMu.Lock()
+		dlProgress.complete = true
+		dlProgressMu.Unlock()
+
+		return ret, nil
+
+	case gen.UpdateAction_QueryProgress:
+		dlProgressMu.Lock()
+		snap := dlProgress
+		dlProgressMu.Unlock()
+		ret.ProgressTotal = snap.totalBytes
+		ret.ProgressReceived = snap.receivedBytes
+		ret.ProgressComplete = snap.complete
+		if snap.err != "" {
+			ret.Error = snap.err
 		}
 		return ret, nil
 
