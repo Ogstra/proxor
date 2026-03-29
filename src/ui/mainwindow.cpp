@@ -29,7 +29,6 @@
 
 #ifdef Q_OS_WIN
 #include "3rdparty/WinCommander.hpp"
-#include "sys/WifiMonitor.hpp"
 #else
 #ifdef Q_OS_LINUX
 #include "sys/linux/LinuxCap.h"
@@ -591,11 +590,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         },
         DS_cores);
 
-#ifdef Q_OS_WIN
     wifi_monitor = new WifiMonitor(this);
     connect(wifi_monitor, &WifiMonitor::ssidChanged, this, &MainWindow::onWifiSsidChanged);
     wifi_monitor->start();
-#endif
 
     const bool restore_system_proxy = ProxorGui::dataStore->remember_spmode.contains("system_proxy");
     const bool restore_vpn = ProxorGui::dataStore->remember_spmode.contains("vpn") || ProxorGui::dataStore->flag_restart_tun_on;
@@ -651,7 +648,6 @@ MainWindow::~MainWindow() {
     delete ui;
 }
 
-#ifdef Q_OS_WIN
 void MainWindow::onWifiSsidChanged(const QString &ssid) {
     if (!ProxorGui::dataStore->ssid_on_demand_enabled) return;
 
@@ -673,7 +669,6 @@ void MainWindow::onWifiSsidChanged(const QString &ssid) {
         }
     }
 }
-#endif
 
 // Group tab manage
 
