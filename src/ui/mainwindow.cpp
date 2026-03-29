@@ -1399,7 +1399,9 @@ void MainWindow::refresh_proxy_list_impl_refresh_data(const int &id) {
                 else if (key == "total") total = val;
             }
             if (total > 0) {
-                f->setText(ReadableSize(upload + download) + " / " + ReadableSize(total));
+                QString usedGiB = QString::number((double)(upload + download) / 1073741824.0, 'f', 2) + " GiB";
+                QString totalGiB = QString::number((double)total / 1073741824.0, 'f', 2) + " GiB";
+                f->setText(usedGiB + " / " + totalGiB);
             }
             ui->proxyListTable->setItem(row, 6, f);
         }
