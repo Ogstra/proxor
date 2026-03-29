@@ -156,19 +156,19 @@ QString ReadableSize(const qint64 &size) {
     static QStringList measures;
     if (measures.isEmpty())
         measures << "B"
-                 << "KiB"
-                 << "MiB"
-                 << "GiB"
-                 << "TiB"
-                 << "PiB"
-                 << "EiB"
-                 << "ZiB"
-                 << "YiB";
+                 << "KB"
+                 << "MB"
+                 << "GB"
+                 << "TB"
+                 << "PB"
+                 << "EB"
+                 << "ZB"
+                 << "YB";
     QStringListIterator it(measures);
     QString measure(it.next());
-    while (sizeAsDouble >= 1024.0 && it.hasNext()) {
+    while (sizeAsDouble >= 1000.0 && it.hasNext()) {
         measure = it.next();
-        sizeAsDouble /= 1024.0;
+        sizeAsDouble /= 1000.0;
     }
     return QString::fromLatin1("%1 %2").arg(sizeAsDouble, 0, 'f', 2).arg(measure);
 }
