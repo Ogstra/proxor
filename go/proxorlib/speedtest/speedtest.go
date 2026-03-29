@@ -30,6 +30,8 @@ func UrlTest(client *http.Client, link string, timeout int32, standard int) (int
 	var time_start time.Time
 	var hsk_end time.Time
 	var time_end time.Time
+	var tcp_start time.Time
+	var tcp_end time.Time
 	var times int
 
 	switch standard {
@@ -40,7 +42,7 @@ func UrlTest(client *http.Client, link string, timeout int32, standard int) (int
 		rt := client.Transport.(*http.Transport)
 		rt.DisableKeepAlives = true
 	case UrlTestStandard_RTT:
-		times = 2
+		times = 1
 	default:
 		return 0, errors.New("unknown urltest standard")
 	}
@@ -54,6 +56,14 @@ func UrlTest(client *http.Client, link string, timeout int32, standard int) (int
 	}
 
 	trace := &httptrace.ClientTrace{
+		ConnectStart: func(network, addr string) {
+			tcp_start = time.Now()
+		},
+		ConnectDone: func(network, addr string, err error) {
+			if err == nil {
+				tcp_end = time.Now()
+			}
+		},
 		TLSHandshakeDone: func(cs tls.ConnectionState, err error) {
 			hsk_end = time.Now()
 		},
@@ -79,12 +89,23 @@ func UrlTest(client *http.Client, link string, timeout int32, standard int) (int
 		resp.Body.Close()
 	}
 
-	if time_end.IsZero() {
-		time_end = time.Now()
+	if standard == UrlTestStandard_RTT {
+		// Use TCP connect time (SYN -> SYN-ACK) for pure network RTT.
+		// Fall back to GotFirstResponseByte-WroteRequest if TCP connect was not observed
+		// (e.g., connection reuse from pool).
+		if !tcp_start.IsZero() && !tcp_end.IsZero() {
+			return int32(tcp_end.Sub(tcp_start).Milliseconds()), nil
+		}
+		// Fallback: use HTTP round-trip measurement
+		if time_end.IsZero() {
+			time_end = time.Now()
+		}
+		time_start = hsk_end
+		return int32(time_end.Sub(time_start).Milliseconds()), nil
 	}
 
-	if standard == UrlTestStandard_RTT {
-		time_start = hsk_end
+	if time_end.IsZero() {
+		time_end = time.Now()
 	}
 
 	return int32(time_end.Sub(time_start).Milliseconds()), nil

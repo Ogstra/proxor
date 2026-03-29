@@ -42,7 +42,7 @@ UpdateProgressDialog::UpdateProgressDialog(const QString &assetName, QWidget *pa
 
 void UpdateProgressDialog::onPollTick() {
     bool ok;
-    auto resp = ProxorGui_rpc::QueryUpdateProgress(&ok);
+    auto resp = ProxorGui_rpc::Client::QueryUpdateProgress(&ok);
     if (!ok) return;
 
     qint64 total    = resp.progress_total();
