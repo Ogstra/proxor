@@ -13,7 +13,7 @@ import (
 
 const UrlTestStandard_RTT = 0
 const UrlTestStandard_Handshake = 1
-const UrlTestStandard_FisrtHandshake = 2
+const UrlTestStandard_FirstHandshake = 2
 
 var errNoRedir = errors.New("no redir")
 
@@ -33,7 +33,7 @@ func UrlTest(client *http.Client, link string, timeout int32, standard int) (int
 	var times int
 
 	switch standard {
-	case UrlTestStandard_FisrtHandshake:
+	case UrlTestStandard_FirstHandshake:
 		times = 1
 	case UrlTestStandard_Handshake:
 		times = 2
@@ -60,7 +60,7 @@ func UrlTest(client *http.Client, link string, timeout int32, standard int) (int
 		GotFirstResponseByte: func() {
 			time_end = time.Now()
 		},
-		WroteHeaders: func() {
+		WroteRequest: func(info httptrace.WroteRequestInfo) {
 			hsk_end = time.Now()
 		},
 	}
