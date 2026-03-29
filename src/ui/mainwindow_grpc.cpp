@@ -593,6 +593,10 @@ void MainWindow::CheckUpdate(bool silent) {
         box.exec();
 
         if (downloadButton == box.clickedButton() && allow_updater) {
+            updateProgressDialog = new UpdateProgressDialog(response.assets_name().c_str(), this);
+            connect(updateProgressDialog, &UpdateProgressDialog::downloadComplete, this, &MainWindow::onUpdateStaged);
+            updateProgressDialog->show();
+
             runOnNewThread([=] {
                 bool ok2;
                 libcore::UpdateReq request2;
@@ -600,18 +604,11 @@ void MainWindow::CheckUpdate(bool silent) {
                 auto response2 = ProxorGui_rpc::defaultClient->Update(&ok2, request2);
                 if (!ok2) return;
 
-                runOnUiThread([=] {
-                    if (response2.error().empty()) {
-                        auto q = QMessageBox::question(nullptr, QObject::tr("Update Ready"),
-                                                       QObject::tr("The update package has been downloaded. Restart now to install it?"));
-                        if (q == QMessageBox::StandardButton::Yes) {
-                            this->exit_reason = 1;
-                            on_menu_exit_triggered();
-                        }
-                    } else {
+                if (!response2.error().empty()) {
+                    runOnUiThread([=] {
                         MessageBoxWarning(QObject::tr("Update"), response2.error().c_str());
-                    }
-                });
+                    });
+                }
             });
         } else if (openButton == box.clickedButton() && releasePageUrl.isValid()) {
             QDesktopServices::openUrl(releasePageUrl);

@@ -208,6 +208,8 @@ set(PROJECT_SOURCES
         src/ui/mainwindow_grpc.cpp
         src/ui/mainwindow.cpp
         src/ui/mainwindow.h
+        src/ui/dialog_update_progress.h
+        src/ui/dialog_update_progress.cpp
         src/ui/mainwindow.ui
 
         src/ui/edit/dialog_edit_profile.h
