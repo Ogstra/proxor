@@ -259,6 +259,10 @@ set(PROJECT_SOURCES
         src/ui/dialog_vpn_settings.h
         src/ui/dialog_vpn_settings.ui
 
+        src/ui/dialog_ssid_settings.cpp
+        src/ui/dialog_ssid_settings.h
+        src/ui/dialog_ssid_settings.ui
+
         src/ui/dialog_hotkey.cpp
         src/ui/dialog_hotkey.h
         src/ui/dialog_hotkey.ui
