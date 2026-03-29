@@ -734,6 +734,13 @@ void MainWindow::show_group(int gid) {
         ui->proxyListTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Interactive);
     }
 
+    // Quota column: only visible for subscription groups
+    bool isSub = !group->url.isEmpty();
+    ui->proxyListTable->setColumnHidden(6, !isSub);
+    if (isSub) {
+        ui->proxyListTable->horizontalHeader()->setSectionResizeMode(6, QHeaderView::ResizeToContents);
+    }
+
     // show proxies
     GroupSortAction gsa;
     gsa.scroll_to_started = true;
@@ -1358,6 +1365,27 @@ void MainWindow::refresh_proxy_list_impl_refresh_data(const int &id) {
         f = f0->clone();
         f->setText(profile->traffic_data->DisplayTraffic());
         ui->proxyListTable->setItem(row, 5, f);
+
+        // C6: Quota (subscription groups only)
+        if (!ui->proxyListTable->isColumnHidden(6)) {
+            f = f0->clone();
+            f->setTextAlignment(Qt::AlignCenter);
+            // Parse "upload=X; download=X; total=X" from group->info
+            qint64 upload = 0, download = 0, total = 0;
+            for (const auto &part : group->info.split(';')) {
+                auto kv = part.trimmed().split('=');
+                if (kv.size() != 2) continue;
+                auto key = kv[0].trimmed();
+                auto val = kv[1].trimmed().toLongLong();
+                if (key == "upload") upload = val;
+                else if (key == "download") download = val;
+                else if (key == "total") total = val;
+            }
+            if (total > 0) {
+                f->setText(ReadableSize(upload + download) + " / " + ReadableSize(total));
+            }
+            ui->proxyListTable->setItem(row, 6, f);
+        }
     }
 
     if (group != nullptr && !group->manually_column_width) {
