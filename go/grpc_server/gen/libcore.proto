@@ -74,6 +74,7 @@ message QueryStatsResp{
 enum UpdateAction {
   Check = 0;
   Download = 1;
+  QueryProgress = 2;
 }
 
 message UpdateReq {
@@ -88,6 +89,9 @@ message UpdateResp {
   string release_url = 4;
   string release_note = 5;
   bool is_pre_release = 6;
+  int64 progress_total = 7;
+  int64 progress_received = 8;
+  bool progress_complete = 9;
 }
 
 message ListConnectionsResp {
