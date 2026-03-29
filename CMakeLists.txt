@@ -199,6 +199,8 @@ set(PROJECT_SOURCES
 
         src/sys/ExternalProcess.cpp
         src/sys/AutoRun.cpp
+        src/sys/WifiMonitor.cpp
+        src/sys/WifiMonitor.hpp
 
         src/ui/ThemeManager.cpp
         src/ui/Icon.cpp
