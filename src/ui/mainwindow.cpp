@@ -16,6 +16,7 @@
 #include "ui/dialog_manage_groups.h"
 #include "ui/dialog_manage_routes.h"
 #include "ui/dialog_vpn_settings.h"
+#include "ui/dialog_ssid_settings.h"
 #include "ui/dialog_hotkey.h"
 
 #include "3rdparty/fix_old_qt.h"
@@ -232,6 +233,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     }, this, 0);
     connect(ui->toolButton_update, &QToolButton::clicked, this, [=] { runOnNewThread([=] { CheckUpdate(); }); });
     connect(ui->toolButton_url_test, &QToolButton::clicked, this, [=] { speedtest_current_group(1, true); });
+    connect(ui->toolButton_update_subscription, &QToolButton::clicked, this, [=] { on_menu_update_subscription_triggered(); });
 
     // Setup log UI
     ui->splitter->restoreState(DecodeB64IfValid(ProxorGui::dataStore->splitter_state));
@@ -818,6 +820,10 @@ void MainWindow::on_menu_routing_settings_triggered() {
 
 void MainWindow::on_menu_vpn_settings_triggered() {
     USE_DIALOG(DialogVPNSettings)
+}
+
+void MainWindow::on_menu_ssid_settings_triggered() {
+    USE_DIALOG(DialogSSIDSettings)
 }
 
 void MainWindow::on_menu_hotkey_settings_triggered() {
