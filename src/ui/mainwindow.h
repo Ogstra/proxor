@@ -10,6 +10,8 @@
 #include <QTableWidgetItem>
 #include <QKeyEvent>
 #include <QSystemTrayIcon>
+#include <QPointer>
+#include "dialog_update_progress.h"
 #include <QProcess>
 #include <QTextDocument>
 #include <QShortcut>
@@ -79,6 +81,8 @@ public slots:
     void on_commitDataRequest();
 
     void on_menu_exit_triggered();
+    
+    void onUpdateStaged();
 
 #ifndef MW_INTERFACE
 
@@ -157,6 +161,9 @@ private:
     ProxorGui_sys::CoreProcess *core_process;
     WifiMonitor *wifi_monitor = nullptr;
     qint64 vpn_pid = 0;
+    //
+    bool update_staged = false;
+    QPointer<UpdateProgressDialog> updateProgressDialog;
     //
     bool qvLogAutoScoll = true;
     QTextDocument *qvLogDocument = new QTextDocument(this);

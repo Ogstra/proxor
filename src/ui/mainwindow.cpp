@@ -887,8 +887,21 @@ void MainWindow::on_commitDataRequest() {
     qDebug() << "End of data save";
 }
 
+void MainWindow::onUpdateStaged() {
+    update_staged = true;
+    tray->showMessage(
+        tr("Proxor"),
+        tr("Update downloaded. It will install automatically when you close the app."),
+        QSystemTrayIcon::Information,
+        4000
+    );
+}
+
 void MainWindow::on_menu_exit_triggered() {
     if (mu_exit.tryLock()) {
+        if (update_staged && exit_reason == 0) {
+            exit_reason = 1;
+        }
         ProxorGui::dataStore->prepare_exit = true;
         //
         proxor_set_spmode_system_proxy(false, false);
