@@ -895,6 +895,9 @@ void MainWindow::onUpdateStaged() {
         QSystemTrayIcon::Information,
         4000
     );
+    // User expects immediate restart after manually clicking update
+    this->exit_reason = 1;
+    on_menu_exit_triggered();
 }
 
 void MainWindow::on_menu_exit_triggered() {
@@ -966,6 +969,7 @@ void MainWindow::on_menu_exit_triggered() {
             QProcess::startDetached(program, arguments);
         }
     }
+    QApplication::closeAllWindows();
     tray->hide();
     QCoreApplication::quit();
 }
