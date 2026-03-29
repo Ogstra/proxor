@@ -539,8 +539,7 @@ namespace ProxorGui_sub {
 
         if (_sub_gid < 0 && (content.startsWith("http://") || content.startsWith("https://"))) {
             auto items = QStringList{
-                QObject::tr("As Subscription (add to this group)"),
-                QObject::tr("As Subscription (create new group)"),
+                QObject::tr("As Subscription (new group)"),
                 QObject::tr("As link"),
             };
             bool ok;
@@ -549,18 +548,28 @@ namespace ProxorGui_sub {
                                            QObject::tr("%1\nHow to update?").arg(content),
                                            items, 0, false, &ok);
             if (!ok) return;
-            if (items.indexOf(a) <= 1) asURL = true;
-            if (items.indexOf(a) == 1) createNewGroup = true;
+            if (items.indexOf(a) == 0) { asURL = true; createNewGroup = true; }
         }
 
         runOnNewThread([=] {
             auto gid = _sub_gid;
             if (createNewGroup) {
+                auto current = ProxorGui::profileManager->CurrentGroup();
+                bool onlyEmptyDefault = (current != nullptr && current->url.isEmpty() &&
+                                         current->Profiles().isEmpty() &&
+                                         ProxorGui::profileManager->groupsTabOrder.size() == 1);
                 auto group = ProxorGui::ProfileManager::NewGroup();
-                group->name = QUrl(str).host();
+                group->name = QObject::tr("Sub");
                 group->url = str;
                 ProxorGui::profileManager->AddGroup(group);
                 gid = group->id;
+                if (onlyEmptyDefault) {
+                    // Put the new Sub group first; keep Default as second tab
+                    auto &order = ProxorGui::profileManager->groupsTabOrder;
+                    order.removeAll(gid);
+                    order.prepend(gid);
+                    ProxorGui::profileManager->SaveManager();
+                }
                 MW_dialog_message("SubUpdater", "NewGroup");
             }
             Update(str, gid, asURL);
