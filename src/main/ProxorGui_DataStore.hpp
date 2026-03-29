@@ -120,8 +120,8 @@ namespace ProxorGui {
         QString user_agent = ""; // set at main.cpp
         bool sub_use_proxy = false;
         bool sub_clear = false;
-        bool sub_insecure = false;
-        int sub_auto_update = -30;
+        bool sub_insecure = true;
+        int sub_auto_update = 60;
         bool check_update_on_start = true;
 
         // Security
