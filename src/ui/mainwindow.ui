@@ -186,12 +186,6 @@
         </property>
         <item>
          <widget class="QToolButton" name="toolButton_url_test">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
           <property name="text">
            <string>URL Test</string>
           </property>
@@ -205,12 +199,6 @@
         </item>
         <item>
          <widget class="QToolButton" name="toolButton_update_subscription">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
           <property name="text">
            <string>Update Sub</string>
           </property>
