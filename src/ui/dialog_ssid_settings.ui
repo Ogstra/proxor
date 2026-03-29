@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>DialogSSIDSettings</class>
+ <widget class="QDialog" name="DialogSSIDSettings">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>420</width>
+    <height>360</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>400</width>
+    <height>0</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>On-Demand WiFi Settings</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QGroupBox" name="groupBox_activation">
+     <property name="title">
+      <string>On-Demand Activation</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_activation">
+      <item>
+       <widget class="QCheckBox" name="ssid_on_demand_enabled">
+        <property name="text">
+         <string>Enable automatic proxy activation by WiFi SSID</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupBox_ssids">
+     <property name="title">
+      <string>Trigger SSIDs</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_ssids">
+      <item>
+       <widget class="QListWidget" name="ssid_list_widget"/>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayout_input">
+        <item>
+         <widget class="QLineEdit" name="ssid_input">
+          <property name="placeholderText">
+           <string>Enter SSID name</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btn_add_ssid">
+          <property name="text">
+           <string>Add</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btn_remove_ssid">
+          <property name="text">
+           <string>Remove</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QDialogButtonBox" name="buttonBox">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <property name="standardButtons">
+      <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
