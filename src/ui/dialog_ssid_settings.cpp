@@ -1,7 +1,11 @@
-#include "ui_dialog_ssid_settings.h"
 #include "dialog_ssid_settings.h"
-#include "main/ProxorGui.hpp"
+#include "ui_dialog_ssid_settings.h"
+
 #include "main/GuiUtils.hpp"
+#include "main/ProxorGui.hpp"
+
+#include <QLabel>
+#include <QCheckBox>
 
 DialogSSIDSettings::DialogSSIDSettings(QWidget *parent) : QDialog(parent), ui(new Ui::DialogSSIDSettings) {
     ui->setupUi(this);
