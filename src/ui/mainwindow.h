@@ -18,6 +18,10 @@
 
 #include "GroupSort.hpp"
 
+#ifdef Q_OS_WIN
+#include "sys/WifiMonitor.hpp"
+#endif
+
 #include "db/ProxyEntity.hpp"
 #include "db/Group.hpp"
 #include "main/GuiUtils.hpp"
@@ -144,6 +148,10 @@ private slots:
 
     void on_tabWidget_currentChanged(int index);
 
+#ifdef Q_OS_WIN
+    void onWifiSsidChanged(const QString &ssid);
+#endif
+
 private:
     Ui::MainWindow *ui;
     QSystemTrayIcon *tray;
@@ -151,6 +159,9 @@ private:
     QShortcut *shortcut_esc = new QShortcut(QKeySequence("Esc"), this);
     //
     ProxorGui_sys::CoreProcess *core_process;
+#ifdef Q_OS_WIN
+    WifiMonitor *wifi_monitor = nullptr;
+#endif
     qint64 vpn_pid = 0;
     //
     bool qvLogAutoScoll = true;

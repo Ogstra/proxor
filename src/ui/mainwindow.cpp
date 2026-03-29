@@ -29,6 +29,7 @@
 
 #ifdef Q_OS_WIN
 #include "3rdparty/WinCommander.hpp"
+#include "sys/WifiMonitor.hpp"
 #else
 #ifdef Q_OS_LINUX
 #include "sys/linux/LinuxCap.h"
@@ -590,6 +591,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         },
         DS_cores);
 
+#ifdef Q_OS_WIN
+    wifi_monitor = new WifiMonitor(this);
+    connect(wifi_monitor, &WifiMonitor::ssidChanged, this, &MainWindow::onWifiSsidChanged);
+    wifi_monitor->start();
+#endif
+
     const bool restore_system_proxy = ProxorGui::dataStore->remember_spmode.contains("system_proxy");
     const bool restore_vpn = ProxorGui::dataStore->remember_spmode.contains("vpn") || ProxorGui::dataStore->flag_restart_tun_on;
 
@@ -643,6 +650,30 @@ void MainWindow::closeEvent(QCloseEvent *event) {
 MainWindow::~MainWindow() {
     delete ui;
 }
+
+#ifdef Q_OS_WIN
+void MainWindow::onWifiSsidChanged(const QString &ssid) {
+    if (!ProxorGui::dataStore->ssid_on_demand_enabled) return;
+
+    bool isTrigger = !ssid.isEmpty() &&
+                     ProxorGui::dataStore->ssid_trigger_list.contains(ssid, Qt::CaseSensitive);
+
+    if (isTrigger) {
+        // Start with the last-used profile if one exists and the proxy isn't already running
+        auto targetId = ProxorGui::dataStore->remember_id;
+        if (targetId >= 0 && ProxorGui::dataStore->started_id < 0) {
+            MW_show_log(tr("[On-Demand] Trigger SSID \"%1\" detected — starting profile %2").arg(ssid).arg(targetId));
+            proxor_start(targetId);
+        }
+    } else {
+        // Non-trigger SSID or disconnected — stop if the proxy is running
+        if (ProxorGui::dataStore->started_id >= 0) {
+            MW_show_log(tr("[On-Demand] Non-trigger SSID \"%1\" — stopping proxy").arg(ssid));
+            proxor_stop(false, false);
+        }
+    }
+}
+#endif
 
 // Group tab manage
 
