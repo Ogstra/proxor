@@ -86,6 +86,7 @@ jobs:
         if: matrix.platform == 'windows-2022'
         env:
           DL_QT_VER: ${{ matrix.qt_version }}
+          GH_TOKEN: ${{ github.token }}
         run: bash ./libs/download_proxor_qtsdk_win.sh
       # ========================================================================================================= 编译与 Qt 无关的依赖
       - name: Install ninja-build tool
