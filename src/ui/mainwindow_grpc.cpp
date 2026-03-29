@@ -583,35 +583,41 @@ void MainWindow::CheckUpdate(bool silent) {
             details += QObject::tr("\n\nAutomatic installation is disabled in appdata mode.");
         }
 
-        QMessageBox box(QMessageBox::Question, QObject::tr("Update Available"), details, QMessageBox::NoButton, this);
-        QAbstractButton *downloadButton = nullptr;
-        if (allow_updater) {
-            downloadButton = box.addButton(QObject::tr("Download and Restart"), QMessageBox::AcceptRole);
-        }
-        QAbstractButton *openButton = box.addButton(QObject::tr("Open Release Page"), QMessageBox::AcceptRole);
-        box.addButton(QObject::tr("Cancel"), QMessageBox::RejectRole);
-        box.exec();
+        bool dialogClosed = false;
+        while (!dialogClosed) {
+            QMessageBox box(QMessageBox::Question, QObject::tr("Update Available"), details, QMessageBox::NoButton, this);
+            QAbstractButton *downloadButton = nullptr;
+            if (allow_updater) {
+                downloadButton = box.addButton(QObject::tr("Download and Restart"), QMessageBox::AcceptRole);
+            }
+            QAbstractButton *openButton = box.addButton(QObject::tr("Open Release Page"), QMessageBox::AcceptRole);
+            box.addButton(QObject::tr("Cancel"), QMessageBox::RejectRole);
+            box.exec();
 
-        if (downloadButton == box.clickedButton() && allow_updater) {
-            updateProgressDialog = new UpdateProgressDialog(response.assets_name().c_str(), this);
-            connect(updateProgressDialog, &UpdateProgressDialog::downloadComplete, this, &MainWindow::onUpdateStaged);
-            updateProgressDialog->show();
+            if (downloadButton == box.clickedButton() && allow_updater) {
+                dialogClosed = true;
+                updateProgressDialog = new UpdateProgressDialog(response.assets_name().c_str(), this);
+                connect(updateProgressDialog, &UpdateProgressDialog::downloadComplete, this, &MainWindow::onUpdateStaged);
+                updateProgressDialog->show();
 
-            runOnNewThread([=] {
-                bool ok2;
-                libcore::UpdateReq request2;
-                request2.set_action(libcore::UpdateAction::Download);
-                auto response2 = ProxorGui_rpc::defaultClient->Update(&ok2, request2);
-                if (!ok2) return;
+                runOnNewThread([=] {
+                    bool ok2;
+                    libcore::UpdateReq request2;
+                    request2.set_action(libcore::UpdateAction::Download);
+                    auto response2 = ProxorGui_rpc::defaultClient->Update(&ok2, request2);
+                    if (!ok2) return;
 
-                if (!response2.error().empty()) {
-                    runOnUiThread([=] {
-                        MessageBoxWarning(QObject::tr("Update"), response2.error().c_str());
-                    });
-                }
-            });
-        } else if (openButton == box.clickedButton() && releasePageUrl.isValid()) {
-            QDesktopServices::openUrl(releasePageUrl);
+                    if (!response2.error().empty()) {
+                        runOnUiThread([=] {
+                            MessageBoxWarning(QObject::tr("Update"), response2.error().c_str());
+                        });
+                    }
+                });
+            } else if (openButton == box.clickedButton() && releasePageUrl.isValid()) {
+                QDesktopServices::openUrl(releasePageUrl);
+            } else {
+                dialogClosed = true;
+            }
         }
     });
 #endif

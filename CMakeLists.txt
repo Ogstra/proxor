@@ -334,6 +334,8 @@ if (WIN32)
     )
     if (MSVC)
         set_property(TARGET proxor PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+        set_property(TARGET proxor APPEND_STRING PROPERTY LINK_FLAGS " /MANIFESTUAC:\"level='requireAdministrator' uiAccess='false'\"")
+        set_property(TARGET ${PROXOR_GUI_TARGET} APPEND_STRING PROPERTY LINK_FLAGS " /MANIFESTUAC:\"level='requireAdministrator' uiAccess='false'\"")
     endif ()
 endif ()
 
