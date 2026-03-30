@@ -1369,12 +1369,10 @@ void MainWindow::refresh_proxy_list_impl_refresh_data(const int &id) {
 
         // C4: Test Result
         f = f0->clone();
-        if (profile->full_test_report.isEmpty()) {
+        {
             auto color = profile->DisplayLatencyColor();
             if (color.isValid()) f->setForeground(color);
             f->setText(profile->DisplayLatency());
-        } else {
-            f->setText(profile->full_test_report);
         }
         ui->proxyListTable->setItem(row, 4, f);
 

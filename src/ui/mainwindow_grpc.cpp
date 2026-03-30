@@ -225,6 +225,8 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
 
                     if (!result.error().empty()) {
                         MW_show_log(tr("[%1] test error: %2").arg(profile->bean->DisplayTypeAndName(), result.error().c_str()));
+                    } else if (!result.full_report().empty()) {
+                        MW_show_log(tr("[%1] %2").arg(profile->bean->DisplayTypeAndName(), result.full_report().c_str()));
                     }
 
                     auto profileId = profile->id;
