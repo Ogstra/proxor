@@ -103,6 +103,7 @@ namespace ProxorGui_fmt {
         // protocol
         if (proxy_type == proxy_VLESS) {
             flow = GetQueryValue(query, "flow", "");
+            stream->packet_encoding = "xudp";
         }
 
         return !(password.isEmpty() || serverAddress.isEmpty());
@@ -176,6 +177,7 @@ namespace ProxorGui_fmt {
             if (!scy.isEmpty()) security = scy;
             // TLS (XTLS?)
             stream->security = objN["tls"].toString();
+            stream->packet_encoding = "xudp";
             // TODO quic & kcp
             return true;
         } else {
@@ -212,6 +214,7 @@ namespace ProxorGui_fmt {
             if (stream->utlsFingerprint.isEmpty()) {
                 stream->utlsFingerprint = ProxorGui::dataStore->utlsFingerprint;
             }
+            stream->packet_encoding = "xudp";
 
             // type
             if (stream->network == "ws") {
