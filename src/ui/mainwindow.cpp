@@ -55,6 +55,7 @@
 #include <QFileInfo>
 #include <QPainter>
 #include <QStyleHints>
+#include <QNetworkInformation>
 
 namespace {
 class CenteredCheckBoxDelegate final : public QStyledItemDelegate {
@@ -617,9 +618,24 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     TM_auto_update_subsctiption_Reset_Minute(ProxorGui::dataStore->sub_auto_update);
 
     if (ProxorGui::dataStore->check_update_on_start) {
-        setTimeout([this] {
-            runOnNewThread([this] { CheckUpdate(true); });
-        }, this, 1500);
+        auto doCheck = [this]() {
+            setTimeout([this] { runOnNewThread([this] { CheckUpdate(true); }); }, this, 1500);
+        };
+        if (QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability)) {
+            auto *ni = QNetworkInformation::instance();
+            if (ni->reachability() == QNetworkInformation::Reachability::Online) {
+                doCheck();
+            } else {
+                connect(ni, &QNetworkInformation::reachabilityChanged, this,
+                    [this, ni](QNetworkInformation::Reachability r) {
+                        if (r != QNetworkInformation::Reachability::Online) return;
+                        disconnect(ni, &QNetworkInformation::reachabilityChanged, this, nullptr);
+                        runOnNewThread([this] { CheckUpdate(true); });
+                    });
+            }
+        } else {
+            doCheck();
+        }
     }
 
     if (!ProxorGui::dataStore->flag_tray) show();
