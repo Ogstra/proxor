@@ -989,6 +989,7 @@ void MainWindow::dialog_message_impl(const QString &sender, const QString &info)
         }
     } else if (sender == "SubUpdater") {
         if (info.startsWith("finish")) {
+            refresh_groups();
             refresh_proxy_list();
             if (!info.contains("dingyue")) {
                 show_log_impl(tr("Imported %1 profile(s)").arg(ProxorGui::dataStore->imported_count));
