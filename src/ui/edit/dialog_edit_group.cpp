@@ -46,8 +46,7 @@ DialogEditGroup::DialogEditGroup(const std::shared_ptr<ProxorGui::Group> &ent, Q
 
     connect(ui->copy_links, &QPushButton::clicked, this, [=] {
         QStringList links;
-        for (const auto &[_, profile]: ProxorGui::profileManager->profiles) {
-            if (profile->gid != ent->id) continue;
+        for (const auto &profile: ent->Profiles()) {
             links += profile->bean->ToShareLink();
         }
         QApplication::clipboard()->setText(links.join("\n"));
@@ -55,8 +54,7 @@ DialogEditGroup::DialogEditGroup(const std::shared_ptr<ProxorGui::Group> &ent, Q
     });
     connect(ui->copy_links_nkr, &QPushButton::clicked, this, [=] {
         QStringList links;
-        for (const auto &[_, profile]: ProxorGui::profileManager->profiles) {
-            if (profile->gid != ent->id) continue;
+        for (const auto &profile: ent->Profiles()) {
             links += profile->bean->ToProxorShareLink(profile->type);
         }
         QApplication::clipboard()->setText(links.join("\n"));
