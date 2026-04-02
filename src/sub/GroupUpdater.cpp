@@ -691,7 +691,9 @@ namespace ProxorGui_sub {
                 if (only_out.length() + only_in.length() == 0) change_text = QObject::tr("Nothing");
             }
 
-            MW_show_log("<<<<<<<< " + QObject::tr("Change of %1:").arg(group->name) + "\n" + change_text);
+            auto change_prefix = "<<<<<<<< " + QObject::tr("Change of %1:").arg(group->name);
+            auto change_separator = change_text.contains('\n') ? "\n" : " ";
+            MW_show_log(change_prefix + change_separator + change_text);
             MW_dialog_message("SubUpdater", "finish-dingyue");
         } else {
             ProxorGui::dataStore->imported_count = rawUpdater->updated_order.count();

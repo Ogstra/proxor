@@ -108,8 +108,10 @@ namespace ProxorGui_traffic {
                 UpdateAll();
             }
 
-            // Keep connection updates independent from traffic refresh settings.
-            QJsonArray conn_list = get_connection_list();
+            QJsonArray conn_list;
+            if (ProxorGui::dataStore->connection_statistics) {
+                conn_list = get_connection_list();
+            }
 
             loop_mutex.unlock();
 

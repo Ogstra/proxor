@@ -41,7 +41,9 @@ namespace ProxorGui_fmt {
 
         QString ToProxorShareLink(const QString &type);
 
-        void ResolveDomainToIP(const std::function<void()> &onFinished);
+        [[nodiscard]] bool CanResolveDomainToIP() const;
+
+        void ResolveDomainToIP(const std::function<void(bool)> &onFinished);
 
         //
 
