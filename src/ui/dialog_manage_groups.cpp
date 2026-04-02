@@ -48,6 +48,9 @@ void DialogManageGroups::on_add_clicked() {
         ProxorGui::profileManager->AddGroup(ent);
         AddGroupToListIfExist(ent->id);
         MW_dialog_message(Dialog_DialogManageGroups, "refresh-1");
+        if (!ent->url.trimmed().isEmpty()) {
+            ProxorGui_sub::groupUpdater->AsyncUpdate(ent->url, ent->id);
+        }
     }
 }
 
