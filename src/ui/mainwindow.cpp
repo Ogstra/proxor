@@ -1447,13 +1447,15 @@ void MainWindow::refresh_proxy_list_impl(const int &id, GroupSortAction groupSor
         // 清空数据
         ui->proxyListTable->row2Id.clear();
         ui->proxyListTable->setRowCount(0);
+        auto group = ProxorGui::profileManager->CurrentGroup();
+        if (group == nullptr) return;
         // 添加行
         int row = -1;
-        for (const auto &[id, profile]: ProxorGui::profileManager->profiles) {
-            if (ProxorGui::dataStore->current_group != profile->gid) continue;
+        for (const auto &profile: group->ProfilesWithOrder()) {
+            if (profile == nullptr) continue;
             row++;
             ui->proxyListTable->insertRow(row);
-            ui->proxyListTable->row2Id += id;
+            ui->proxyListTable->row2Id += profile->id;
         }
     }
 

@@ -167,6 +167,32 @@ namespace ProxorGui {
         stmt.exec();
     }
 
+    void ProfileManager::RebuildGroupProfileIndex() {
+        groupProfileIds.clear();
+        for (const auto &[gid, _]: groups) {
+            groupProfileIds[gid] = {};
+        }
+        for (const auto &[id, profile]: profiles) {
+            if (profile == nullptr) continue;
+            AddProfileToGroupIndex(id, profile->gid);
+        }
+    }
+
+    void ProfileManager::AddProfileToGroupIndex(int profileId, int gid) {
+        if (gid < 0) return;
+        auto &ids = groupProfileIds[gid];
+        if (!ids.contains(profileId)) {
+            ids.push_back(profileId);
+            std::sort(ids.begin(), ids.end());
+        }
+    }
+
+    void ProfileManager::RemoveProfileFromGroupIndex(int profileId, int gid) {
+        if (!groupProfileIds.contains(gid)) return;
+        auto &ids = groupProfileIds[gid];
+        ids.removeAll(profileId);
+    }
+
     void ProfileManager::WireEntityCallbacks(const std::shared_ptr<ProxyEntity> &ent) {
         if (ent == nullptr) return;
 
@@ -252,6 +278,7 @@ namespace ProxorGui {
         profilesIdOrder = {};
         groupsIdOrder = {};
         groupsTabOrder = {};
+        groupProfileIds = {};
 
         SQLite::Statement groupsQuery(*m_db, "SELECT id, data FROM groups ORDER BY id");
         while (groupsQuery.executeStep()) {
@@ -307,6 +334,7 @@ namespace ProxorGui {
             }
         }
         groupsTabOrder = normalizedOrder;
+        RebuildGroupProfileIndex();
     }
 
     void ProfileManager::LoadManager() {
@@ -315,6 +343,7 @@ namespace ProxorGui {
         profilesIdOrder = {};
         groupsIdOrder = {};
         groupsTabOrder = {};
+        groupProfileIds = {};
 
         const auto dbExists = QFile::exists(kDatabaseFile);
         const auto jsonExists = !filterIntJsonFile(QStringLiteral("profiles")).isEmpty()
@@ -411,6 +440,7 @@ namespace ProxorGui {
             profilesIdOrder = newProfilesIdOrder;
             groupsIdOrder = newGroupsIdOrder;
             groupsTabOrder = newGroupsIdOrder;
+            RebuildGroupProfileIndex();
 
             for (const auto &[id, group]: groups) {
                 WireGroupCallbacks(group);
@@ -553,6 +583,7 @@ namespace ProxorGui {
         ent->id = NewProfileID();
         profiles[ent->id] = ent;
         profilesIdOrder.push_back(ent->id);
+        AddProfileToGroupIndex(ent->id, ent->gid);
         WireEntityCallbacks(ent);
 
         auto group = GetGroup(ent->gid);
@@ -574,6 +605,7 @@ namespace ProxorGui {
                 profilesIdOrder << ent->id;
                 std::sort(profilesIdOrder.begin(), profilesIdOrder.end());
             }
+            AddProfileToGroupIndex(ent->id, ent->gid);
             WireEntityCallbacks(ent);
         }
         return SaveProfileToDb(ent->id);
@@ -590,6 +622,7 @@ namespace ProxorGui {
                 group->order.removeAll(id);
                 SaveGroup(group);
             }
+            RemoveProfileFromGroupIndex(id, ent->gid);
         }
 
         profiles.erase(id);
@@ -606,6 +639,7 @@ namespace ProxorGui {
             oldGroup->toggle_proxy_ids.removeAll(ent->id);
             SaveGroup(oldGroup);
         }
+        RemoveProfileFromGroupIndex(ent->id, ent->gid);
 
         auto newGroup = GetGroup(gid);
         if (newGroup != nullptr) {
@@ -619,11 +653,29 @@ namespace ProxorGui {
         }
 
         ent->gid = gid;
+        AddProfileToGroupIndex(ent->id, gid);
         SaveProfile(ent);
     }
 
     std::shared_ptr<ProxyEntity> ProfileManager::GetProfile(int id) {
         return profiles.count(id) ? profiles[id] : nullptr;
+    }
+
+    QList<int> ProfileManager::GroupProfileIds(int gid) const {
+        return groupProfileIds.value(gid);
+    }
+
+    QList<std::shared_ptr<ProxyEntity>> ProfileManager::GroupProfiles(int gid) const {
+        QList<std::shared_ptr<ProxyEntity>> ret;
+        const auto ids = GroupProfileIds(gid);
+        ret.reserve(ids.size());
+        for (auto id: ids) {
+            const auto it = profiles.find(id);
+            if (it != profiles.end() && it->second != nullptr) {
+                ret += it->second;
+            }
+        }
+        return ret;
     }
 
     Group::Group() {
@@ -665,6 +717,7 @@ namespace ProxorGui {
         groups[ent->id] = ent;
         groupsIdOrder.push_back(ent->id);
         groupsTabOrder.push_back(ent->id);
+        groupProfileIds[ent->id] = {};
         WireGroupCallbacks(ent);
 
         const auto saved = SaveGroup(ent);
@@ -688,6 +741,9 @@ namespace ProxorGui {
             if (!groupsTabOrder.contains(ent->id)) {
                 groupsTabOrder << ent->id;
             }
+            if (!groupProfileIds.contains(ent->id)) {
+                groupProfileIds[ent->id] = {};
+            }
             WireGroupCallbacks(ent);
         }
         return SaveGroupToDb(ent->id);
@@ -696,10 +752,7 @@ namespace ProxorGui {
     void ProfileManager::DeleteGroup(int gid) {
         if (groups.size() <= 1) return;
 
-        QList<int> toDelete;
-        for (const auto &[id, profile]: profiles) {
-            if (profile->gid == gid) toDelete += id;
-        }
+        auto toDelete = GroupProfileIds(gid);
         for (const auto &id: toDelete) {
             DeleteProfile(id);
         }
@@ -707,6 +760,7 @@ namespace ProxorGui {
         groups.erase(gid);
         groupsIdOrder.removeAll(gid);
         groupsTabOrder.removeAll(gid);
+        groupProfileIds.remove(gid);
         DeleteGroupFromDb(gid);
         SaveGroupsTabOrder();
 
@@ -724,11 +778,7 @@ namespace ProxorGui {
     }
 
     QList<std::shared_ptr<ProxyEntity>> Group::Profiles() const {
-        QList<std::shared_ptr<ProxyEntity>> ret;
-        for (const auto &[_, profile]: profileManager->profiles) {
-            if (id == profile->gid) ret += profile;
-        }
-        return ret;
+        return profileManager->GroupProfiles(id);
     }
 
     QList<std::shared_ptr<ProxyEntity>> Group::ProfilesWithOrder() const {
