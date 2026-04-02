@@ -245,6 +245,7 @@ namespace ProxorGui {
         _add(new configItem("inbound_auth", dynamic_cast<JsonStore *>(inbound_auth), itemType::jsonStore));
 
         _add(new configItem("user_agent2", &user_agent, itemType::string));
+        _add(new configItem("last_run_version", &last_run_version, itemType::string));
         _add(new configItem("test_url", &test_latency_url, itemType::string));
         _add(new configItem("test_url_dl", &test_download_url, itemType::string));
         _add(new configItem("test_dl_timeout", &test_download_timeout, itemType::integer));
@@ -289,7 +290,6 @@ namespace ProxorGui {
         _add(new configItem("sub_clear", &sub_clear, itemType::boolean));
         _add(new configItem("sub_insecure", &sub_insecure, itemType::boolean));
         _add(new configItem("sub_auto_update", &sub_auto_update, itemType::integer));
-        _add(new configItem("sub_auto_update_migrated", &sub_auto_update_migrated, itemType::boolean));
         _add(new configItem("sub_update_on_start", &sub_update_on_start, itemType::boolean));
         _add(new configItem("check_update_on_start", &check_update_on_start, itemType::boolean));
         _add(new configItem("log_ignore", &log_ignore, itemType::stringList));

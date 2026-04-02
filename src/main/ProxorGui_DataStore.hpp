@@ -93,6 +93,7 @@ namespace ProxorGui {
         // Saved
 
         // Misc
+        QString last_run_version = "";
         QString log_level = "info";
         QString test_latency_url = "https://www.gstatic.com/generate_204";
         QString test_download_url = "https://sao-br-ping.vultr.com/vultr.com.100MB.bin";
@@ -122,7 +123,6 @@ namespace ProxorGui {
         bool sub_clear = false;
         bool sub_insecure = true;
         int sub_auto_update = 30;
-        bool sub_auto_update_migrated = false;
         bool sub_update_on_start = true;
         bool check_update_on_start = true;
 

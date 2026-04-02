@@ -166,19 +166,41 @@ int main(int argc, char* argv[]) {
             return 0;
     }
     auto isLoaded = ProxorGui::dataStore->Load();
+    auto normalizeVersion = [](QString version) {
+        version = SubStrBefore(version, "-").trimmed();
+        return version;
+    };
+    auto versionLessThan = [&](QString lhs, QString rhs) {
+        const auto left = normalizeVersion(lhs).split(".");
+        const auto right = normalizeVersion(rhs).split(".");
+        const int count = qMax(left.count(), right.count());
+        for (int i = 0; i < count; i++) {
+            const int lv = i < left.count() ? left[i].toInt() : 0;
+            const int rv = i < right.count() ? right[i].toInt() : 0;
+            if (lv != rv) return lv < rv;
+        }
+        return false;
+    };
+    const QString currentVersion = normalizeVersion(NKR_VERSION);
     if (!isLoaded) {
+        ProxorGui::dataStore->last_run_version = currentVersion;
         ProxorGui::dataStore->Save();
     } else if (!ProxorGui::dataStore->fake_dns_migrated) {
         // One-time migration: enable fake-dns for existing installs upgrading from pre-1.2.3.
         // Without fake-dns, every new connection incurs a 400ms-1.3s DNS round-trip through the proxy.
         ProxorGui::dataStore->fake_dns = true;
         ProxorGui::dataStore->fake_dns_migrated = true;
-        ProxorGui::dataStore->Save();
-    } else if (!ProxorGui::dataStore->sub_auto_update_migrated) {
+    }
+
+    const QString previousVersion = normalizeVersion(ProxorGui::dataStore->last_run_version);
+    if (previousVersion.isEmpty() || versionLessThan(previousVersion, "1.4.3")) {
         if (ProxorGui::dataStore->sub_auto_update <= 0) {
             ProxorGui::dataStore->sub_auto_update = 30;
         }
-        ProxorGui::dataStore->sub_auto_update_migrated = true;
+        ProxorGui::dataStore->sub_update_on_start = true;
+    }
+    if (ProxorGui::dataStore->last_run_version != currentVersion) {
+        ProxorGui::dataStore->last_run_version = currentVersion;
         ProxorGui::dataStore->Save();
     }
 
