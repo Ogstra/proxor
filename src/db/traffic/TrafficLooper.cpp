@@ -109,7 +109,11 @@ namespace ProxorGui_traffic {
             }
 
             QJsonArray conn_list;
-            if (ProxorGui::dataStore->connection_statistics) {
+            const auto *mainWindow = GetMainWindow();
+            const bool shouldPollConnections = ProxorGui::dataStore->connection_statistics &&
+                                               mainWindow != nullptr &&
+                                               mainWindow->should_refresh_connection_statistics();
+            if (shouldPollConnections) {
                 conn_list = get_connection_list();
             }
 
@@ -127,7 +131,11 @@ namespace ProxorGui_traffic {
                         m->refresh_proxy_list(item->id);
                     }
                 }
-                m->refresh_connection_list(conn_list);
+                if (!ProxorGui::dataStore->connection_statistics) {
+                    m->refresh_connection_list({});
+                } else if (shouldPollConnections) {
+                    m->refresh_connection_list(conn_list);
+                }
             });
         }
     }
