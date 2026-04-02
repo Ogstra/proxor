@@ -289,6 +289,8 @@ namespace ProxorGui {
         _add(new configItem("sub_clear", &sub_clear, itemType::boolean));
         _add(new configItem("sub_insecure", &sub_insecure, itemType::boolean));
         _add(new configItem("sub_auto_update", &sub_auto_update, itemType::integer));
+        _add(new configItem("sub_auto_update_migrated", &sub_auto_update_migrated, itemType::boolean));
+        _add(new configItem("sub_update_on_start", &sub_update_on_start, itemType::boolean));
         _add(new configItem("check_update_on_start", &check_update_on_start, itemType::boolean));
         _add(new configItem("log_ignore", &log_ignore, itemType::stringList));
         _add(new configItem("start_minimal", &start_minimal, itemType::boolean));

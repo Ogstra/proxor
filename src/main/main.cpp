@@ -174,6 +174,12 @@ int main(int argc, char* argv[]) {
         ProxorGui::dataStore->fake_dns = true;
         ProxorGui::dataStore->fake_dns_migrated = true;
         ProxorGui::dataStore->Save();
+    } else if (!ProxorGui::dataStore->sub_auto_update_migrated) {
+        if (ProxorGui::dataStore->sub_auto_update <= 0) {
+            ProxorGui::dataStore->sub_auto_update = 30;
+        }
+        ProxorGui::dataStore->sub_auto_update_migrated = true;
+        ProxorGui::dataStore->Save();
     }
 
     // Datastore & Flags
