@@ -8,6 +8,7 @@
 
 #include <QTime>
 #include <QTableWidgetItem>
+#include <QSet>
 #include <QKeyEvent>
 #include <QSystemTrayIcon>
 #include <QPointer>
@@ -48,6 +49,8 @@ public:
     ~MainWindow() override;
 
     void refresh_proxy_list(const int &id = -1);
+    
+    void refresh_proxy_list_rows(const QList<int> &ids);
 
     void show_group(int gid);
 
@@ -204,6 +207,8 @@ private:
     void refresh_proxy_list_impl(const int &id = -1, GroupSortAction groupSortAction = {});
 
     void refresh_proxy_list_impl_refresh_data(const int &id = -1);
+    
+    void refresh_proxy_list_impl_refresh_data(const QSet<int> &ids);
 
     void keyPressEvent(QKeyEvent *event) override;
 
