@@ -9,6 +9,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 #include <QUrlQuery>
 
 #ifndef NKR_NO_YAML
@@ -37,6 +38,51 @@ namespace ProxorGui_sub {
                 if (value.isString()) return value.toString().toInt();
             }
             return def;
+        }
+
+        QString DecodeSubscriptionTitle(QString title) {
+            title = title.trimmed();
+            if (title.startsWith("base64:", Qt::CaseInsensitive)) {
+                const auto decoded = QByteArray::fromBase64(title.mid(7).toUtf8());
+                if (!decoded.isEmpty()) return QString::fromUtf8(decoded).trimmed();
+            }
+            return title;
+        }
+
+        QString NameFromContentDisposition(const QString &contentDisposition) {
+            if (contentDisposition.isEmpty()) return {};
+
+            const QRegularExpression utf8Pattern(R"(filename\*\s*=\s*UTF-8''([^;]+))",
+                                                 QRegularExpression::CaseInsensitiveOption);
+            auto match = utf8Pattern.match(contentDisposition);
+            if (match.hasMatch()) {
+                return QUrl::fromPercentEncoding(match.captured(1).toUtf8()).trimmed();
+            }
+
+            const QRegularExpression plainPattern(R"(filename\s*=\s*\"?([^\";]+)\"?)",
+                                                  QRegularExpression::CaseInsensitiveOption);
+            match = plainPattern.match(contentDisposition);
+            if (match.hasMatch()) {
+                return match.captured(1).trimmed();
+            }
+
+            return {};
+        }
+
+        QString NameFromSubscriptionUrl(const QUrl &url) {
+            if (!url.isValid()) return {};
+            return url.fragment(QUrl::FullyDecoded).trimmed();
+        }
+
+        QString ResolveSubscriptionName(const QUrl &url, const QList<QPair<QByteArray, QByteArray>> &headers) {
+            auto profileTitle = DecodeSubscriptionTitle(NetworkRequestHelper::GetHeader(headers, "profile-title"));
+            if (!profileTitle.isEmpty()) return profileTitle;
+
+            auto contentDisposition = NameFromContentDisposition(
+                NetworkRequestHelper::GetHeader(headers, "content-disposition"));
+            if (!contentDisposition.isEmpty()) return contentDisposition;
+
+            return NameFromSubscriptionUrl(url);
         }
 
         bool UpdateSip008(const QString &str, RawUpdater *updater) {
@@ -589,6 +635,7 @@ namespace ProxorGui_sub {
         QString sub_user_info;
         bool asURL = _sub_gid >= 0 || _not_sub_as_url; // 把 _str 当作 url 处理（下载内容）
         auto content = _str.trimmed();
+        const auto subscriptionUrl = QUrl(content);
         auto group = ProxorGui::profileManager->GetGroup(_sub_gid);
         if (group != nullptr && group->archive) return;
 
@@ -605,6 +652,10 @@ namespace ProxorGui_sub {
 
             content = resp.data;
             sub_user_info = NetworkRequestHelper::GetHeader(resp.header, "Subscription-UserInfo");
+            auto sub_name = ResolveSubscriptionName(subscriptionUrl, resp.header);
+            if (group != nullptr && !sub_name.isEmpty()) {
+                group->name = sub_name;
+            }
 
             MW_show_log("<<<<<<<< " + QObject::tr("Subscription request fininshed: %1").arg(groupName));
         }
