@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include <QMap>
 #include <SQLiteCpp/SQLiteCpp.h>
 
 #include "main/ProxorGui.hpp"
@@ -52,10 +53,15 @@ namespace ProxorGui {
 
         std::shared_ptr<Group> CurrentGroup();
 
+        [[nodiscard]] QList<int> GroupProfileIds(int gid) const;
+
+        [[nodiscard]] QList<std::shared_ptr<ProxyEntity>> GroupProfiles(int gid) const;
+
     private:
         // sort by id
         QList<int> profilesIdOrder;
         QList<int> groupsIdOrder;
+        QMap<int, QList<int>> groupProfileIds;
         std::unique_ptr<SQLite::Database> m_db;
 
         [[nodiscard]] int NewProfileID() const;
@@ -77,6 +83,12 @@ namespace ProxorGui {
         void DeleteGroupFromDb(int id);
 
         void SaveGroupsTabOrder();
+
+        void RebuildGroupProfileIndex();
+
+        void AddProfileToGroupIndex(int profileId, int gid);
+
+        void RemoveProfileFromGroupIndex(int profileId, int gid);
 
         void WireEntityCallbacks(const std::shared_ptr<ProxyEntity> &ent);
 
