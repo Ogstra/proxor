@@ -2,10 +2,9 @@
 
 #include <QWidget>
 #include <QDialog>
-#include <QMenu>
-#include <QTableWidgetItem>
+#include <QModelIndex>
 
-#include "db/Group.hpp"
+#include "ui/model/GroupListModel.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -23,10 +22,23 @@ public:
 
 private:
     Ui::DialogManageGroups *ui;
+    GroupListModel *groupListModel = nullptr;
+
+    void reload_groups();
+
+    void edit_group(int groupId);
+
+    void remove_group(int groupId);
+
+    void update_group(int groupId);
 
 private slots:
 
     void on_add_clicked();
 
     void on_update_all_clicked();
+
+    void on_listView_clicked(const QModelIndex &index);
+
+    void on_listView_doubleClicked(const QModelIndex &index);
 };
