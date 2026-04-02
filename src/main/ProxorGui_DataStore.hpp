@@ -94,13 +94,13 @@ namespace ProxorGui {
 
         // Misc
         QString log_level = "info";
-        QString test_latency_url = "http://cp.cloudflare.com/";
-        QString test_download_url = "http://cachefly.cachefly.net/10mb.test";
+        QString test_latency_url = "https://www.gstatic.com/generate_204";
+        QString test_download_url = "https://sao-br-ping.vultr.com/vultr.com.100MB.bin";
         int test_download_timeout = 30;
         int test_concurrent = 5;
         bool old_share_link_format = true;
         int traffic_loop_interval = 1000;
-        bool connection_statistics = false;
+        bool connection_statistics = true;
         int current_group = 0; // group id
         QString mux_protocol = "h2mux";
         bool mux_padding = false;
@@ -136,6 +136,7 @@ namespace ProxorGui {
         // On-demand WiFi SSID
         bool ssid_on_demand_enabled = false;
         QStringList ssid_trigger_list = {};
+        int ssid_on_demand_profile_id = -1919;
 
         // Socks & HTTP Inbound
         QString inbound_address = "127.0.0.1";

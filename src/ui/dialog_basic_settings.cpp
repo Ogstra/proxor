@@ -96,6 +96,7 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     D_LOAD_BOOL(check_update_on_start)
     D_LOAD_BOOL(check_include_pre)
     D_LOAD_BOOL(connection_statistics)
+    CACHE.initialConnectionStatistics = ProxorGui::dataStore->connection_statistics;
     D_LOAD_BOOL(start_minimal)
     D_LOAD_INT(max_log_line)
     //
@@ -112,11 +113,6 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     } else {
         ui->rfsh_r->setCurrentIndex(5);
     }
-    //
-    ui->language->setCurrentIndex(ProxorGui::dataStore->language);
-    connect(ui->language, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this, [=](int index) {
-        CACHE.needRestart = true;
-    });
     //
     ui->theme->addItems(QStyleFactory::keys());
     ui->theme->addItem("QDarkStyle");
@@ -222,7 +218,6 @@ void DialogBasicSettings::accept() {
 
     // Style
 
-    ProxorGui::dataStore->language = ui->language->currentIndex();
     D_SAVE_BOOL(connection_statistics)
     D_SAVE_BOOL(check_update_on_start)
     D_SAVE_BOOL(check_include_pre)
@@ -283,6 +278,7 @@ void DialogBasicSettings::accept() {
 
     QStringList str{"UpdateDataStore"};
     if (CACHE.needRestart) str << "NeedRestart";
+    if (CACHE.initialConnectionStatistics != ProxorGui::dataStore->connection_statistics) str << "ConnStatChanged";
     MW_dialog_message(Dialog_DialogBasicSettings, str.join(","));
     QDialog::accept();
 }

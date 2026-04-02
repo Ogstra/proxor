@@ -27,6 +27,7 @@ private:
         QJsonObject extraCore;
         QString custom_inbound;
         bool needRestart = false;
+        bool initialConnectionStatistics = false;
     } CACHE;
 
 private slots:

@@ -29,6 +29,7 @@
 
 #ifdef Q_OS_WIN
 #include "3rdparty/WinCommander.hpp"
+#include "sys/windows/ActiveNetworkType.h"
 #else
 #ifdef Q_OS_LINUX
 #include "sys/linux/LinuxCap.h"
@@ -58,6 +59,8 @@
 #include <QNetworkInformation>
 
 namespace {
+constexpr int kAddGroupTabId = -114514;
+
 class CenteredCheckBoxDelegate final : public QStyledItemDelegate {
 public:
     using QStyledItemDelegate::QStyledItemDelegate;
@@ -116,6 +119,24 @@ public:
     }
 };
 
+class SortableTableWidgetItem final : public QTableWidgetItem {
+public:
+    using QTableWidgetItem::QTableWidgetItem;
+
+    QTableWidgetItem *clone() const override {
+        return new SortableTableWidgetItem(*this);
+    }
+
+    bool operator<(const QTableWidgetItem &other) const override {
+        const auto lhs = data(Qt::UserRole);
+        const auto rhs = other.data(Qt::UserRole);
+        if (lhs.isValid() && rhs.isValid()) {
+            return lhs.toLongLong() < rhs.toLongLong();
+        }
+        return QTableWidgetItem::operator<(other);
+    }
+};
+
 QIcon makeToggleProxyIcon(const QColor &color) {
     QPixmap pixmap(24, 24);
     pixmap.fill(Qt::transparent);
@@ -146,6 +167,13 @@ QWidget *makeCenteredCheckboxCell(QWidget *parent, bool checked, const std::func
     });
     return container;
 }
+
+QString groupTabText(const QString &name) {
+    constexpr int maxLen = 20;
+    if (name.size() <= maxLen) return name;
+    return name.left(maxLen) + "...";
+}
+
 }
 
 void UI_InitMainWindow() {
@@ -178,11 +206,59 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     //
     connect(ui->menu_start, &QAction::triggered, this, [=]() { proxor_start(); });
     connect(ui->menu_stop, &QAction::triggered, this, [=]() { proxor_stop(); });
+    ui->tabWidget->tabBar()->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(ui->tabWidget->tabBar(), &QTabBar::customContextMenuRequested, this, [=](const QPoint &pos) {
+        auto *tabBar = ui->tabWidget->tabBar();
+        const int index = tabBar->tabAt(pos);
+        if (index < 0) return;
+
+        const int gid = tabBar->tabData(index).toInt();
+        if (gid == kAddGroupTabId) return;
+
+        auto group = ProxorGui::profileManager->GetGroup(gid);
+        if (group == nullptr) return;
+
+        QMenu menu(this);
+        menu.setStyleSheet("QMenu::item { padding: 4px 20px 4px 8px; }");
+        auto *updateAction = menu.addAction(tr("Update"));
+        auto *editAction = menu.addAction(tr("Edit"));
+        auto *deleteAction = menu.addAction(tr("Delete"));
+
+        updateAction->setEnabled(!group->url.trimmed().isEmpty());
+        deleteAction->setEnabled(ProxorGui::profileManager->groups.size() > 1);
+
+        auto *chosen = menu.exec(tabBar->mapToGlobal(pos));
+        if (chosen == updateAction) {
+            ProxorGui_sub::groupUpdater->AsyncUpdate(group->url, group->id);
+            return;
+        }
+        if (chosen == editAction) {
+            auto dialog = new DialogEditGroup(group, this);
+            connect(dialog, &QDialog::finished, this, [=] {
+                if (dialog->result() == QDialog::Accepted) {
+                    ProxorGui::profileManager->SaveGroup(group);
+                    refresh_groups();
+                }
+                dialog->deleteLater();
+            });
+            dialog->show();
+            return;
+        }
+        if (chosen == deleteAction) {
+            if (QMessageBox::question(this, tr("Confirmation"), tr("Remove %1?").arg(group->name)) ==
+                QMessageBox::StandardButton::Yes) {
+                ProxorGui::profileManager->DeleteGroup(group->id);
+                refresh_groups();
+            }
+        }
+    });
     connect(ui->tabWidget->tabBar(), &QTabBar::tabMoved, this, [=](int from, int to) {
         // use tabData to track tab & gid
         ProxorGui::profileManager->groupsTabOrder.clear();
         for (int i = 0; i < ui->tabWidget->tabBar()->count(); i++) {
-            ProxorGui::profileManager->groupsTabOrder += ui->tabWidget->tabBar()->tabData(i).toInt();
+            auto gid = ui->tabWidget->tabBar()->tabData(i).toInt();
+            if (gid == kAddGroupTabId) continue;
+            ProxorGui::profileManager->groupsTabOrder += gid;
         }
         ProxorGui::profileManager->SaveManager();
     });
@@ -527,6 +603,23 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     };
     auto move_tests_to_menu = [=](bool menuCurrent_Select) {
         return [=] {
+            QList<std::shared_ptr<ProxorGui::ProxyEntity>> profiles;
+            if (menuCurrent_Select) {
+                profiles = get_now_selected_list();
+            } else {
+                auto group = ProxorGui::profileManager->CurrentGroup();
+                if (group != nullptr) {
+                    profiles = group->ProfilesWithOrder();
+                }
+            }
+            bool canResolveDomain = false;
+            for (const auto &profile: profiles) {
+                if (profile != nullptr && profile->bean->CanResolveDomainToIP()) {
+                    canResolveDomain = true;
+                    break;
+                }
+            }
+            ui->menu_resolve_domain->setEnabled(canResolveDomain);
             if (menuCurrent_Select) {
                 ui->menuCurrent_Select->insertAction(ui->actionfake_4, ui->menu_tcp_ping);
                 ui->menuCurrent_Select->insertAction(ui->actionfake_4, ui->menu_url_test);
@@ -672,14 +765,13 @@ void MainWindow::onWifiSsidChanged(const QString &ssid) {
                      ProxorGui::dataStore->ssid_trigger_list.contains(ssid, Qt::CaseSensitive);
 
     if (isTrigger) {
-        // Start with the last-used profile if one exists and the proxy isn't already running
-        auto targetId = ProxorGui::dataStore->remember_id;
+        auto targetId = ProxorGui::dataStore->ssid_on_demand_profile_id;
+        if (targetId < 0) targetId = ProxorGui::dataStore->remember_id;
         if (targetId >= 0 && ProxorGui::dataStore->started_id < 0) {
             MW_show_log(tr("[On-Demand] Trigger SSID \"%1\" detected — starting profile %2").arg(ssid).arg(targetId));
             proxor_start(targetId);
         }
     } else {
-        // Non-trigger SSID or disconnected — stop if the proxy is running
         if (ProxorGui::dataStore->started_id >= 0) {
             MW_show_log(tr("[On-Demand] Non-trigger SSID \"%1\" — stopping proxy").arg(ssid));
             proxor_stop(false, false);
@@ -703,6 +795,31 @@ inline int groupId2TabIndex(int gid) {
 
 void MainWindow::on_tabWidget_currentChanged(int index) {
     if (ProxorGui::dataStore->refreshing_group_list) return;
+    if (ui->tabWidget->tabBar()->tabData(index).toInt() == kAddGroupTabId) {
+        auto ent = ProxorGui::ProfileManager::NewGroup();
+        auto dialog = new DialogEditGroup(ent, this);
+        connect(dialog, &QDialog::finished, this, [=] {
+            if (dialog->result() == QDialog::Accepted) {
+                ProxorGui::profileManager->AddGroup(ent);
+                refresh_groups();
+                if (!ent->url.trimmed().isEmpty()) {
+                    ProxorGui_sub::groupUpdater->AsyncUpdate(ent->url, ent->id);
+                }
+            } else {
+                auto currentIndex = groupId2TabIndex(ProxorGui::dataStore->current_group);
+                if (currentIndex >= 0 && currentIndex < ui->tabWidget->count()) {
+                    ui->tabWidget->setCurrentIndex(currentIndex);
+                }
+            }
+            dialog->deleteLater();
+        });
+        dialog->show();
+        auto currentIndex = groupId2TabIndex(ProxorGui::dataStore->current_group);
+        if (currentIndex >= 0 && currentIndex < ui->tabWidget->count()) {
+            ui->tabWidget->setCurrentIndex(currentIndex);
+        }
+        return;
+    }
     if (tabIndex2GroupId(index) == ProxorGui::dataStore->current_group) return;
     show_group(tabIndex2GroupId(index));
 }
@@ -777,6 +894,9 @@ void MainWindow::dialog_message_impl(const QString &sender, const QString &info)
         auto suggestRestartProxy = ProxorGui::dataStore->Save();
         if (info.contains("RouteChanged")) {
             suggestRestartProxy = true;
+        }
+        if (info.contains("ConnStatChanged")) {
+            suggestRestartProxy = false;
         }
         if (info.contains("NeedRestart")) {
             suggestRestartProxy = false;
@@ -1155,18 +1275,28 @@ void MainWindow::refresh_status(const QString &traffic_update) {
     auto icon_status_new = Icon::NONE;
 
     if (running != nullptr) {
-        if (ProxorGui::dataStore->spmode_vpn) {
-            icon_status_new = Icon::VPN;
-        } else if (ProxorGui::dataStore->spmode_system_proxy) {
-            icon_status_new = Icon::SYSTEM_PROXY;
-        } else {
-            icon_status_new = Icon::RUNNING;
+        switch (ProxorGui_sys::DetectActiveNetworkType()) {
+        case ProxorGui_sys::ActiveNetworkType::Wifi:
+            icon_status_new = Icon::ACTIVE_WIFI;
+            break;
+        case ProxorGui_sys::ActiveNetworkType::Ethernet:
+            icon_status_new = Icon::ACTIVE_ETHERNET;
+            break;
+        case ProxorGui_sys::ActiveNetworkType::Unknown:
+            if (ProxorGui::dataStore->spmode_vpn) {
+                icon_status_new = Icon::VPN;
+            } else if (ProxorGui::dataStore->spmode_system_proxy) {
+                icon_status_new = Icon::SYSTEM_PROXY;
+            } else {
+                icon_status_new = Icon::RUNNING;
+            }
+            break;
         }
     }
 
     // refresh title & window icon
     setWindowTitle(make_title(false));
-    if (icon_status_new != icon_status) QApplication::setWindowIcon(Icon::GetTrayIcon(Icon::NONE));
+    if (icon_status_new != icon_status) QApplication::setWindowIcon(Icon::GetTrayIcon(icon_status_new));
 
     // refresh tray
     if (tray != nullptr) {
@@ -1184,26 +1314,31 @@ void MainWindow::refresh_groups() {
     ProxorGui::dataStore->refreshing_group_list = true;
 
     // refresh group?
-    for (int i = ui->tabWidget->count() - 1; i > 0; i--) {
+    for (int i = ui->tabWidget->count() - 1; i >= 0; i--) {
         ui->tabWidget->removeTab(i);
     }
 
     int index = 0;
     for (const auto &gid: ProxorGui::profileManager->groupsTabOrder) {
         auto group = ProxorGui::profileManager->GetGroup(gid);
-        if (index == 0) {
-            ui->tabWidget->setTabText(0, group->name);
-        } else {
-            auto widget2 = new QWidget();
-            auto layout2 = new QVBoxLayout();
-            layout2->setContentsMargins(QMargins());
-            layout2->setSpacing(0);
-            widget2->setLayout(layout2);
-            ui->tabWidget->addTab(widget2, group->name);
-        }
+        auto widget2 = new QWidget();
+        auto layout2 = new QVBoxLayout();
+        layout2->setContentsMargins(QMargins());
+        layout2->setSpacing(0);
+        widget2->setLayout(layout2);
+        ui->tabWidget->addTab(widget2, groupTabText(group->name));
         ui->tabWidget->tabBar()->setTabData(index, gid);
         index++;
     }
+
+    auto addGroupWidget = new QWidget();
+    auto addGroupLayout = new QVBoxLayout();
+    addGroupLayout->setContentsMargins(QMargins());
+    addGroupLayout->setSpacing(0);
+    addGroupWidget->setLayout(addGroupLayout);
+    ui->tabWidget->addTab(addGroupWidget, " +");
+    ui->tabWidget->tabBar()->setTabData(index, kAddGroupTabId);
+    ui->tabWidget->tabBar()->setTabToolTip(index, tr("Add group"));
 
     // show after group changed
     if (ProxorGui::profileManager->CurrentGroup() == nullptr) {
@@ -1749,6 +1884,9 @@ void MainWindow::on_menu_add_subscription_triggered() {
         if (dialog->result() == QDialog::Accepted) {
             ProxorGui::profileManager->AddGroup(ent);
             refresh_groups();
+            if (!ent->url.trimmed().isEmpty()) {
+                ProxorGui_sub::groupUpdater->AsyncUpdate(ent->url, ent->id);
+            }
         }
         dialog->deleteLater();
     });
@@ -1819,7 +1957,18 @@ void MainWindow::on_menu_remove_unavailable_triggered() {
 }
 
 void MainWindow::on_menu_resolve_domain_triggered() {
-    auto profiles = get_selected_or_group();
+    auto profiles_all = get_selected_or_group();
+    if (profiles_all.isEmpty()) return;
+
+    QList<std::shared_ptr<ProxorGui::ProxyEntity>> profiles;
+    int skipped = 0;
+    for (const auto &profile: profiles_all) {
+        if (profile->bean->CanResolveDomainToIP()) {
+            profiles << profile;
+        } else {
+            skipped++;
+        }
+    }
     if (profiles.isEmpty()) return;
 
     if (QMessageBox::question(this,
@@ -1830,13 +1979,24 @@ void MainWindow::on_menu_resolve_domain_triggered() {
     if (mw_sub_updating) return;
     mw_sub_updating = true;
     ProxorGui::dataStore->resolve_count = profiles.count();
+    auto resolved_count = std::make_shared<int>(0);
+    auto failed_count = std::make_shared<int>(0);
 
     for (const auto &profile: profiles) {
-        profile->bean->ResolveDomainToIP([=] {
+        profile->bean->ResolveDomainToIP([=](bool ok) {
             ProxorGui::profileManager->SaveProfile(profile);
+            if (ok) {
+                (*resolved_count)++;
+            } else {
+                (*failed_count)++;
+            }
             if (--ProxorGui::dataStore->resolve_count != 0) return;
             refresh_proxy_list();
             mw_sub_updating = false;
+            MW_show_log(tr("<<<<<<<< Resolved %1 / Skipped %2 / Failed %3")
+                            .arg(*resolved_count)
+                            .arg(skipped)
+                            .arg(*failed_count));
         });
     }
 }
@@ -2231,7 +2391,7 @@ void MainWindow::refresh_connection_list(const QJsonArray &arr) {
         row++;
         ui->tableWidget_conn->insertRow(row);
 
-        auto f0 = std::make_unique<QTableWidgetItem>();
+        auto f0 = std::make_unique<SortableTableWidgetItem>();
         f0->setData(114514, item["ID"].toInt());
 
         // C0: Status
@@ -2254,6 +2414,7 @@ void MainWindow::refresh_connection_list(const QJsonArray &arr) {
         ui->tableWidget_conn->setCellWidget(row, 0, c0);
         auto f_status = f0->clone();
         f_status->setData(Qt::DisplayRole, static_cast<int>(item["Start"].toVariant().toLongLong()));
+        f_status->setData(Qt::UserRole, item["Start"].toVariant().toLongLong());
         ui->tableWidget_conn->setItem(row, 0, f_status);
 
         // C1: Outbound
@@ -2269,7 +2430,7 @@ void MainWindow::refresh_connection_list(const QJsonArray &arr) {
         if (target2.isEmpty() || target1 == target2) {
             target2 = "";
         }
-        f->setText("[" + target1 + "] " + target2);
+        f->setText(target2.isEmpty() ? target1 : target1 + " " + target2);
         ui->tableWidget_conn->setItem(row, 2, f);
 
         // C3: Process
@@ -2293,6 +2454,7 @@ void MainWindow::refresh_connection_list(const QJsonArray &arr) {
         const auto upload = item["Upload"].toVariant().toLongLong();
         const auto download = item["Download"].toVariant().toLongLong();
         f->setText(ReadableSize(upload) + "↑ " + ReadableSize(download) + "↓");
+        f->setData(Qt::UserRole, upload + download);
         ui->tableWidget_conn->setItem(row, 5, f);
     }
     ui->tableWidget_conn->setSortingEnabled(true);

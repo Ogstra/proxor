@@ -302,15 +302,24 @@ namespace ProxorGui {
         _add(new configItem("vpn_internal_tun", &vpn_internal_tun, itemType::boolean));
         _add(new configItem("ssid_on_demand_enabled", &ssid_on_demand_enabled, itemType::boolean));
         _add(new configItem("ssid_trigger_list", &ssid_trigger_list, itemType::stringList));
+        _add(new configItem("ssid_on_demand_profile_id", &ssid_on_demand_profile_id, itemType::integer));
     }
 
     void DataStore::UpdateStartedId(int id) {
         started_id = id;
+        bool save = false;
+        if (id >= 0 && ssid_on_demand_profile_id != id) {
+            ssid_on_demand_profile_id = id;
+            save = true;
+        }
         if (remember_enable) {
             remember_id = id;
-            Save();
+            save = true;
         } else if (remember_id >= 0) {
             remember_id = -1919;
+            save = true;
+        }
+        if (save) {
             Save();
         }
     }

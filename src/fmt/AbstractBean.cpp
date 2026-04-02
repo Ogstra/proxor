@@ -45,26 +45,31 @@ namespace ProxorGui_fmt {
         return QJsonObject2QString(ToJson({"c_cfg", "c_out", "name"}), true) + DisplayType();
     }
 
-    void AbstractBean::ResolveDomainToIP(const std::function<void()> &onFinished) {
-        bool noResolve = false;
-        if (dynamic_cast<ChainBean *>(this) != nullptr) noResolve = true;
-        if (dynamic_cast<CustomBean *>(this) != nullptr) noResolve = true;
-        if (dynamic_cast<NaiveBean *>(this) != nullptr) noResolve = true;
-        if (IsIpAddress(serverAddress)) noResolve = true;
-        if (noResolve) {
-            onFinished();
+    bool AbstractBean::CanResolveDomainToIP() const {
+        if (dynamic_cast<const ChainBean *>(this) != nullptr) return false;
+        if (dynamic_cast<const CustomBean *>(this) != nullptr) return false;
+        if (dynamic_cast<const NaiveBean *>(this) != nullptr) return false;
+        if (IsIpAddress(serverAddress)) return false;
+        return true;
+    }
+
+    void AbstractBean::ResolveDomainToIP(const std::function<void(bool)> &onFinished) {
+        if (!CanResolveDomainToIP()) {
+            onFinished(false);
             return;
         }
 
 #if QT_VERSION >= QT_VERSION_CHECK(5, 11, 0) // TODO older QT
         QHostInfo::lookupHost(serverAddress, QApplication::instance(), [=](const QHostInfo &host) {
             auto addr = host.addresses();
+            bool resolved = false;
             if (!addr.isEmpty()) {
                 auto domain = serverAddress;
                 auto stream = GetStreamSettings(this);
 
                 // replace serverAddress
                 serverAddress = addr.first().toString();
+                resolved = true;
 
                 // replace ws tls
                 if (stream != nullptr) {
@@ -76,8 +81,10 @@ namespace ProxorGui_fmt {
                     }
                 }
             }
-            onFinished();
+            onFinished(resolved);
         });
+#else
+        onFinished(false);
 #endif
     }
 } // namespace ProxorGui_fmt
