@@ -118,12 +118,22 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
     }
     speedtesting = true;
 
-    runOnNewThread([this, profiles, mode, full_test_flags]() {
+    runOnNewThread([this, profiles, mode, full_test_flags, test_group]() {
         QMutex lock_write;
         QMutex lock_return;
+        QMutex lock_results;
         int threadN = ProxorGui::dataStore->test_concurrent;
+        if (mode == libcore::FullTest && full_test_flags.contains("3")) {
+            threadN = 1;
+        }
         int threadN_finished = 0;
         auto profiles_test = profiles; // copy
+        QStringList final_logs;
+        QHash<int, int> profile_log_index;
+        for (int i = 0; i < profiles.count(); i++) {
+            final_logs << "";
+            profile_log_index.insert(profiles[i]->id, i);
+        }
 
         // Threads
         lock_return.lock();
@@ -163,6 +173,11 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
                         if (!c->error.isEmpty()) {
                             profile->full_test_report = c->error;
                             ProxorGui::profileManager->SaveProfile(profile);
+                            if (test_group) {
+                                lock_results.lock();
+                                final_logs[profile_log_index.value(profile->id)] = tr("[%1] test error: %2").arg(profile->bean->DisplayTypeAndName(), c->error);
+                                lock_results.unlock();
+                            }
                             auto profileId = profile->id;
                             runOnUiThread([this, profileId] {
                                 refresh_proxy_list(profileId);
@@ -212,7 +227,14 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
                         extSem.acquire();
                     }
                     //
-                    if (!rpcOK) return;
+                    if (!rpcOK) {
+                        if (test_group) {
+                            lock_results.lock();
+                            final_logs[profile_log_index.value(profile->id)] = tr("[%1] test error: RPC failed").arg(profile->bean->DisplayTypeAndName());
+                            lock_results.unlock();
+                        }
+                        return;
+                    }
 
                     if (result.error().empty()) {
                         profile->latency = result.ms();
@@ -223,10 +245,18 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
                     profile->full_test_report = result.full_report().c_str(); // higher priority
                     ProxorGui::profileManager->SaveProfile(profile);
 
+                    QString result_log;
                     if (!result.error().empty()) {
-                        MW_show_log(tr("[%1] test error: %2").arg(profile->bean->DisplayTypeAndName(), result.error().c_str()));
+                        result_log = tr("[%1] test error: %2").arg(profile->bean->DisplayTypeAndName(), result.error().c_str());
                     } else if (!result.full_report().empty()) {
-                        MW_show_log(tr("[%1] %2").arg(profile->bean->DisplayTypeAndName(), result.full_report().c_str()));
+                        result_log = tr("[%1] %2").arg(profile->bean->DisplayTypeAndName(), result.full_report().c_str());
+                    }
+                    if (test_group) {
+                        lock_results.lock();
+                        final_logs[profile_log_index.value(profile->id)] = result_log;
+                        lock_results.unlock();
+                    } else if (!result_log.isEmpty()) {
+                        MW_show_log(result_log);
                     }
 
                     auto profileId = profile->id;
@@ -241,6 +271,15 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
         lock_return.lock();
         lock_return.unlock();
         speedtesting = false;
+        if (test_group) {
+            lock_results.lock();
+            auto logs = final_logs;
+            lock_results.unlock();
+            logs.removeAll("");
+            if (!logs.isEmpty()) {
+                MW_show_log(logs.join("\n"));
+            }
+        }
         MW_show_log(QObject::tr("Speedtest finished."));
     });
 #endif
