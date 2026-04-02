@@ -709,6 +709,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     };
     connect(TM_auto_update_subsctiption, &QTimer::timeout, this, [&] { UI_update_all_groups(true); });
     TM_auto_update_subsctiption_Reset_Minute(ProxorGui::dataStore->sub_auto_update);
+    if (ProxorGui::dataStore->sub_update_on_start) {
+        setTimeout([this] { UI_update_all_groups(true); }, this, 2000);
+    }
 
     if (ProxorGui::dataStore->check_update_on_start) {
         auto doCheck = [this]() {
