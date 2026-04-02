@@ -31,11 +31,30 @@ namespace ProxorGui {
         int gid = 0;
         int latency = 0;
         std::shared_ptr<ProxorGui_fmt::AbstractBean> bean;
+        QString summary_name;
+        QString summary_serverAddress;
+        int summary_serverPort = 0;
+        QString summary_displayType;
+        QString summary_displayAddress;
+        QString summary_displayName;
+        QString summary_displayTypeAndName;
         std::shared_ptr<ProxorGui_traffic::TrafficData> traffic_data = std::make_shared<ProxorGui_traffic::TrafficData>("");
 
         QString full_test_report;
 
         ProxyEntity(ProxorGui_fmt::AbstractBean *bean, const QString &type_);
+
+        void RefreshSummaryFromBean();
+
+        [[nodiscard]] bool EnsureHydrated() const;
+
+        [[nodiscard]] QString DisplayTypeSummary() const;
+
+        [[nodiscard]] QString DisplayAddressSummary() const;
+
+        [[nodiscard]] QString DisplayNameSummary() const;
+
+        [[nodiscard]] QString DisplayTypeAndNameSummary() const;
 
         [[nodiscard]] QString DisplayLatency() const;
 

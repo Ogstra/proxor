@@ -169,6 +169,11 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
                     QSemaphore extSem;
 
                     if (mode == libcore::TestMode::UrlTest || mode == libcore::FullTest) {
+                        if (!profile->EnsureHydrated()) {
+                            profile->full_test_report = tr("Profile is not hydrated");
+                            ProxorGui::profileManager->SaveProfile(profile);
+                            continue;
+                        }
                         auto c = BuildConfig(profile, true, false);
                         if (!c->error.isEmpty()) {
                             profile->full_test_report = c->error;
@@ -209,6 +214,11 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
                         req.set_full_speed_url(ProxorGui::dataStore->test_download_url.toStdString());
                         req.set_full_speed_timeout(ProxorGui::dataStore->test_download_timeout);
                     } else if (mode == libcore::TcpPing) {
+                        if (!profile->EnsureHydrated()) {
+                            profile->full_test_report = tr("Profile is not hydrated");
+                            ProxorGui::profileManager->SaveProfile(profile);
+                            continue;
+                        }
                         req.set_address(profile->bean->DisplayAddress().toStdString());
                     }
 
@@ -329,6 +339,10 @@ void MainWindow::proxor_start(int _id) {
     auto ents = get_now_selected_list();
     auto ent = (_id < 0 && !ents.isEmpty()) ? ents.first() : ProxorGui::profileManager->GetProfile(_id);
     if (ent == nullptr) return;
+    if (!ent->EnsureHydrated()) {
+        MessageBoxWarning(software_name, tr("Profile is not hydrated"));
+        return;
+    }
 
     if (select_mode) {
         emit profile_selected(ent->id);

@@ -244,7 +244,7 @@
           <number>0</number>
          </property>
          <item row="0" column="0">
-          <widget class="MyTableWidget" name="proxyListTable">
+          <widget class="ProxyListView" name="proxyListTable">
            <property name="contextMenuPolicy">
             <enum>Qt::CustomContextMenu</enum>
            </property>
@@ -955,9 +955,9 @@
  </widget>
  <customwidgets>
   <customwidget>
-   <class>MyTableWidget</class>
-   <extends>QTableWidget</extends>
-   <header>ui/widget/MyTableWidget.h</header>
+   <class>ProxyListView</class>
+   <extends>QTableView</extends>
+   <header>ui/widget/ProxyListView.h</header>
   </customwidget>
  </customwidgets>
  <resources/>
