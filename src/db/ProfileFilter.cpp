@@ -4,8 +4,11 @@ namespace ProxorGui {
 
     QString ProfileFilter_ent_key(const std::shared_ptr<ProxorGui::ProxyEntity> &ent, bool by_address) {
         by_address &= ent->type != "custom";
-        return by_address ? (ent->bean->DisplayAddress() + ent->bean->DisplayType())
-                          : ent->bean->MetadataStrippedIdentity();
+        if (by_address) {
+            return ent->DisplayAddressSummary() + ent->DisplayTypeSummary();
+        }
+        if (!ent->EnsureHydrated()) return ent->DisplayTypeAndNameSummary();
+        return ent->bean->MetadataStrippedIdentity();
     }
 
     void ProfileFilter::Uniq(const QList<std::shared_ptr<ProxyEntity>> &in,

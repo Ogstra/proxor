@@ -7,8 +7,8 @@
 #ifndef MW_INTERFACE
 
 #include <QTime>
-#include <QTableWidgetItem>
 #include <QSet>
+#include <QModelIndex>
 #include <QKeyEvent>
 #include <QSystemTrayIcon>
 #include <QPointer>
@@ -27,6 +27,7 @@
 #include "db/ProxyEntity.hpp"
 #include "db/Group.hpp"
 #include "main/GuiUtils.hpp"
+#include "ui/model/ProxyListModel.h"
 
 #endif
 
@@ -146,9 +147,7 @@ private slots:
 
     void on_menu_resolve_domain_triggered();
 
-    void on_proxyListTable_itemDoubleClicked(QTableWidgetItem *item);
-
-    void on_proxyListTable_itemChanged(QTableWidgetItem *item);
+    void on_proxyListTable_doubleClicked(const QModelIndex &index);
 
     void on_proxyListTable_customContextMenuRequested(const QPoint &pos);
 
@@ -172,6 +171,7 @@ private:
     //
     bool update_staged = false;
     QPointer<UpdateProgressDialog> updateProgressDialog;
+    ProxyListModel *proxyListModel = nullptr;
     //
     bool qvLogAutoScoll = true;
     QTextDocument *qvLogDocument = new QTextDocument(this);
@@ -209,6 +209,8 @@ private:
     void refresh_proxy_list_impl_refresh_data(const int &id = -1);
     
     void refresh_proxy_list_impl_refresh_data(const QSet<int> &ids);
+
+    void apply_proxy_list_search(const QString &text);
 
     void keyPressEvent(QKeyEvent *event) override;
 

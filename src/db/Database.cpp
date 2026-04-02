@@ -44,6 +44,7 @@ namespace ProxorGui {
             }
 
             ent->FromJsonBytes(data);
+            ent->RefreshSummaryFromBean();
             return ent;
         }
 
@@ -199,6 +200,7 @@ namespace ProxorGui {
         std::weak_ptr<ProxyEntity> weakEnt = ent;
         ent->callback_before_save = [this, weakEnt]() {
             if (auto locked = weakEnt.lock()) {
+                locked->RefreshSummaryFromBean();
                 SaveProfileToDb(locked->id);
             }
         };
@@ -529,13 +531,52 @@ namespace ProxorGui {
         _add(new configItem("gid", &gid, itemType::integer));
         _add(new configItem("yc", &latency, itemType::integer));
         _add(new configItem("report", &full_test_report, itemType::string));
+        _add(new configItem("summary_name", &summary_name, itemType::string));
+        _add(new configItem("summary_addr", &summary_serverAddress, itemType::string));
+        _add(new configItem("summary_port", &summary_serverPort, itemType::integer));
+        _add(new configItem("summary_display_type", &summary_displayType, itemType::string));
+        _add(new configItem("summary_display_addr", &summary_displayAddress, itemType::string));
+        _add(new configItem("summary_display_name", &summary_displayName, itemType::string));
+        _add(new configItem("summary_display_type_name", &summary_displayTypeAndName, itemType::string));
 
         if (bean != nullptr) {
             this->bean = std::shared_ptr<ProxorGui_fmt::AbstractBean>(bean);
             _add(new configItem("bean", dynamic_cast<JsonStore *>(bean), itemType::jsonStore));
             _add(new configItem("traffic", dynamic_cast<JsonStore *>(traffic_data.get()), itemType::jsonStore));
+            RefreshSummaryFromBean();
         }
     };
+
+    void ProxyEntity::RefreshSummaryFromBean() {
+        if (bean == nullptr) return;
+        summary_name = bean->name;
+        summary_serverAddress = bean->serverAddress;
+        summary_serverPort = bean->serverPort;
+        summary_displayType = bean->DisplayType();
+        summary_displayAddress = bean->DisplayAddress();
+        summary_displayName = bean->DisplayName();
+        summary_displayTypeAndName = bean->DisplayTypeAndName();
+    }
+
+    bool ProxyEntity::EnsureHydrated() const {
+        return bean != nullptr;
+    }
+
+    QString ProxyEntity::DisplayTypeSummary() const {
+        return summary_displayType;
+    }
+
+    QString ProxyEntity::DisplayAddressSummary() const {
+        return summary_displayAddress;
+    }
+
+    QString ProxyEntity::DisplayNameSummary() const {
+        return summary_displayName;
+    }
+
+    QString ProxyEntity::DisplayTypeAndNameSummary() const {
+        return summary_displayTypeAndName;
+    }
 
     QString ProxyEntity::DisplayLatency() const {
         if (latency < 0) {
@@ -581,6 +622,7 @@ namespace ProxorGui {
         }
 
         ent->id = NewProfileID();
+        ent->RefreshSummaryFromBean();
         profiles[ent->id] = ent;
         profilesIdOrder.push_back(ent->id);
         AddProfileToGroupIndex(ent->id, ent->gid);
@@ -600,6 +642,7 @@ namespace ProxorGui {
     bool ProfileManager::SaveProfile(const std::shared_ptr<ProxyEntity> &ent) {
         if (ent == nullptr || ent->id < 0) return false;
         if (!profiles.count(ent->id)) {
+            ent->RefreshSummaryFromBean();
             profiles[ent->id] = ent;
             if (!profilesIdOrder.contains(ent->id)) {
                 profilesIdOrder << ent->id;
@@ -608,6 +651,7 @@ namespace ProxorGui {
             AddProfileToGroupIndex(ent->id, ent->gid);
             WireEntityCallbacks(ent);
         }
+        ent->RefreshSummaryFromBean();
         return SaveProfileToDb(ent->id);
     }
 

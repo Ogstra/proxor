@@ -194,6 +194,11 @@ void DialogEditProfile::typeSelected(const QString &newType) {
         this->ent->gid = groupId;
     }
 
+    if (!ent->EnsureHydrated()) {
+        MessageBoxWarning(newType, "Profile is not hydrated");
+        return;
+    }
+
     // hide some widget
     auto showAddressPort = type != "chain" && customType != "internal" && customType != "internal-full";
     ui->address->setVisible(showAddressPort);
@@ -328,6 +333,10 @@ void DialogEditProfile::typeSelected(const QString &newType) {
 }
 
 bool DialogEditProfile::onEnd() {
+    if (!ent->EnsureHydrated()) {
+        MessageBoxWarning(software_name, "Profile is not hydrated");
+        return false;
+    }
     // bean
     if (!innerEditor->onEnd()) {
         return false;
