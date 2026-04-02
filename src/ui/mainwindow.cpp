@@ -819,6 +819,23 @@ inline int groupId2TabIndex(int gid) {
     return 0;
 }
 
+bool canReuseGroupTabs(QTabWidget *tabWidget, const QList<int> &groupsTabOrder) {
+    if (tabWidget == nullptr) return false;
+    const int expectedCount = groupsTabOrder.count() + 1;
+    if (tabWidget->count() != expectedCount) return false;
+
+    auto *tabBar = tabWidget->tabBar();
+    if (tabBar == nullptr) return false;
+    if (tabBar->tabData(expectedCount - 1).toInt() != kAddGroupTabId) return false;
+
+    for (int i = 0; i < groupsTabOrder.count(); i++) {
+        if (tabBar->tabData(i).toInt() != groupsTabOrder[i]) return false;
+        auto *page = tabWidget->widget(i);
+        if (page == nullptr || page->layout() == nullptr) return false;
+    }
+    return true;
+}
+
 void MainWindow::on_tabWidget_currentChanged(int index) {
     if (ProxorGui::dataStore->refreshing_group_list) return;
     if (ui->tabWidget->tabBar()->tabData(index).toInt() == kAddGroupTabId) {
@@ -1358,33 +1375,49 @@ void MainWindow::refresh_status(const QString &traffic_update) {
 // refresh_groups -> show_group -> refresh_proxy_list
 void MainWindow::refresh_groups() {
     ProxorGui::dataStore->refreshing_group_list = true;
+    auto &groupsTabOrder = ProxorGui::profileManager->groupsTabOrder;
+    auto *tabBar = ui->tabWidget->tabBar();
+    const bool reuseTabs = canReuseGroupTabs(ui->tabWidget, groupsTabOrder);
 
-    // refresh group?
-    for (int i = ui->tabWidget->count() - 1; i >= 0; i--) {
-        ui->tabWidget->removeTab(i);
+    if (reuseTabs) {
+        for (int index = 0; index < groupsTabOrder.count(); index++) {
+            auto group = ProxorGui::profileManager->GetGroup(groupsTabOrder[index]);
+            if (group == nullptr) continue;
+            ui->tabWidget->setTabText(index, groupTabText(group->name));
+            tabBar->setTabData(index, group->id);
+        }
+        tabBar->setTabData(groupsTabOrder.count(), kAddGroupTabId);
+        tabBar->setTabToolTip(groupsTabOrder.count(), tr("Add group"));
+    } else {
+        ui->proxyListTable->setParent(nullptr);
+        for (int i = ui->tabWidget->count() - 1; i >= 0; i--) {
+            auto *page = ui->tabWidget->widget(i);
+            ui->tabWidget->removeTab(i);
+            if (page != nullptr) page->deleteLater();
+        }
+
+        int index = 0;
+        for (const auto &gid: groupsTabOrder) {
+            auto group = ProxorGui::profileManager->GetGroup(gid);
+            auto widget2 = new QWidget();
+            auto layout2 = new QVBoxLayout();
+            layout2->setContentsMargins(QMargins());
+            layout2->setSpacing(0);
+            widget2->setLayout(layout2);
+            ui->tabWidget->addTab(widget2, group == nullptr ? QString{} : groupTabText(group->name));
+            tabBar->setTabData(index, gid);
+            index++;
+        }
+
+        auto addGroupWidget = new QWidget();
+        auto addGroupLayout = new QVBoxLayout();
+        addGroupLayout->setContentsMargins(QMargins());
+        addGroupLayout->setSpacing(0);
+        addGroupWidget->setLayout(addGroupLayout);
+        ui->tabWidget->addTab(addGroupWidget, " +");
+        tabBar->setTabData(index, kAddGroupTabId);
+        tabBar->setTabToolTip(index, tr("Add group"));
     }
-
-    int index = 0;
-    for (const auto &gid: ProxorGui::profileManager->groupsTabOrder) {
-        auto group = ProxorGui::profileManager->GetGroup(gid);
-        auto widget2 = new QWidget();
-        auto layout2 = new QVBoxLayout();
-        layout2->setContentsMargins(QMargins());
-        layout2->setSpacing(0);
-        widget2->setLayout(layout2);
-        ui->tabWidget->addTab(widget2, groupTabText(group->name));
-        ui->tabWidget->tabBar()->setTabData(index, gid);
-        index++;
-    }
-
-    auto addGroupWidget = new QWidget();
-    auto addGroupLayout = new QVBoxLayout();
-    addGroupLayout->setContentsMargins(QMargins());
-    addGroupLayout->setSpacing(0);
-    addGroupWidget->setLayout(addGroupLayout);
-    ui->tabWidget->addTab(addGroupWidget, " +");
-    ui->tabWidget->tabBar()->setTabData(index, kAddGroupTabId);
-    ui->tabWidget->tabBar()->setTabToolTip(index, tr("Add group"));
 
     // show after group changed
     if (ProxorGui::profileManager->CurrentGroup() == nullptr) {
@@ -1401,6 +1434,11 @@ void MainWindow::refresh_groups() {
 
 void MainWindow::refresh_proxy_list(const int &id) {
     refresh_proxy_list_impl(id, {});
+}
+
+void MainWindow::refresh_proxy_list_rows(const QList<int> &ids) {
+    if (ids.isEmpty()) return;
+    refresh_proxy_list_impl_refresh_data(QSet<int>(ids.begin(), ids.end()));
 }
 
 void MainWindow::refresh_proxy_list_impl(const int &id, GroupSortAction groupSortAction) {
@@ -1492,13 +1530,21 @@ void MainWindow::refresh_proxy_list_impl(const int &id, GroupSortAction groupSor
 }
 
 void MainWindow::refresh_proxy_list_impl_refresh_data(const int &id) {
+    if (id < 0) {
+        refresh_proxy_list_impl_refresh_data(QSet<int>{});
+        return;
+    }
+    refresh_proxy_list_impl_refresh_data(QSet<int>{id});
+}
+
+void MainWindow::refresh_proxy_list_impl_refresh_data(const QSet<int> &ids) {
     auto group = ProxorGui::profileManager->CurrentGroup();
     auto toggleProxyIds = get_toggle_proxy_ids(group);
     QSignalBlocker blocker(ui->proxyListTable);
     // 绘制或更新item(s)
     for (int row = 0; row < ui->proxyListTable->rowCount(); row++) {
         auto profileId = ui->proxyListTable->row2Id[row];
-        if (id >= 0 && profileId != id) continue; // refresh ONE item
+        if (!ids.isEmpty() && !ids.contains(profileId)) continue;
         auto profile = ProxorGui::profileManager->GetProfile(profileId);
         if (profile == nullptr) continue;
 
