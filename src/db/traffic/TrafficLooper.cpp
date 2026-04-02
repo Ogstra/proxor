@@ -122,14 +122,18 @@ namespace ProxorGui_traffic {
             // post to UI
             runOnUiThread([=] {
                 auto m = GetMainWindow();
+                if (m == nullptr) return;
                 if (proxy != nullptr && ProxorGui::dataStore->traffic_loop_interval != 0) {
                     m->refresh_status(QObject::tr("Proxy: %1\nDirect: %2").arg(proxy->DisplaySpeed(), bypass->DisplaySpeed()));
                 }
                 if (ProxorGui::dataStore->traffic_loop_interval != 0) {
+                    QList<int> updatedIds;
+                    updatedIds.reserve(items.size());
                     for (const auto &item: items) {
                         if (item->id < 0) continue;
-                        m->refresh_proxy_list(item->id);
+                        updatedIds += item->id;
                     }
+                    m->refresh_proxy_list_rows(updatedIds);
                 }
                 if (!ProxorGui::dataStore->connection_statistics) {
                     m->refresh_connection_list({});
