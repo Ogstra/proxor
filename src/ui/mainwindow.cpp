@@ -42,8 +42,8 @@
 #include <QLabel>
 #include <QCheckBox>
 #include <QHBoxLayout>
-#include <QSignalBlocker>
 #include <QStyledItemDelegate>
+#include <QTableWidgetItem>
 #include <QTextBlock>
 #include <QScrollBar>
 #include <QScreen>
@@ -56,6 +56,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QPainter>
+#include <QMouseEvent>
 #include <QStyleHints>
 #include <QNetworkInformation>
 
@@ -149,24 +150,6 @@ QIcon makeToggleProxyIcon(const QColor &color) {
     painter.drawEllipse(QRectF(3, 3, 18, 18));
 
     return QIcon(pixmap);
-}
-
-QWidget *makeCenteredCheckboxCell(QWidget *parent, bool checked, const std::function<void(bool)> &onToggled) {
-    auto *container = new QWidget(parent);
-    auto *layout = new QHBoxLayout(container);
-    layout->setContentsMargins(6, 0, 6, 0);
-    layout->setSpacing(0);
-    layout->setAlignment(Qt::AlignCenter);
-
-    auto *checkbox = new QCheckBox(container);
-    checkbox->setText({});
-    checkbox->setChecked(checked);
-    layout->addWidget(checkbox, 0, Qt::AlignCenter);
-
-    QObject::connect(checkbox, &QCheckBox::toggled, container, [onToggled](bool enabled) {
-        onToggled(enabled);
-    });
-    return container;
 }
 
 QString groupTabText(const QString &name) {
@@ -363,12 +346,15 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     };
 
     // table UI
-    ui->proxyListTable->callback_save_order = [=] {
+    proxyListModel = new ProxyListModel(this);
+    ui->proxyListTable->setModel(proxyListModel);
+    ui->proxyListTable->setItemDelegateForColumn(ProxyListModel::ToggleColumn, new CenteredCheckBoxDelegate(ui->proxyListTable));
+    connect(proxyListModel, &ProxyListModel::orderChanged, this, [=](const QList<int> &order) {
         auto group = ProxorGui::profileManager->CurrentGroup();
-        group->order = ui->proxyListTable->order;
+        if (group == nullptr) return;
+        group->order = order;
         ProxorGui::profileManager->SaveGroup(group);
-    };
-    ui->proxyListTable->refresh_data = [=](int id) { refresh_proxy_list_impl_refresh_data(id); };
+    });
     if (auto button = ui->proxyListTable->findChild<QAbstractButton *>(QString(), Qt::FindDirectChildrenOnly)) {
         // Corner Button
         connect(button, &QAbstractButton::clicked, this, [=] { refresh_proxy_list_impl(-1, {GroupSortMethod::ById}); });
@@ -473,21 +459,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             refresh_status();
         }
     });
-    connect(ui->search, &QLineEdit::textChanged, this, [=](const QString &text) {
-        if (text.isEmpty()) {
-            for (int i = 0; i < ui->proxyListTable->rowCount(); i++) {
-                ui->proxyListTable->setRowHidden(i, false);
-            }
-        } else {
-            QList<QTableWidgetItem *> findItem = ui->proxyListTable->findItems(text, Qt::MatchContains);
-            for (int i = 0; i < ui->proxyListTable->rowCount(); i++) {
-                ui->proxyListTable->setRowHidden(i, true);
-            }
-            for (auto item: findItem) {
-                if (item != nullptr) ui->proxyListTable->setRowHidden(item->row(), false);
-            }
-        }
-    });
+    connect(ui->search, &QLineEdit::textChanged, this, &MainWindow::apply_proxy_list_search);
 
     // refresh
     this->refresh_groups();
@@ -1444,53 +1416,40 @@ void MainWindow::refresh_proxy_list_rows(const QList<int> &ids) {
 void MainWindow::refresh_proxy_list_impl(const int &id, GroupSortAction groupSortAction) {
     // id < 0 重绘
     if (id < 0) {
-        // 清空数据
-        ui->proxyListTable->row2Id.clear();
-        ui->proxyListTable->setRowCount(0);
         auto group = ProxorGui::profileManager->CurrentGroup();
         if (group == nullptr) return;
-        // 添加行
-        int row = -1;
+        QList<int> orderedIds;
         for (const auto &profile: group->ProfilesWithOrder()) {
-            if (profile == nullptr) continue;
-            row++;
-            ui->proxyListTable->insertRow(row);
-            ui->proxyListTable->row2Id += profile->id;
+            if (profile != nullptr) orderedIds += profile->id;
         }
-    }
 
-    // 显示排序
-    if (id < 0) {
         switch (groupSortAction.method) {
             case GroupSortMethod::Raw: {
-                auto group = ProxorGui::profileManager->CurrentGroup();
-                if (group == nullptr) return;
-                ui->proxyListTable->order = group->order;
                 break;
             }
             case GroupSortMethod::ById: {
-                // Clear Order
-                ui->proxyListTable->order.clear();
-                ui->proxyListTable->callback_save_order();
+                std::sort(orderedIds.begin(), orderedIds.end());
+                group->order.clear();
+                ProxorGui::profileManager->SaveGroup(group);
                 break;
             }
             case GroupSortMethod::ByAddress:
             case GroupSortMethod::ByName:
             case GroupSortMethod::ByLatency:
             case GroupSortMethod::ByType: {
-                std::sort(ui->proxyListTable->order.begin(), ui->proxyListTable->order.end(),
+                std::sort(orderedIds.begin(), orderedIds.end(),
                           [=](int a, int b) {
                               QString ms_a;
                               QString ms_b;
                               if (groupSortAction.method == GroupSortMethod::ByType) {
-                                  ms_a = ProxorGui::profileManager->GetProfile(a)->bean->DisplayType();
-                                  ms_b = ProxorGui::profileManager->GetProfile(b)->bean->DisplayType();
+                                  ms_a = ProxorGui::profileManager->GetProfile(a)->DisplayTypeSummary();
+                                  ms_b = ProxorGui::profileManager->GetProfile(b)->DisplayTypeSummary();
                               } else if (groupSortAction.method == GroupSortMethod::ByName) {
-                                  ms_a = ProxorGui::profileManager->GetProfile(a)->bean->name;
-                                  ms_b = ProxorGui::profileManager->GetProfile(b)->bean->name;
+                                  ms_a = ProxorGui::profileManager->GetProfile(a)->summary_name;
+                                  ms_b = ProxorGui::profileManager->GetProfile(b)->summary_name;
                               } else if (groupSortAction.method == GroupSortMethod::ByAddress) {
-                                  ms_a = ProxorGui::profileManager->GetProfile(a)->bean->DisplayAddress();
-                                  ms_b = ProxorGui::profileManager->GetProfile(b)->bean->DisplayAddress();
+                                  ms_a = ProxorGui::profileManager->GetProfile(a)->DisplayAddressSummary();
+                                  ms_b = ProxorGui::profileManager->GetProfile(b)->DisplayAddressSummary();
                               } else if (groupSortAction.method == GroupSortMethod::ByLatency) {
                                   ms_a = ProxorGui::profileManager->GetProfile(a)->full_test_report;
                                   ms_b = ProxorGui::profileManager->GetProfile(b)->full_test_report;
@@ -1521,10 +1480,14 @@ void MainWindow::refresh_proxy_list_impl(const int &id, GroupSortAction groupSor
                                   return ms_a < ms_b;
                               }
                           });
+                if (groupSortAction.save_sort) {
+                    group->order = orderedIds;
+                    ProxorGui::profileManager->SaveGroup(group);
+                }
                 break;
             }
         }
-        ui->proxyListTable->update_order(groupSortAction.save_sort);
+        proxyListModel->setProfileIds(orderedIds);
     }
 
     // refresh data
@@ -1541,114 +1504,9 @@ void MainWindow::refresh_proxy_list_impl_refresh_data(const int &id) {
 
 void MainWindow::refresh_proxy_list_impl_refresh_data(const QSet<int> &ids) {
     auto group = ProxorGui::profileManager->CurrentGroup();
-    auto toggleProxyIds = get_toggle_proxy_ids(group);
-    QSignalBlocker blocker(ui->proxyListTable);
-    // 绘制或更新item(s)
-    for (int row = 0; row < ui->proxyListTable->rowCount(); row++) {
-        auto profileId = ui->proxyListTable->row2Id[row];
-        if (!ids.isEmpty() && !ids.contains(profileId)) continue;
-        auto profile = ProxorGui::profileManager->GetProfile(profileId);
-        if (profile == nullptr) continue;
-
-        auto isRunning = profileId == ProxorGui::dataStore->started_id;
-        auto f0 = std::make_unique<QTableWidgetItem>();
-        f0->setData(114514, profileId);
-
-        // Check state
-        auto check = f0->clone();
-        check->setText(isRunning ? "✓" : Int2String(row + 1));
-        ui->proxyListTable->setVerticalHeaderItem(row, check);
-
-        // C0: Toggle
-        auto f = f0->clone();
-        f->setText({});
-        f->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
-        ui->proxyListTable->setItem(row, 0, f);
-        ui->proxyListTable->setCellWidget(row, 0, makeCenteredCheckboxCell(
-            ui->proxyListTable,
-            toggleProxyIds.contains(profileId),
-            [profileId, table = ui->proxyListTable](bool enabled) {
-                auto group = ProxorGui::profileManager->CurrentGroup();
-                if (group == nullptr) return;
-
-                if (enabled) {
-                    // Single-select: uncheck every other row visually
-                    for (int i = 0; i < table->rowCount(); i++) {
-                        auto *w = table->cellWidget(i, 0);
-                        if (!w) continue;
-                        auto *cb = w->findChild<QCheckBox *>();
-                        if (cb && cb->isChecked()) {
-                            auto *item = table->item(i, 0);
-                            if (item && item->data(114514).toInt() != profileId) {
-                                cb->blockSignals(true);
-                                cb->setChecked(false);
-                                cb->blockSignals(false);
-                            }
-                        }
-                    }
-                    group->toggle_proxy_ids = {profileId};
-                } else {
-                    group->toggle_proxy_ids.removeAll(profileId);
-                }
-                ProxorGui::profileManager->SaveGroup(group);
-            }
-        ));
-
-        // C1: Name
-        f = f0->clone();
-        f->setText(profile->bean->name);
-        if (isRunning) f->setForeground(palette().link());
-        ui->proxyListTable->setItem(row, 1, f);
-
-        // C2: Type
-        f = f0->clone();
-        f->setText(profile->bean->DisplayType());
-        if (isRunning) f->setForeground(palette().link());
-        ui->proxyListTable->setItem(row, 2, f);
-
-        // C3: Address+Port
-        f = f0->clone();
-        f->setText(profile->bean->DisplayAddress());
-        if (isRunning) f->setForeground(palette().link());
-        ui->proxyListTable->setItem(row, 3, f);
-
-        // C4: Test Result
-        f = f0->clone();
-        {
-            auto color = profile->DisplayLatencyColor();
-            if (color.isValid()) f->setForeground(color);
-            f->setText(profile->DisplayLatency());
-        }
-        ui->proxyListTable->setItem(row, 4, f);
-
-        // C5: Traffic
-        f = f0->clone();
-        f->setText(profile->traffic_data->DisplayTraffic());
-        ui->proxyListTable->setItem(row, 5, f);
-
-        // C6: Quota (subscription groups only)
-        if (!ui->proxyListTable->isColumnHidden(6)) {
-            f = f0->clone();
-            f->setTextAlignment(Qt::AlignCenter);
-            // Parse "upload=X; download=X; total=X" from group->info
-            qint64 upload = 0, download = 0, total = 0;
-            for (const auto &part : group->info.split(';')) {
-                auto kv = part.trimmed().split('=');
-                if (kv.size() != 2) continue;
-                auto key = kv[0].trimmed();
-                auto val = kv[1].trimmed().toLongLong();
-                if (key == "upload") upload = val;
-                else if (key == "download") download = val;
-                else if (key == "total") total = val;
-            }
-            if (total > 0) {
-                QString usedGiB = QString::number((double)(upload + download) / 1073741824.0, 'f', 2) + " GiB";
-                QString totalGiB = QString::number((double)total / 1073741824.0, 'f', 2) + " GiB";
-                f->setText(usedGiB + " / " + totalGiB);
-            }
-            ui->proxyListTable->setItem(row, 6, f);
-        }
-    }
+    Q_UNUSED(group)
+    proxyListModel->refreshRows(ids);
+    apply_proxy_list_search(ui->search->text());
 
     if (group != nullptr && !group->manually_column_width) {
         auto header = ui->proxyListTable->horizontalHeader();
@@ -1660,11 +1518,15 @@ void MainWindow::refresh_proxy_list_impl_refresh_data(const QSet<int> &ids) {
     }
 }
 
+void MainWindow::apply_proxy_list_search(const QString &text) {
+    ui->proxyListTable->setSearchText(text);
+}
+
 // table菜单相关
 
-void MainWindow::on_proxyListTable_itemDoubleClicked(QTableWidgetItem *item) {
-    if (item == nullptr || item->column() == 0) return;
-    auto id = item->data(114514).toInt();
+void MainWindow::on_proxyListTable_doubleClicked(const QModelIndex &index) {
+    if (!index.isValid() || index.column() == ProxyListModel::ToggleColumn) return;
+    const auto id = index.data(ProxyListModel::ProfileIdRole).toInt();
     if (select_mode) {
         emit profile_selected(id);
         select_mode = false;
@@ -1673,32 +1535,6 @@ void MainWindow::on_proxyListTable_itemDoubleClicked(QTableWidgetItem *item) {
     }
     auto dialog = new DialogEditProfile("", id, this);
     connect(dialog, &QDialog::finished, dialog, &QDialog::deleteLater);
-}
-
-void MainWindow::on_proxyListTable_itemChanged(QTableWidgetItem *item) {
-    if (item == nullptr || item->column() != 0) return;
-
-    auto group = ProxorGui::profileManager->CurrentGroup();
-    if (group == nullptr) return;
-
-    auto profileId = item->data(114514).toInt();
-
-    if (item->checkState() == Qt::Checked) {
-        // Single-select: uncheck every other row before updating the model
-        ui->proxyListTable->blockSignals(true);
-        for (int i = 0; i < ui->proxyListTable->rowCount(); i++) {
-            auto *other = ui->proxyListTable->item(i, 0);
-            if (other && other != item && other->checkState() == Qt::Checked)
-                other->setCheckState(Qt::Unchecked);
-        }
-        ui->proxyListTable->blockSignals(false);
-
-        group->toggle_proxy_ids = {profileId};
-    } else {
-        group->toggle_proxy_ids.removeAll(profileId);
-    }
-
-    ProxorGui::profileManager->SaveGroup(group);
 }
 
 void MainWindow::on_menu_add_from_input_triggered() {
@@ -2100,10 +1936,8 @@ void MainWindow::on_proxyListTable_customContextMenuRequested(const QPoint &pos)
 }
 
 QList<std::shared_ptr<ProxorGui::ProxyEntity>> MainWindow::get_now_selected_list() {
-    auto items = ui->proxyListTable->selectedItems();
     QList<std::shared_ptr<ProxorGui::ProxyEntity>> list;
-    for (auto item: items) {
-        auto id = item->data(114514).toInt();
+    for (const auto id: ui->proxyListTable->selectedProfileIds()) {
         auto ent = ProxorGui::profileManager->GetProfile(id);
         if (ent != nullptr && !list.contains(ent)) list += ent;
     }

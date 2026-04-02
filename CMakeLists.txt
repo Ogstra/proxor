@@ -274,9 +274,12 @@ set(PROJECT_SOURCES
         src/ui/widget/ProxyItem.cpp
         src/ui/widget/ProxyItem.h
         src/ui/widget/ProxyItem.ui
-        src/ui/widget/GroupItem.cpp
-        src/ui/widget/GroupItem.h
-        src/ui/widget/GroupItem.ui
+        src/ui/widget/ProxyListView.cpp
+        src/ui/widget/ProxyListView.h
+        src/ui/model/GroupListModel.cpp
+        src/ui/model/GroupListModel.h
+        src/ui/model/ProxyListModel.cpp
+        src/ui/model/ProxyListModel.h
 
         assets/res/proxor.qrc
         assets/res/qdarkstyle/darkstyle.qrc
