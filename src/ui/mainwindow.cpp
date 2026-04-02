@@ -38,6 +38,7 @@
 #endif
 
 #include <QClipboard>
+#include <QApplication>
 #include <QLabel>
 #include <QCheckBox>
 #include <QHBoxLayout>
@@ -198,6 +199,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     }
     themeManager->ApplyTheme(ProxorGui::dataStore->theme);
     ui->setupUi(this);
+    connect(ui->down_tab, &QTabWidget::currentChanged, this, &MainWindow::on_down_tab_currentChanged);
+    connect(qApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState) {
+        update_connection_statistics_polling_state();
+    });
+    update_connection_statistics_polling_state();
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
     connect(qApp->styleHints(), &QStyleHints::colorSchemeChanged, this, [this](const Qt::ColorScheme &) {
         themeManager->ApplyTheme(ProxorGui::dataStore->theme, true);
@@ -757,6 +763,23 @@ void MainWindow::closeEvent(QCloseEvent *event) {
     }
 }
 
+void MainWindow::changeEvent(QEvent *event) {
+    QMainWindow::changeEvent(event);
+    if (event->type() == QEvent::WindowStateChange || event->type() == QEvent::ActivationChange) {
+        update_connection_statistics_polling_state();
+    }
+}
+
+void MainWindow::showEvent(QShowEvent *event) {
+    QMainWindow::showEvent(event);
+    update_connection_statistics_polling_state();
+}
+
+void MainWindow::hideEvent(QHideEvent *event) {
+    QMainWindow::hideEvent(event);
+    update_connection_statistics_polling_state();
+}
+
 MainWindow::~MainWindow() {
     delete ui;
 }
@@ -825,6 +848,25 @@ void MainWindow::on_tabWidget_currentChanged(int index) {
     }
     if (tabIndex2GroupId(index) == ProxorGui::dataStore->current_group) return;
     show_group(tabIndex2GroupId(index));
+}
+
+void MainWindow::on_down_tab_currentChanged(int index) {
+    Q_UNUSED(index);
+    update_connection_statistics_polling_state();
+}
+
+bool MainWindow::should_refresh_connection_statistics() const {
+    return conn_stats_tab_active.load(std::memory_order_relaxed) &&
+           conn_stats_window_visible.load(std::memory_order_relaxed);
+}
+
+void MainWindow::update_connection_statistics_polling_state() {
+    const bool tabActive = ui != nullptr && ui->down_tab->currentWidget() == ui->tab_2;
+    const bool windowVisible = isVisible() &&
+                               !isMinimized() &&
+                               QApplication::applicationState() == Qt::ApplicationActive;
+    conn_stats_tab_active.store(tabActive, std::memory_order_relaxed);
+    conn_stats_window_visible.store(windowVisible, std::memory_order_relaxed);
 }
 
 void MainWindow::show_group(int gid) {

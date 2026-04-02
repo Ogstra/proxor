@@ -17,6 +17,7 @@
 #include <QShortcut>
 #include <QSemaphore>
 #include <QMutex>
+#include <atomic>
 
 #include "GroupSort.hpp"
 
@@ -67,6 +68,8 @@ public:
     void start_select_mode(QObject *context, const std::function<void(int)> &callback);
 
     void refresh_connection_list(const QJsonArray &arr);
+
+    [[nodiscard]] bool should_refresh_connection_statistics() const;
 
     void RegisterHotkey(bool unregister);
 
@@ -150,6 +153,8 @@ private slots:
 
     void on_tabWidget_currentChanged(int index);
 
+    void on_down_tab_currentChanged(int index);
+
     void onWifiSsidChanged(const QString &ssid);
 
 private:
@@ -183,6 +188,8 @@ private:
     QMutex mu_exit;
     QSemaphore sem_stopped;
     int exit_reason = 0;
+    std::atomic_bool conn_stats_tab_active{false};
+    std::atomic_bool conn_stats_window_visible{false};
 
     void rebuildLogDocument(const QString &filter);
 
@@ -202,11 +209,19 @@ private:
 
     void closeEvent(QCloseEvent *event) override;
 
+    void changeEvent(QEvent *event) override;
+
+    void showEvent(QShowEvent *event) override;
+
+    void hideEvent(QHideEvent *event) override;
+
     //
 
     void HotkeyEvent(const QString &key);
 
     bool StartVPNProcess();
+
+    void update_connection_statistics_polling_state();
 
     // grpc and ...
 
