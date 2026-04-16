@@ -25,33 +25,58 @@ namespace {
         }
         return QFile::rename(path, backupPath);
     }
+
+    bool LoadJsonObject(const QByteArray &data, QJsonObject &object) {
+        QJsonParseError error{};
+        const auto document = QJsonDocument::fromJson(data, &error);
+        if (error.error != QJsonParseError::NoError || !document.isObject()) {
+            return false;
+        }
+        object = document.object();
+        return true;
+    }
+
+    bool LoadJsonObjectFromFile(const QString &path, QByteArray &data, QJsonObject &object) {
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly)) {
+            return false;
+        }
+        data = file.readAll();
+        return LoadJsonObject(data, object);
+    }
 } // namespace
 
 namespace ProxorGui {
 
     namespace {
-        std::shared_ptr<ProxyEntity> LoadProxyEntityFromBytes(const QByteArray &data) {
-            QJsonParseError error{};
-            const auto document = QJsonDocument::fromJson(data, &error);
-            if (error.error != QJsonParseError::NoError || !document.isObject()) {
-                return nullptr;
-            }
-
-            const auto type = document.object().value(QStringLiteral("type")).toString();
+        std::shared_ptr<ProxyEntity> LoadProxyEntityFromObject(const QJsonObject &object) {
+            const auto type = object.value(QStringLiteral("type")).toString();
             auto ent = ProfileManager::NewProxyEntity(type);
             if (ent == nullptr || ent->bean == nullptr || ent->bean->version == -114514) {
                 return nullptr;
             }
 
-            ent->FromJsonBytes(data);
+            ent->FromJson(object);
             ent->RefreshSummaryFromBean();
             return ent;
         }
 
-        std::shared_ptr<Group> LoadGroupFromBytes(const QByteArray &data) {
+        std::shared_ptr<ProxyEntity> LoadProxyEntityFromBytes(const QByteArray &data) {
+            QJsonObject object;
+            if (!LoadJsonObject(data, object)) return nullptr;
+            return LoadProxyEntityFromObject(object);
+        }
+
+        std::shared_ptr<Group> LoadGroupFromObject(const QJsonObject &object) {
             auto ent = ProfileManager::NewGroup();
-            ent->FromJsonBytes(data);
+            ent->FromJson(object);
             return ent;
+        }
+
+        std::shared_ptr<Group> LoadGroupFromBytes(const QByteArray &data) {
+            QJsonObject object;
+            if (!LoadJsonObject(data, object)) return nullptr;
+            return LoadGroupFromObject(object);
         }
     } // namespace
 
@@ -464,23 +489,14 @@ namespace ProxorGui {
     }
 
     std::shared_ptr<ProxyEntity> ProfileManager::LoadProxyEntity(const QString &jsonPath) {
-        ProxyEntity ent0(nullptr, nullptr);
-        ent0.fn = jsonPath;
-        const auto validJson = ent0.Load();
-        const auto type = ent0.type;
+        QByteArray data;
+        QJsonObject object;
+        if (!LoadJsonObjectFromFile(jsonPath, data, object)) return nullptr;
 
-        std::shared_ptr<ProxyEntity> ent;
-        auto validType = validJson;
-
-        if (validType) {
-            ent = NewProxyEntity(type);
-            validType = ent->bean->version != -114514;
-        }
-
-        if (validType) {
-            ent->load_control_must = true;
+        auto ent = LoadProxyEntityFromObject(object);
+        if (ent != nullptr) {
             ent->fn = jsonPath;
-            ent->Load();
+            ent->last_save_content = data;
         }
         return ent;
     }
@@ -738,9 +754,15 @@ namespace ProxorGui {
     }
 
     std::shared_ptr<Group> ProfileManager::LoadGroup(const QString &jsonPath) {
-        auto ent = std::make_shared<Group>();
-        ent->fn = jsonPath;
-        ent->Load();
+        QByteArray data;
+        QJsonObject object;
+        if (!LoadJsonObjectFromFile(jsonPath, data, object)) return nullptr;
+
+        auto ent = LoadGroupFromObject(object);
+        if (ent != nullptr) {
+            ent->fn = jsonPath;
+            ent->last_save_content = data;
+        }
         return ent;
     }
 
