@@ -444,6 +444,15 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     connect(shortcut_ctrl_v, &QShortcut::activated, this, [=] {
         on_menu_add_from_clipboard_triggered();
     });
+    connect(shortcut_ctrl_a, &QShortcut::activated, this, [=] {
+        ui->menu_select_all->trigger();
+    });
+    connect(shortcut_ctrl_c, &QShortcut::activated, this, [=] {
+        ui->menu_copy_links->trigger();
+    });
+    connect(shortcut_ctrl_s, &QShortcut::activated, this, [=] {
+        ui->menu_stop->trigger();
+    });
     connect(shortcut_esc, &QShortcut::activated, this, [=] {
         if (ui->search->isVisible()) {
             ui->search->setText("");
