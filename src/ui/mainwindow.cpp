@@ -63,6 +63,16 @@
 namespace {
 constexpr int kAddGroupTabId = -114514;
 
+QRect centeredCheckboxIndicatorRect(const QStyleOptionViewItem &option, const QWidget *widget) {
+    auto *style = widget ? widget->style() : QApplication::style();
+    QStyleOptionButton checkbox;
+    const QSize indicatorSize(
+        style->pixelMetric(QStyle::PM_IndicatorWidth, &checkbox, widget),
+        style->pixelMetric(QStyle::PM_IndicatorHeight, &checkbox, widget)
+    );
+    return QStyle::alignedRect(option.direction, Qt::AlignCenter, indicatorSize, option.rect);
+}
+
 class CenteredCheckBoxDelegate final : public QStyledItemDelegate {
 public:
     using QStyledItemDelegate::QStyledItemDelegate;
@@ -81,6 +91,7 @@ public:
         if (state == Qt::Unchecked && !index.data(Qt::CheckStateRole).isValid()) return;
 
         QStyleOptionButton checkbox;
+        checkbox.rect = centeredCheckboxIndicatorRect(option, viewOption.widget);
         checkbox.state |= QStyle::State_Enabled;
         if (option.state & QStyle::State_MouseOver) checkbox.state |= QStyle::State_MouseOver;
         if (option.state & QStyle::State_HasFocus) checkbox.state |= QStyle::State_HasFocus;
@@ -91,15 +102,7 @@ public:
         } else {
             checkbox.state |= QStyle::State_Off;
         }
-
-        auto indicatorSize = style->sizeFromContents(QStyle::CT_CheckBox, &checkbox, QSize(), viewOption.widget);
-        checkbox.rect = QStyle::alignedRect(
-            option.direction,
-            Qt::AlignCenter,
-            indicatorSize,
-            option.rect
-        );
-        style->drawControl(QStyle::CE_CheckBox, &checkbox, painter, viewOption.widget);
+        style->drawPrimitive(QStyle::PE_IndicatorCheckBox, &checkbox, painter, viewOption.widget);
     }
 
     bool editorEvent(QEvent *event, QAbstractItemModel *model, const QStyleOptionViewItem &option, const QModelIndex &index) override {
@@ -107,10 +110,7 @@ public:
 
         if (event->type() == QEvent::MouseButtonRelease) {
             auto *mouseEvent = static_cast<QMouseEvent *>(event);
-            QStyleOptionButton checkbox;
-            auto *style = option.widget ? option.widget->style() : QApplication::style();
-            auto indicatorSize = style->sizeFromContents(QStyle::CT_CheckBox, &checkbox, QSize(), option.widget);
-            auto indicatorRect = QStyle::alignedRect(option.direction, Qt::AlignCenter, indicatorSize, option.rect);
+            auto indicatorRect = centeredCheckboxIndicatorRect(option, option.widget);
             if (!indicatorRect.contains(mouseEvent->pos())) return false;
         } else if (event->type() != QEvent::KeyPress) {
             return false;
@@ -174,10 +174,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ProxorGui::profileManager->LoadManager();
 
     // Setup misc UI
-    bool legacyNumericTheme = false;
-    ProxorGui::dataStore->theme.toInt(&legacyNumericTheme);
-    if (legacyNumericTheme || ProxorGui::dataStore->theme.trimmed().isEmpty()) {
-        ProxorGui::dataStore->theme = "System";
+    const auto normalizedTheme = themeManager->NormalizeTheme(ProxorGui::dataStore->theme);
+    if (ProxorGui::dataStore->theme != normalizedTheme) {
+        ProxorGui::dataStore->theme = normalizedTheme;
         ProxorGui::dataStore->Save();
     }
     themeManager->ApplyTheme(ProxorGui::dataStore->theme);
@@ -208,7 +207,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         if (group == nullptr) return;
 
         QMenu menu(this);
-        menu.setStyleSheet("QMenu::item { padding: 4px 20px 4px 8px; }");
+        menu.setObjectName("groupTabMenu");
         auto *updateAction = menu.addAction(tr("Update"));
         auto *editAction = menu.addAction(tr("Edit"));
         auto *deleteAction = menu.addAction(tr("Delete"));
@@ -275,24 +274,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->toolButton_program->setMenu(ui->menu_program);
     ui->toolButton_preferences->setMenu(ui->menu_preferences);
     ui->toolButton_server->setMenu(ui->menu_server);
-    const QString dropdownButtonStyle =
-        "QToolButton#toolButton_program::menu-indicator,"
-        "QToolButton#toolButton_preferences::menu-indicator,"
-        "QToolButton#toolButton_server::menu-indicator {"
-        "image: none;"
-        "width: 0px;"
-        "height: 0px;"
-        "subcontrol-position: center;"
-        "}";
-    ui->toolButton_program->setStyleSheet(dropdownButtonStyle);
-    ui->toolButton_preferences->setStyleSheet(dropdownButtonStyle);
-    ui->toolButton_server->setStyleSheet(dropdownButtonStyle);
     ui->menubar->setVisible(false);
     ui->toolButton_toggle_proxy->setText(tr("Start"));
     ui->toolButton_toggle_proxy->setIcon(makeToggleProxyIcon(QColor(52, 199, 89)));
     ui->toolButton_toggle_proxy->setIconSize(QSize(20, 20));
     ui->toolButton_toggle_proxy->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
-    ui->toolButton_toggle_proxy->setStyleSheet("QToolButton#toolButton_toggle_proxy { padding: 4px; }");
     setTimeout([this] {
         const int referenceHeight = qMax(ui->toolButton_program->height(), ui->toolButton_program->sizeHint().height());
         ui->toolButton_toggle_proxy->setFixedSize(referenceHeight, referenceHeight);
@@ -307,15 +293,15 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     qvLogDocument->setUndoRedoEnabled(false);
     ui->masterLogBrowser->setUndoRedoEnabled(false);
     ui->masterLogBrowser->setDocument(qvLogDocument);
-    ui->masterLogBrowser->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
-    {
-        auto font = ui->masterLogBrowser->font();
-        font.setPointSize(9);
-        ui->masterLogBrowser->setFont(font);
-        qvLogDocument->setDefaultFont(font);
-    }
-    // Log color palette follows system theme automatically.
-    ui->log_filter->setFont(ui->masterLogBrowser->font());
+    auto bottomPaneFont = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    bottomPaneFont.setPointSize(9);
+    ui->masterLogBrowser->setFont(bottomPaneFont);
+    qvLogDocument->setDefaultFont(bottomPaneFont);
+    // Keep log and connection tabs visually aligned.
+    ui->log_filter->setFont(bottomPaneFont);
+    ui->conn_filter->setFont(bottomPaneFont);
+    ui->tableWidget_conn->setFont(bottomPaneFont);
+    ui->tableWidget_conn->horizontalHeader()->setFont(bottomPaneFont);
     connect(ui->log_filter, &QLineEdit::textChanged, this, [=](const QString &text) {
         rebuildLogDocument(text);
         if (qvLogAutoScoll) {
@@ -687,28 +673,34 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     };
     connect(TM_auto_update_subsctiption, &QTimer::timeout, this, [&] { UI_update_all_groups(true); });
     TM_auto_update_subsctiption_Reset_Minute(ProxorGui::dataStore->sub_auto_update);
+    const bool niLoaded = QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability);
+    QNetworkInformation *ni = niLoaded ? QNetworkInformation::instance() : nullptr;
+    const bool isOnline = ni && ni->reachability() == QNetworkInformation::Reachability::Online;
+
     if (ProxorGui::dataStore->sub_update_on_start) {
-        setTimeout([this] { UI_update_all_groups(true); }, this, 2000);
+        if (!ni || isOnline) {
+            setTimeout([this] { UI_update_all_groups(true); }, this, 2000);
+        } else {
+            connect(ni, &QNetworkInformation::reachabilityChanged, this,
+                [this](QNetworkInformation::Reachability r) {
+                    if (r != QNetworkInformation::Reachability::Online) return;
+                    UI_update_all_groups(true);
+                }, Qt::SingleShotConnection);
+        }
     }
 
     if (ProxorGui::dataStore->check_update_on_start) {
         auto doCheck = [this]() {
             setTimeout([this] { runOnNewThread([this] { CheckUpdate(true); }); }, this, 1500);
         };
-        if (QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability)) {
-            auto *ni = QNetworkInformation::instance();
-            if (ni->reachability() == QNetworkInformation::Reachability::Online) {
-                doCheck();
-            } else {
-                connect(ni, &QNetworkInformation::reachabilityChanged, this,
-                    [this, ni](QNetworkInformation::Reachability r) {
-                        if (r != QNetworkInformation::Reachability::Online) return;
-                        disconnect(ni, &QNetworkInformation::reachabilityChanged, this, nullptr);
-                        runOnNewThread([this] { CheckUpdate(true); });
-                    });
-            }
-        } else {
+        if (!ni || isOnline) {
             doCheck();
+        } else {
+            connect(ni, &QNetworkInformation::reachabilityChanged, this,
+                [this](QNetworkInformation::Reachability r) {
+                    if (r != QNetworkInformation::Reachability::Online) return;
+                    runOnNewThread([this] { CheckUpdate(true); });
+                }, Qt::SingleShotConnection);
         }
     }
 
@@ -756,6 +748,92 @@ MainWindow::~MainWindow() {
     delete ui;
 }
 
+std::shared_ptr<ProxorGui::ProxyEntity> MainWindow::resolveSsidOnDemandProfile() const {
+    auto *dataStore = ProxorGui::dataStore;
+    auto syncStoredProfileRef = [dataStore](const std::shared_ptr<ProxorGui::ProxyEntity> &profile) {
+        if (profile == nullptr) return false;
+
+        const bool changed =
+            dataStore->ssid_on_demand_profile_id != profile->id ||
+            dataStore->ssid_on_demand_profile_name != profile->summary_name ||
+            dataStore->ssid_on_demand_profile_type != profile->type ||
+            dataStore->ssid_on_demand_profile_address.compare(profile->summary_serverAddress, Qt::CaseInsensitive) != 0 ||
+            dataStore->ssid_on_demand_profile_port != profile->summary_serverPort;
+        if (!changed) return false;
+
+        dataStore->ssid_on_demand_profile_id = profile->id;
+        dataStore->ssid_on_demand_profile_name = profile->summary_name;
+        dataStore->ssid_on_demand_profile_type = profile->type;
+        dataStore->ssid_on_demand_profile_address = profile->summary_serverAddress;
+        dataStore->ssid_on_demand_profile_port = profile->summary_serverPort;
+        dataStore->Save();
+        return true;
+    };
+
+    auto direct = ProxorGui::profileManager->GetProfile(dataStore->ssid_on_demand_profile_id);
+    if (direct != nullptr) {
+        syncStoredProfileRef(direct);
+        return direct;
+    }
+
+    struct Candidate {
+        std::shared_ptr<ProxorGui::ProxyEntity> profile;
+        int score = 0;
+        bool matchedName = false;
+        bool matchedType = false;
+        bool matchedAddress = false;
+        bool matchedPort = false;
+    };
+
+    Candidate best;
+    bool ambiguous = false;
+    for (const auto &[_, profile] : ProxorGui::profileManager->profiles) {
+        if (profile == nullptr) continue;
+
+        Candidate candidate;
+        candidate.profile = profile;
+
+        if (!dataStore->ssid_on_demand_profile_type.isEmpty() &&
+            profile->type == dataStore->ssid_on_demand_profile_type) {
+            candidate.matchedType = true;
+            candidate.score += 4;
+        }
+        if (!dataStore->ssid_on_demand_profile_address.isEmpty() &&
+            profile->summary_serverAddress.compare(dataStore->ssid_on_demand_profile_address, Qt::CaseInsensitive) == 0) {
+            candidate.matchedAddress = true;
+            candidate.score += 4;
+        }
+        if (dataStore->ssid_on_demand_profile_port > 0 &&
+            profile->summary_serverPort == dataStore->ssid_on_demand_profile_port) {
+            candidate.matchedPort = true;
+            candidate.score += 3;
+        }
+        if (!dataStore->ssid_on_demand_profile_name.isEmpty() &&
+            profile->summary_name == dataStore->ssid_on_demand_profile_name) {
+            candidate.matchedName = true;
+            candidate.score += 2;
+        }
+
+        const bool acceptable =
+            (candidate.matchedAddress && candidate.matchedType) ||
+            (candidate.matchedAddress && candidate.matchedPort) ||
+            (candidate.matchedType && candidate.matchedName && candidate.matchedPort);
+        if (!acceptable) continue;
+
+        if (candidate.score > best.score) {
+            best = candidate;
+            ambiguous = false;
+        } else if (candidate.score > 0 && candidate.score == best.score) {
+            ambiguous = true;
+        }
+    }
+
+    if (ambiguous || best.profile == nullptr) return nullptr;
+
+    syncStoredProfileRef(best.profile);
+    return best.profile;
+}
+
 void MainWindow::onWifiSsidChanged(const QString &ssid) {
     if (!ProxorGui::dataStore->ssid_on_demand_enabled) return;
 
@@ -763,14 +841,22 @@ void MainWindow::onWifiSsidChanged(const QString &ssid) {
                      ProxorGui::dataStore->ssid_trigger_list.contains(ssid, Qt::CaseSensitive);
 
     if (isTrigger) {
-        auto targetId = ProxorGui::dataStore->ssid_on_demand_profile_id;
-        if (targetId < 0) targetId = ProxorGui::dataStore->remember_id;
-        if (targetId >= 0 && ProxorGui::dataStore->started_id < 0) {
-            MW_show_log(tr("[On-Demand] Trigger SSID \"%1\" detected — starting profile %2").arg(ssid).arg(targetId));
-            proxor_start(targetId);
+        if (ProxorGui::dataStore->started_id >= 0) return;
+        if (auto_start_consumed_ssid == ssid) return;
+
+        auto targetProfile = resolveSsidOnDemandProfile();
+        if (targetProfile == nullptr) {
+            MW_show_log(tr("[On-Demand] Trigger SSID \"%1\" detected but no target profile could be resolved").arg(ssid));
+            return;
         }
+
+        auto_start_consumed_ssid = ssid;
+        MW_show_log(tr("[On-Demand] Trigger SSID \"%1\" detected — starting profile %2")
+                        .arg(ssid, targetProfile->DisplayTypeAndNameSummary()));
+        proxor_start(targetProfile->id, true);
     } else {
-        if (ProxorGui::dataStore->started_id >= 0) {
+        auto_start_consumed_ssid.clear();
+        if (started_via_ssid_trigger && ProxorGui::dataStore->started_id >= 0) {
             MW_show_log(tr("[On-Demand] Non-trigger SSID \"%1\" — stopping proxy").arg(ssid));
             proxor_stop(false, false);
         }
@@ -1113,7 +1199,7 @@ void MainWindow::on_menu_exit_triggered() {
     } else if (exit_reason == 2 || exit_reason == 3) {
         QDir::setCurrent(ProxorGui::PackageRootPath());
 
-        auto arguments = ProxorGui::dataStore->argv;
+        auto arguments = QCoreApplication::arguments();
         if (arguments.length() > 0) {
             arguments.removeFirst();
             arguments.removeAll("-tray");
