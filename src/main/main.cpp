@@ -41,7 +41,7 @@ int main(int argc, char* argv[]) {
     QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
 #endif
     QApplication::setQuitOnLastWindowClosed(false);
-    auto preQApp = new QApplication(argc, argv);
+    QApplication a(argc, argv);
 
     // Clean
     const auto packageRoot = ProxorGui::PackageRootPath();
@@ -56,19 +56,19 @@ int main(int argc, char* argv[]) {
 #endif
 
     // Flags
-    ProxorGui::dataStore->argv = QApplication::arguments();
-    if (ProxorGui::dataStore->argv.contains("-many")) ProxorGui::dataStore->flag_many = true;
-    if (ProxorGui::dataStore->argv.contains("-appdata")) {
+    const auto commandLineArguments = QCoreApplication::arguments();
+    if (commandLineArguments.contains("-many")) ProxorGui::dataStore->flag_many = true;
+    if (commandLineArguments.contains("-appdata")) {
         ProxorGui::dataStore->flag_use_appdata = true;
-        int appdataIndex = ProxorGui::dataStore->argv.indexOf("-appdata");
-        if (ProxorGui::dataStore->argv.size() > appdataIndex + 1 && !ProxorGui::dataStore->argv.at(appdataIndex + 1).startsWith("-")) {
-            ProxorGui::dataStore->appdataDir = ProxorGui::dataStore->argv.at(appdataIndex + 1);
+        int appdataIndex = commandLineArguments.indexOf("-appdata");
+        if (commandLineArguments.size() > appdataIndex + 1 && !commandLineArguments.at(appdataIndex + 1).startsWith("-")) {
+            ProxorGui::dataStore->appdataDir = commandLineArguments.at(appdataIndex + 1);
         }
     }
-    if (ProxorGui::dataStore->argv.contains("-tray")) ProxorGui::dataStore->flag_tray = true;
-    if (ProxorGui::dataStore->argv.contains("-debug")) ProxorGui::dataStore->flag_debug = true;
-    if (ProxorGui::dataStore->argv.contains("-flag_restart_tun_on")) ProxorGui::dataStore->flag_restart_tun_on = true;
-    if (ProxorGui::dataStore->argv.contains("-flag_reorder")) ProxorGui::dataStore->flag_reorder = true;
+    if (commandLineArguments.contains("-tray")) ProxorGui::dataStore->flag_tray = true;
+    if (commandLineArguments.contains("-debug")) ProxorGui::dataStore->flag_debug = true;
+    if (commandLineArguments.contains("-flag_restart_tun_on")) ProxorGui::dataStore->flag_restart_tun_on = true;
+    if (commandLineArguments.contains("-flag_reorder")) ProxorGui::dataStore->flag_reorder = true;
 #ifdef NKR_CPP_USE_APPDATA
     ProxorGui::dataStore->flag_use_appdata = true; // Example: Package & MacOS
 #endif
@@ -79,7 +79,7 @@ int main(int argc, char* argv[]) {
     // dirs & clean
     auto wd = QDir(packageRoot);
     if (ProxorGui::dataStore->flag_use_appdata) {
-        QApplication::setApplicationName("proxor");
+        QCoreApplication::setApplicationName("proxor");
         if (!ProxorGui::dataStore->appdataDir.isEmpty()) {
             wd.setPath(ProxorGui::dataStore->appdataDir);
         } else {
@@ -90,10 +90,6 @@ int main(int argc, char* argv[]) {
     if (!wd.exists("config")) wd.mkdir("config");
     QDir::setCurrent(wd.absoluteFilePath("config"));
     QDir("temp").removeRecursively();
-
-    // init QApplication
-    delete preQApp;
-    QApplication a(argc, argv);
 
     // dispatchers
     DS_cores = new QThread;
