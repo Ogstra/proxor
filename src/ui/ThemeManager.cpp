@@ -111,6 +111,15 @@ void ThemeManager::ApplyTheme(const QString &theme, bool force) {
     baseStyleSheet.append(proxorCss);
     qApp->setStyleSheet(baseStyleSheet);
 
+    // Force unpolish/repolish on every widget so QSS subcontrol overrides
+    // (e.g. arrow suppression) take effect even when the style object itself
+    // didn't change (e.g. System theme at startup).
+    for (auto *w : qApp->allWidgets()) {
+        w->style()->unpolish(w);
+        w->style()->polish(w);
+        w->update();
+    }
+
     current_theme = normalizedTheme;
     emit themeChanged(normalizedTheme);
 }
