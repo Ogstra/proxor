@@ -441,6 +441,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         ui->search->setVisible(true);
         ui->search->setFocus();
     });
+    connect(shortcut_ctrl_v, &QShortcut::activated, this, [=] {
+        on_menu_add_from_clipboard_triggered();
+    });
     connect(shortcut_esc, &QShortcut::activated, this, [=] {
         if (ui->search->isVisible()) {
             ui->search->setText("");
