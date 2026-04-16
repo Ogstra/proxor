@@ -1701,11 +1701,15 @@ void MainWindow::on_menu_reset_traffic_triggered() {
 void MainWindow::on_menu_profile_debug_info_triggered() {
     auto ents = get_now_selected_list();
     if (ents.count() != 1) return;
-    auto btn = QMessageBox::information(this, software_name, ents.first()->ToJsonBytes(), "OK", "Edit", "Reload", 0, 0);
-    if (btn == 1) {
+    QMessageBox mb(QMessageBox::Information, software_name, ents.first()->ToJsonBytes(), QMessageBox::NoButton, this);
+    auto *btnEdit   = mb.addButton("Edit",   QMessageBox::ActionRole);
+    auto *btnReload = mb.addButton("Reload", QMessageBox::ActionRole);
+    mb.addButton("OK", QMessageBox::AcceptRole);
+    mb.exec();
+    if (mb.clickedButton() == btnEdit) {
         auto dialog = new DialogEditProfile("", ents.first()->id, this);
         connect(dialog, &QDialog::finished, dialog, &QDialog::deleteLater);
-    } else if (btn == 2) {
+    } else if (mb.clickedButton() == btnReload) {
         ProxorGui::dataStore->Load();
         ProxorGui::profileManager->LoadManager();
         refresh_proxy_list();
