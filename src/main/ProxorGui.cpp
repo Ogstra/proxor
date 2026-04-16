@@ -356,7 +356,9 @@ namespace ProxorGui {
 
     QString DataStore::GetDeviceModel() const {
         if (!ua_include_computer) return {};
-        return QString::fromLocal8Bit(qgetenv("COMPUTERNAME"));
+        const auto computer = QString::fromLocal8Bit(qgetenv("COMPUTERNAME"));
+        const auto user = QString::fromLocal8Bit(qgetenv("USERNAME"));
+        return user.isEmpty() ? computer : computer + "/" + user;
     }
 
     QString DataStore::GetDeviceOS() {
