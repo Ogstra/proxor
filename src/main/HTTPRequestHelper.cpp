@@ -39,6 +39,19 @@ namespace ProxorGui_network {
         request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
 #endif
         request.setHeader(QNetworkRequest::KnownHeaders::UserAgentHeader, ProxorGui::dataStore->GetUserAgent());
+
+        // X-* headers for server-side tracking (conditional on datastore toggles)
+        auto setTruncated = [&](const QByteArray &name, const QString &value, int maxLen) {
+            if (!value.isEmpty()) {
+                request.setRawHeader(name, value.left(maxLen).toUtf8());
+            }
+        };
+        setTruncated("X-Hwid", ProxorGui::dataStore->GetHwid(), 255);
+        setTruncated("X-Device-Model", ProxorGui::dataStore->GetDeviceModel(), 255);
+        setTruncated("X-Device-OS", ProxorGui::dataStore->GetDeviceOS(), 64);
+        setTruncated("X-Ver-Os", ProxorGui::dataStore->GetOSVersion(), 64);
+        setTruncated("X-App-Version", ProxorGui::dataStore->GetAppVersion(), 64);
+
         if (ProxorGui::dataStore->sub_insecure) {
             QSslConfiguration c;
             c.setPeerVerifyMode(QSslSocket::PeerVerifyMode::VerifyNone);
