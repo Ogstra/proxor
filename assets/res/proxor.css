@@ -1,3 +1,31 @@
 QMessageBox {
-    messagebox-text-interaction-flags: 5;
+  messagebox-text-interaction-flags: 5;
+}
+
+QMenu#groupTabMenu::item {
+  padding: 4px 20px 4px 8px;
+}
+
+QToolButton#toolButton_program::menu-indicator,
+QToolButton#toolButton_preferences::menu-indicator,
+QToolButton#toolButton_server::menu-indicator,
+QToolButton#toolButton_program::menu-arrow,
+QToolButton#toolButton_preferences::menu-arrow,
+QToolButton#toolButton_server::menu-arrow {
+  image: none;
+  width: 0px;
+  height: 0px;
+  subcontrol-position: center;
+}
+
+QToolButton#toolButton_program::menu-button,
+QToolButton#toolButton_preferences::menu-button,
+QToolButton#toolButton_server::menu-button {
+  width: 0px;
+  padding: 0px;
+  border: none;
+}
+
+QToolButton#toolButton_toggle_proxy {
+  padding: 4px;
 }

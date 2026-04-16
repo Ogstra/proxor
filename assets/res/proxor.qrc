@@ -19,6 +19,7 @@
         <file alias="proxor.png">public/proxor.png</file>
         <file alias="proxor_active.png">public/proxor_active.png</file>
         <file>proxor.css</file>
+        <file>qdarkstyle_overrides.qss</file>
         <file>vpn/vpn-run-root.sh</file>
         <file>vpn/sing-box-vpn.json</file>
         <file>dashboard-notice.html</file>
