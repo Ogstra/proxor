@@ -8,7 +8,6 @@
 #include "main/GuiUtils.hpp"
 #include "main/ProxorGui.hpp"
 
-#include <QStyleFactory>
 #include <QFileDialog>
 #include <QInputDialog>
 #include <QMessageBox>
@@ -114,18 +113,20 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
         ui->rfsh_r->setCurrentIndex(5);
     }
     //
-    ui->theme->addItems(QStyleFactory::keys());
-    ui->theme->addItem("QDarkStyle");
-    //
-    bool legacyNumericTheme = false;
-    ProxorGui::dataStore->theme.toInt(&legacyNumericTheme);
-    if (legacyNumericTheme || ProxorGui::dataStore->theme.trimmed().isEmpty()) {
-        ui->theme->setCurrentText("System");
-    } else {
-        ui->theme->setCurrentText(ProxorGui::dataStore->theme);
+    ui->theme->clear();
+    for (const auto &themeOption: themeManager->AvailableThemes()) {
+        ui->theme->addItem(themeOption.second, themeOption.first);
     }
-    //
-    connect(ui->theme, &QComboBox::currentTextChanged, this, [=](const QString &themeName) {
+
+    const auto currentTheme = themeManager->NormalizeTheme(ProxorGui::dataStore->theme);
+    const int currentThemeIndex = ui->theme->findData(currentTheme);
+    if (currentThemeIndex >= 0) {
+        ui->theme->setCurrentIndex(currentThemeIndex);
+    }
+
+    connect(ui->theme, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int index) {
+        const auto themeName = ui->theme->itemData(index).toString();
+        if (themeName.isEmpty()) return;
         themeManager->ApplyTheme(themeName);
         ProxorGui::dataStore->theme = themeName;
         ProxorGui::dataStore->Save();
@@ -137,6 +138,10 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
 
     ui->user_agent->setText(ProxorGui::dataStore->user_agent);
     ui->user_agent->setPlaceholderText(ProxorGui::dataStore->GetUserAgent(true));
+    D_LOAD_BOOL(ua_include_cpu)
+    D_LOAD_BOOL(ua_include_hwid)
+    D_LOAD_BOOL(ua_include_computer)
+    D_LOAD_BOOL(ua_include_username)
     D_LOAD_BOOL(sub_use_proxy)
     D_LOAD_BOOL(sub_clear)
     D_LOAD_BOOL(sub_insecure)
@@ -252,6 +257,10 @@ void DialogBasicSettings::accept() {
     }
 
     ProxorGui::dataStore->user_agent = ui->user_agent->text();
+    D_SAVE_BOOL(ua_include_cpu)
+    D_SAVE_BOOL(ua_include_hwid)
+    D_SAVE_BOOL(ua_include_computer)
+    D_SAVE_BOOL(ua_include_username)
     D_SAVE_BOOL(sub_use_proxy)
     D_SAVE_BOOL(sub_clear)
     D_SAVE_BOOL(sub_insecure)

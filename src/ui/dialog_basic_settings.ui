@@ -482,6 +482,34 @@
          </property>
         </widget>
        </item>
+       <item row="6" column="1">
+        <widget class="QCheckBox" name="ua_include_cpu">
+         <property name="text">
+          <string>Include CPU name in User Agent</string>
+         </property>
+        </widget>
+       </item>
+       <item row="7" column="1">
+        <widget class="QCheckBox" name="ua_include_hwid">
+         <property name="text">
+          <string>Include hardware ID in User Agent</string>
+         </property>
+        </widget>
+       </item>
+       <item row="8" column="1">
+        <widget class="QCheckBox" name="ua_include_computer">
+         <property name="text">
+          <string>Include computer name in User Agent</string>
+         </property>
+        </widget>
+       </item>
+       <item row="9" column="1">
+        <widget class="QCheckBox" name="ua_include_username">
+         <property name="text">
+          <string>Include username in User Agent</string>
+         </property>
+        </widget>
+       </item>
        <item row="0" column="0">
         <widget class="QLabel" name="label_20">
          <property name="sizePolicy">

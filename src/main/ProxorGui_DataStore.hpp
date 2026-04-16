@@ -82,7 +82,6 @@ namespace ProxorGui {
         int resolve_count = 0;
 
         // Flags
-        QStringList argv = {};
         bool flag_use_appdata = false;
         bool flag_many = false;
         bool flag_tray = false;
@@ -119,6 +118,10 @@ namespace ProxorGui {
 
         // Subscription
         QString user_agent = ""; // set at main.cpp
+        bool ua_include_cpu = true;
+        bool ua_include_computer = true;
+        bool ua_include_username = true;
+        bool ua_include_hwid = true;
         bool sub_use_proxy = false;
         bool sub_clear = false;
         bool sub_insecure = true;
@@ -139,6 +142,10 @@ namespace ProxorGui {
         bool ssid_on_demand_enabled = false;
         QStringList ssid_trigger_list = {};
         int ssid_on_demand_profile_id = -1919;
+        QString ssid_on_demand_profile_name = "";
+        QString ssid_on_demand_profile_type = "";
+        QString ssid_on_demand_profile_address = "";
+        int ssid_on_demand_profile_port = 0;
 
         // Socks & HTTP Inbound
         QString inbound_address = "127.0.0.1";

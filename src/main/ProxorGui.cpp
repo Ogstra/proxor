@@ -247,6 +247,10 @@ namespace ProxorGui {
         _add(new configItem("inbound_auth", dynamic_cast<JsonStore *>(inbound_auth), itemType::jsonStore));
 
         _add(new configItem("user_agent2", &user_agent, itemType::string));
+        _add(new configItem("ua_include_cpu", &ua_include_cpu, itemType::boolean));
+        _add(new configItem("ua_include_computer", &ua_include_computer, itemType::boolean));
+        _add(new configItem("ua_include_username", &ua_include_username, itemType::boolean));
+        _add(new configItem("ua_include_hwid", &ua_include_hwid, itemType::boolean));
         _add(new configItem("last_run_version", &last_run_version, itemType::string));
         _add(new configItem("test_url", &test_latency_url, itemType::string));
         _add(new configItem("test_url_dl", &test_download_url, itemType::string));
@@ -337,14 +341,25 @@ namespace ProxorGui {
             if (!version.contains(".")) version = "2.0";
             const auto os = QSysInfo::prettyProductName();
             const auto arch = QSysInfo::currentCpuArchitecture();
-            const auto computer = QString::fromLocal8Bit(qgetenv("COMPUTERNAME"));
-            const auto user = QString::fromLocal8Bit(qgetenv("USERNAME"));
-            QSettings cpuReg("HKEY_LOCAL_MACHINE\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0", QSettings::NativeFormat);
-            const auto cpu = cpuReg.value("ProcessorNameString").toString().simplified();
             QStringList parts = {os, arch};
-            if (!cpu.isEmpty()) parts << cpu;
-            if (!computer.isEmpty()) parts << computer;
-            if (!user.isEmpty()) parts << user;
+            if (ua_include_cpu) {
+                QSettings cpuReg("HKEY_LOCAL_MACHINE\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0", QSettings::NativeFormat);
+                const auto cpu = cpuReg.value("ProcessorNameString").toString().simplified();
+                if (!cpu.isEmpty()) parts << cpu;
+            }
+            if (ua_include_hwid) {
+                QSettings hwReg("HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography", QSettings::NativeFormat);
+                const auto hwid = hwReg.value("MachineGuid").toString();
+                if (!hwid.isEmpty()) parts << hwid;
+            }
+            if (ua_include_computer) {
+                const auto computer = QString::fromLocal8Bit(qgetenv("COMPUTERNAME"));
+                if (!computer.isEmpty()) parts << computer;
+            }
+            if (ua_include_username) {
+                const auto user = QString::fromLocal8Bit(qgetenv("USERNAME"));
+                if (!user.isEmpty()) parts << user;
+            }
             return "Proxor/" + version + " (" + parts.join("; ") + ")";
         }
         return user_agent;
