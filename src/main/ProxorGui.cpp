@@ -10,6 +10,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QSysInfo>
+#include <QSettings>
 
 #ifdef Q_OS_WIN
 #include "sys/windows/guihelper.h"
@@ -335,8 +336,16 @@ namespace ProxorGui {
             QString version = SubStrBefore(NKR_VERSION, "-");
             if (!version.contains(".")) version = "2.0";
             const auto os = QSysInfo::prettyProductName();
+            const auto arch = QSysInfo::currentCpuArchitecture();
+            const auto computer = QString::fromLocal8Bit(qgetenv("COMPUTERNAME"));
             const auto user = QString::fromLocal8Bit(qgetenv("USERNAME"));
-            return "Proxor/" + version + " (" + os + (user.isEmpty() ? "" : "; " + user) + ")";
+            QSettings cpuReg("HKEY_LOCAL_MACHINE\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0", QSettings::NativeFormat);
+            const auto cpu = cpuReg.value("ProcessorNameString").toString().simplified();
+            QStringList parts = {os, arch};
+            if (!cpu.isEmpty()) parts << cpu;
+            if (!computer.isEmpty()) parts << computer;
+            if (!user.isEmpty()) parts << user;
+            return "Proxor/" + version + " (" + parts.join("; ") + ")";
         }
         return user_agent;
     }
