@@ -333,36 +333,47 @@ namespace ProxorGui {
     }
 
     QString DataStore::GetUserAgent(bool isDefault) const {
-        if (user_agent.isEmpty()) {
-            isDefault = true;
+        if (!user_agent.isEmpty() && !isDefault) {
+            return user_agent;
         }
-        if (isDefault) {
-            QString version = SubStrBefore(NKR_VERSION, "-");
-            if (!version.contains(".")) version = "2.0";
-            const auto os = QSysInfo::prettyProductName();
-            const auto arch = QSysInfo::currentCpuArchitecture();
-            QStringList parts = {os, arch};
-            if (ua_include_cpu) {
-                QSettings cpuReg("HKEY_LOCAL_MACHINE\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0", QSettings::NativeFormat);
-                const auto cpu = cpuReg.value("ProcessorNameString").toString().simplified();
-                if (!cpu.isEmpty()) parts << cpu;
-            }
-            if (ua_include_hwid) {
-                QSettings hwReg("HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography", QSettings::NativeFormat);
-                const auto hwid = hwReg.value("MachineGuid").toString();
-                if (!hwid.isEmpty()) parts << hwid;
-            }
-            if (ua_include_computer) {
-                const auto computer = QString::fromLocal8Bit(qgetenv("COMPUTERNAME"));
-                if (!computer.isEmpty()) parts << computer;
-            }
-            if (ua_include_username) {
-                const auto user = QString::fromLocal8Bit(qgetenv("USERNAME"));
-                if (!user.isEmpty()) parts << user;
-            }
-            return "Proxor/" + version + " (" + parts.join("; ") + ")";
-        }
-        return user_agent;
+        // Server expects: ClientName/Platform/Version
+        QString version = SubStrBefore(NKR_VERSION, "-");
+        if (!version.contains(".")) version = "2.0";
+        QString platform = QSysInfo::productType(); // "windows", "macos", "linux"
+        // Capitalize first letter
+        if (!platform.isEmpty()) platform[0] = platform[0].toUpper();
+        return QStringLiteral("Proxor/%1/%2").arg(platform, version);
+    }
+
+    QString DataStore::GetHwid() const {
+        if (!ua_include_hwid) return {};
+#ifdef Q_OS_WIN
+        QSettings hwReg("HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography", QSettings::NativeFormat);
+        return hwReg.value("MachineGuid").toString();
+#else
+        return {};
+#endif
+    }
+
+    QString DataStore::GetDeviceModel() const {
+        if (!ua_include_computer) return {};
+        return QString::fromLocal8Bit(qgetenv("COMPUTERNAME"));
+    }
+
+    QString DataStore::GetDeviceOS() {
+        QString os = QSysInfo::productType();
+        if (!os.isEmpty()) os[0] = os[0].toUpper();
+        return os;
+    }
+
+    QString DataStore::GetOSVersion() {
+        return QSysInfo::productVersion(); // "11", "10", etc.
+    }
+
+    QString DataStore::GetAppVersion() {
+        QString v = SubStrBefore(NKR_VERSION, "-");
+        if (!v.contains(".")) v = "2.0";
+        return v;
     }
 
     // preset routing
