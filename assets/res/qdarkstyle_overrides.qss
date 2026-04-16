@@ -1,0 +1,71 @@
+QTabWidget QWidget {
+  border-radius: 0px;
+}
+
+QTabWidget::pane {
+  top: -1px;
+  margin-top: -1px;
+}
+
+QTabWidget::pane:selected {
+  background-color: #19232D;
+}
+
+QTabBar::tab:top:!selected {
+  margin-top: 0px;
+}
+
+QLineEdit:focus,
+QLineEdit:hover,
+QTextEdit:focus,
+QTextEdit:hover,
+QPlainTextEdit:focus,
+QPlainTextEdit:hover,
+QComboBox:focus,
+QComboBox:hover,
+QAbstractSpinBox:focus,
+QAbstractSpinBox:hover,
+QAbstractItemView:focus,
+QAbstractView:hover,
+QAbstractScrollArea:focus {
+  border: 1px solid #455364;
+}
+
+QSplitter#splitter {
+  background-color: transparent;
+}
+
+QSplitter#splitter::handle {
+  background-color: transparent;
+  border: none;
+  padding: 0px;
+}
+
+QSplitter#splitter::handle:hover {
+  background-color: transparent;
+}
+
+QSplitter#splitter::handle:vertical {
+  height: 5px;
+  image: none;
+}
+
+QToolButton#toolButton_program::menu-indicator,
+QToolButton#toolButton_preferences::menu-indicator,
+QToolButton#toolButton_server::menu-indicator,
+QToolButton#toolButton_program::menu-arrow,
+QToolButton#toolButton_preferences::menu-arrow,
+QToolButton#toolButton_server::menu-arrow {
+  image: none;
+  width: 0px;
+  height: 0px;
+  subcontrol-position: center;
+}
+
+QToolButton#toolButton_program::menu-button,
+QToolButton#toolButton_preferences::menu-button,
+QToolButton#toolButton_server::menu-button {
+  width: 0px;
+  padding: 0px;
+  border: none;
+}
