@@ -59,7 +59,7 @@ public:
 
     void refresh_status(const QString &traffic_update = "");
 
-    void proxor_start(int _id = -1);
+    void proxor_start(int _id = -1, bool startedByWifiTrigger = false);
 
     void proxor_stop(bool crash = false, bool sem = false);
 
@@ -181,6 +181,8 @@ private:
     int icon_status = -1;
     std::shared_ptr<ProxorGui::ProxyEntity> running;
     bool start_pending = false;
+    bool started_via_ssid_trigger = false;
+    QString auto_start_consumed_ssid;
     QString traffic_update_cache;
     QTime last_test_time;
     //
@@ -201,6 +203,7 @@ private:
     QList<std::shared_ptr<ProxorGui::ProxyEntity>> get_selected_or_group();
 
     QList<int> get_toggle_proxy_ids(const std::shared_ptr<ProxorGui::Group> &group) const;
+    [[nodiscard]] std::shared_ptr<ProxorGui::ProxyEntity> resolveSsidOnDemandProfile() const;
 
     void dialog_message_impl(const QString &sender, const QString &info);
 
