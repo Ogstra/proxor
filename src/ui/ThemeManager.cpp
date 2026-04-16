@@ -1,5 +1,6 @@
 #include <QStyle>
 #include <QApplication>
+#include <QWidget>
 #include <QFile>
 #include <QPalette>
 #include <QStyleFactory>
