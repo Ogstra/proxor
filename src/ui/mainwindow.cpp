@@ -1417,16 +1417,16 @@ void MainWindow::refresh_status(const QString &traffic_update) {
 
     // refresh title & window icon
     setWindowTitle(make_title(false));
-    if (icon_status_new != icon_status) QApplication::setWindowIcon(Icon::GetTrayIcon(icon_status_new));
+    if (icon_status_new != icon_status) {
+        auto newIcon = Icon::GetTrayIcon(icon_status_new);
+        QApplication::setWindowIcon(newIcon);
+        setWindowIcon(newIcon); // force taskbar update via WM_SETICON on the actual HWND
+    }
 
     // refresh tray
     if (tray != nullptr) {
         tray->setToolTip(make_title(true));
-        if (icon_status_new != icon_status) {
-            tray->hide();
-            tray->setIcon(Icon::GetTrayIcon(icon_status_new));
-            tray->show();
-        }
+        if (icon_status_new != icon_status) tray->setIcon(Icon::GetTrayIcon(icon_status_new));
     }
 
     icon_status = icon_status_new;
