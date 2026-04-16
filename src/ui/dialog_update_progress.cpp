@@ -5,6 +5,7 @@
 
 UpdateProgressDialog::UpdateProgressDialog(const QString &assetName, QWidget *parent)
     : QDialog(parent) {
+    setObjectName("updateProgressDialog");
     setAttribute(Qt::WA_DeleteOnClose);
     setWindowFlags(windowFlags() | Qt::WindowStaysOnTopHint);
     setWindowTitle(tr("Downloading Update"));
@@ -16,10 +17,10 @@ UpdateProgressDialog::UpdateProgressDialog(const QString &assetName, QWidget *pa
     mainLayout->addWidget(titleLabel);
 
     progressBar = new QProgressBar(this);
+    progressBar->setObjectName("updateProgressBar");
     progressBar->setRange(0, 100);
     progressBar->setValue(0);
     progressBar->setFixedHeight(24);
-    progressBar->setStyleSheet("QProgressBar { border: 1px solid #aaa; border-radius: 4px; text-align: center; } QProgressBar::chunk { background-color: #0078D7; width: 10px; margin: 1px; }");
     mainLayout->addWidget(progressBar);
 
     auto *infoLayout = new QHBoxLayout();
