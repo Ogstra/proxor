@@ -271,12 +271,17 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     }
 
     // top bar
-    ui->toolButton_program->setMenu(ui->menu_program);
-    ui->toolButton_program->setPopupMode(QToolButton::InstantPopup);
-    ui->toolButton_preferences->setMenu(ui->menu_preferences);
-    ui->toolButton_preferences->setPopupMode(QToolButton::InstantPopup);
-    ui->toolButton_server->setMenu(ui->menu_server);
-    ui->toolButton_server->setPopupMode(QToolButton::InstantPopup);
+    // Show menus manually on click so no menu is associated with the button —
+    // any associated QMenu causes UxTheme to draw a native drop arrow that
+    // cannot be suppressed via QSS on the Windows platform style.
+    auto attachMenuOnClick = [](QToolButton *btn, QMenu *menu) {
+        QObject::connect(btn, &QToolButton::clicked, btn, [btn, menu]() {
+            menu->popup(btn->mapToGlobal(QPoint(0, btn->height())));
+        });
+    };
+    attachMenuOnClick(ui->toolButton_program, ui->menu_program);
+    attachMenuOnClick(ui->toolButton_preferences, ui->menu_preferences);
+    attachMenuOnClick(ui->toolButton_server, ui->menu_server);
     ui->menubar->setVisible(false);
     ui->toolButton_toggle_proxy->setText(tr("Start"));
     ui->toolButton_toggle_proxy->setIcon(makeToggleProxyIcon(QColor(52, 199, 89)));
