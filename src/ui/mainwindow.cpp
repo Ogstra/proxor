@@ -272,8 +272,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     // top bar
     ui->toolButton_program->setMenu(ui->menu_program);
+    ui->toolButton_program->setPopupMode(QToolButton::InstantPopup);
     ui->toolButton_preferences->setMenu(ui->menu_preferences);
+    ui->toolButton_preferences->setPopupMode(QToolButton::InstantPopup);
     ui->toolButton_server->setMenu(ui->menu_server);
+    ui->toolButton_server->setPopupMode(QToolButton::InstantPopup);
     ui->menubar->setVisible(false);
     ui->toolButton_toggle_proxy->setText(tr("Start"));
     ui->toolButton_toggle_proxy->setIcon(makeToggleProxyIcon(QColor(52, 199, 89)));
