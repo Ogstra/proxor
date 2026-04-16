@@ -179,8 +179,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         ProxorGui::dataStore->theme = normalizedTheme;
         ProxorGui::dataStore->Save();
     }
-    themeManager->ApplyTheme(ProxorGui::dataStore->theme);
     ui->setupUi(this);
+    themeManager->ApplyTheme(ProxorGui::dataStore->theme);
     connect(ui->down_tab, &QTabWidget::currentChanged, this, &MainWindow::on_down_tab_currentChanged);
     connect(qApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState) {
         update_connection_statistics_polling_state();
