@@ -50,6 +50,34 @@ QSplitter#splitter::handle:vertical {
   image: none;
 }
 
+QCheckBox::indicator {
+  width: 14px;
+  height: 14px;
+  border: 1px solid #455364;
+  border-radius: 3px;
+  background-color: #19232D;
+}
+
+QCheckBox::indicator:hover {
+  border-color: #37AEFE;
+}
+
+QCheckBox::indicator:checked {
+  background-color: #1464A0;
+  border-color: #1464A0;
+  image: none;
+}
+
+QCheckBox::indicator:checked:hover {
+  background-color: #37AEFE;
+  border-color: #37AEFE;
+}
+
+QCheckBox::indicator:disabled {
+  border-color: #2D4257;
+  background-color: #14222E;
+}
+
 QToolButton#toolButton_program::menu-indicator,
 QToolButton#toolButton_preferences::menu-indicator,
 QToolButton#toolButton_server::menu-indicator,
