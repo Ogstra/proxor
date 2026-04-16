@@ -9,6 +9,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QSysInfo>
 
 #ifdef Q_OS_WIN
 #include "sys/windows/guihelper.h"
@@ -305,15 +306,15 @@ namespace ProxorGui {
         _add(new configItem("ssid_on_demand_enabled", &ssid_on_demand_enabled, itemType::boolean));
         _add(new configItem("ssid_trigger_list", &ssid_trigger_list, itemType::stringList));
         _add(new configItem("ssid_on_demand_profile_id", &ssid_on_demand_profile_id, itemType::integer));
+        _add(new configItem("ssid_on_demand_profile_name", &ssid_on_demand_profile_name, itemType::string));
+        _add(new configItem("ssid_on_demand_profile_type", &ssid_on_demand_profile_type, itemType::string));
+        _add(new configItem("ssid_on_demand_profile_address", &ssid_on_demand_profile_address, itemType::string));
+        _add(new configItem("ssid_on_demand_profile_port", &ssid_on_demand_profile_port, itemType::integer));
     }
 
     void DataStore::UpdateStartedId(int id) {
         started_id = id;
         bool save = false;
-        if (id >= 0 && ssid_on_demand_profile_id != id) {
-            ssid_on_demand_profile_id = id;
-            save = true;
-        }
         if (remember_enable) {
             remember_id = id;
             save = true;
@@ -333,7 +334,9 @@ namespace ProxorGui {
         if (isDefault) {
             QString version = SubStrBefore(NKR_VERSION, "-");
             if (!version.contains(".")) version = "2.0";
-            return "Proxor/PC/" + version + " (Prefer ClashMeta Format)";
+            const auto os = QSysInfo::prettyProductName();
+            const auto user = QString::fromLocal8Bit(qgetenv("USERNAME"));
+            return "Proxor/" + version + " (" + os + (user.isEmpty() ? "" : "; " + user) + ")";
         }
         return user_agent;
     }
