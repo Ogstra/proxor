@@ -1422,7 +1422,11 @@ void MainWindow::refresh_status(const QString &traffic_update) {
     // refresh tray
     if (tray != nullptr) {
         tray->setToolTip(make_title(true));
-        if (icon_status_new != icon_status) tray->setIcon(Icon::GetTrayIcon(icon_status_new));
+        if (icon_status_new != icon_status) {
+            tray->hide();
+            tray->setIcon(Icon::GetTrayIcon(icon_status_new));
+            tray->show();
+        }
     }
 
     icon_status = icon_status_new;
