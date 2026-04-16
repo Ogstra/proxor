@@ -333,7 +333,7 @@ void MainWindow::stop_core_daemon() {
 #endif
 }
 
-void MainWindow::proxor_start(int _id) {
+void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
     if (ProxorGui::dataStore->prepare_exit) return;
 
     auto ents = get_now_selected_list();
@@ -410,6 +410,7 @@ void MainWindow::proxor_start(int _id) {
             DS_cores);
 
         ProxorGui::dataStore->UpdateStartedId(ent->id);
+        started_via_ssid_trigger = startedByWifiTrigger;
         running = ent;
 
         runOnUiThread([=] {
@@ -558,6 +559,7 @@ void MainWindow::proxor_stop(bool crash, bool sem) {
 #endif
 
         ProxorGui::dataStore->UpdateStartedId(-1919);
+        started_via_ssid_trigger = false;
         ProxorGui::dataStore->need_keep_vpn_off = false;
         running = nullptr;
 

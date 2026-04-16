@@ -14,5 +14,6 @@ private slots:
     void on_btn_add_ssid_clicked();
     void on_btn_remove_ssid_clicked();
 private:
+    void populateProfileCombo();
     Ui::DialogSSIDSettings *ui;
 };

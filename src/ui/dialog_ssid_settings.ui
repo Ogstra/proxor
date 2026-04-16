@@ -33,6 +33,27 @@
         </property>
        </widget>
       </item>
+      <item>
+       <widget class="QLabel" name="label_profile_hint">
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QFormLayout" name="formLayout_profile">
+        <item row="0" column="0">
+         <widget class="QLabel" name="label_target_profile">
+          <property name="text">
+           <string>Target profile</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QComboBox" name="ssid_on_demand_profile"/>
+        </item>
+       </layout>
+      </item>
      </layout>
     </widget>
    </item>
