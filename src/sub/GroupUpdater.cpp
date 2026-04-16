@@ -652,6 +652,21 @@ namespace ProxorGui_sub {
 
             content = resp.data;
             sub_user_info = NetworkRequestHelper::GetHeader(resp.header, "Subscription-UserInfo");
+
+            // Parse server-recommended update interval
+            auto profileUpdateInterval = NetworkRequestHelper::GetHeader(resp.header, "profile-update-interval");
+            if (!profileUpdateInterval.isEmpty()) {
+                bool ok = false;
+                int intervalMinutes = profileUpdateInterval.trimmed().toInt(&ok);
+                if (ok && intervalMinutes > 0) {
+                    MW_show_log(QObject::tr("Server recommends update interval: %1 minutes").arg(intervalMinutes));
+                }
+            }
+            auto updateAlways = NetworkRequestHelper::GetHeader(resp.header, "update-always");
+            if (updateAlways.toLower() == "true") {
+                MW_show_log(QObject::tr("Server indicates always-update mode"));
+            }
+
             auto sub_name = ResolveSubscriptionName(subscriptionUrl, resp.header);
             if (group != nullptr && !sub_name.isEmpty()) {
                 group->name = sub_name;
