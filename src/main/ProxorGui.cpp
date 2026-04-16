@@ -336,7 +336,6 @@ namespace ProxorGui {
         if (!user_agent.isEmpty() && !isDefault) {
             return user_agent;
         }
-        // Server expects: ClientName/Platform/Version
         QString version = SubStrBefore(NKR_VERSION, "-");
         if (!version.contains(".")) version = "2.0";
         QString platform = QSysInfo::productType(); // "windows", "macos", "linux"

@@ -40,7 +40,6 @@ namespace ProxorGui_network {
 #endif
         request.setHeader(QNetworkRequest::KnownHeaders::UserAgentHeader, ProxorGui::dataStore->GetUserAgent());
 
-        // X-* headers for server-side tracking (conditional on datastore toggles)
         auto setTruncated = [&](const QByteArray &name, const QString &value, int maxLen) {
             if (!value.isEmpty()) {
                 request.setRawHeader(name, value.left(maxLen).toUtf8());

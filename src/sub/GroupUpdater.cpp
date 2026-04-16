@@ -653,7 +653,6 @@ namespace ProxorGui_sub {
             content = resp.data;
             sub_user_info = NetworkRequestHelper::GetHeader(resp.header, "Subscription-UserInfo");
 
-            // Parse server-recommended update interval
             auto profileUpdateInterval = NetworkRequestHelper::GetHeader(resp.header, "profile-update-interval");
             if (!profileUpdateInterval.isEmpty()) {
                 bool ok = false;

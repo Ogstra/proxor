@@ -193,15 +193,10 @@ namespace ProxorGui {
 
         QString GetUserAgent(bool isDefault = false) const;
 
-        // Returns HWID (MachineGuid from registry), empty if ua_include_hwid is false
         QString GetHwid() const;
-        // Returns device model (COMPUTERNAME), empty if ua_include_computer is false
         QString GetDeviceModel() const;
-        // Returns OS name (e.g. "Windows")
         static QString GetDeviceOS();
-        // Returns OS version (e.g. "11")
         static QString GetOSVersion();
-        // Returns app version from NKR_VERSION (e.g. "1.5.0")
         static QString GetAppVersion();
     };
 
