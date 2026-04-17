@@ -24,6 +24,8 @@ private:
 
     struct {
         int front_proxy;
+        bool using_global_update_interval = false;
+        QString initial_update_interval_text;
     } CACHE;
 
     void refresh_front_proxy();

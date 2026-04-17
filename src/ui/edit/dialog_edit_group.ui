@@ -151,7 +151,7 @@
          <item row="0" column="0">
           <widget class="QLabel" name="label_update_interval">
            <property name="text">
-            <string>Profile update interval</string>
+            <string>Profile update interval (hours)</string>
            </property>
           </widget>
          </item>

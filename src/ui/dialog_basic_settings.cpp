@@ -11,7 +11,40 @@
 #include <QFileDialog>
 #include <QInputDialog>
 #include <QMessageBox>
+#include <QSignalBlocker>
 #include <QTimer>
+
+namespace {
+int ThemeModeIndexForTheme(const QString &themeName) {
+    const auto normalized = themeManager->NormalizeTheme(themeName);
+    if (normalized == QStringLiteral("FusionLight")) return 1;
+    if (normalized == QStringLiteral("FusionDark") ||
+        normalized == QStringLiteral("FusionArcDark") ||
+        normalized == QStringLiteral("QDarkStyle")) {
+        return 2;
+    }
+    return 0;
+}
+
+QString ThemeComboKeyForTheme(const QString &themeName) {
+    const auto normalized = themeManager->NormalizeTheme(themeName);
+    if (normalized == QStringLiteral("Fusion") ||
+        normalized == QStringLiteral("FusionLight") ||
+        normalized == QStringLiteral("FusionDark")) {
+        return QStringLiteral("Fusion");
+    }
+    return normalized;
+}
+
+QString ResolveThemeSelection(const QString &comboTheme, int modeIndex) {
+    if (comboTheme == QStringLiteral("Fusion")) {
+        if (modeIndex == 1) return QStringLiteral("FusionLight");
+        if (modeIndex == 2) return QStringLiteral("FusionDark");
+        return QStringLiteral("Fusion");
+    }
+    return comboTheme;
+}
+}
 
 class ExtraCoreWidget : public QWidget {
 public:
@@ -119,14 +152,33 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     }
 
     const auto currentTheme = themeManager->NormalizeTheme(ProxorGui::dataStore->theme);
-    const int currentThemeIndex = ui->theme->findData(currentTheme);
+    const int currentThemeIndex = ui->theme->findData(ThemeComboKeyForTheme(currentTheme));
     if (currentThemeIndex >= 0) {
         ui->theme->setCurrentIndex(currentThemeIndex);
     }
+    ui->theme_mode->setCurrentIndex(ThemeModeIndexForTheme(currentTheme));
 
     connect(ui->theme, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int index) {
-        const auto themeName = ui->theme->itemData(index).toString();
+        const auto comboThemeName = ui->theme->itemData(index).toString();
+        const auto themeName = ResolveThemeSelection(comboThemeName, ui->theme_mode->currentIndex());
         if (themeName.isEmpty()) return;
+        const QSignalBlocker blocker(ui->theme_mode);
+        ui->theme_mode->setCurrentIndex(ThemeModeIndexForTheme(themeName));
+        themeManager->ApplyTheme(themeName);
+        ProxorGui::dataStore->theme = themeName;
+        ProxorGui::dataStore->Save();
+        repaint();
+        mainwindow->repaint();
+    });
+
+    connect(ui->theme_mode, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int index) {
+        const auto comboThemeName = ui->theme->currentData().toString();
+        const auto themeName = ResolveThemeSelection(comboThemeName, index);
+        const int themeIndex = ui->theme->findData(ThemeComboKeyForTheme(themeName));
+        if (themeIndex >= 0) {
+            const QSignalBlocker blocker(ui->theme);
+            ui->theme->setCurrentIndex(themeIndex);
+        }
         themeManager->ApplyTheme(themeName);
         ProxorGui::dataStore->theme = themeName;
         ProxorGui::dataStore->Save();
