@@ -743,6 +743,8 @@ namespace ProxorGui {
         _add(new configItem("front_proxy_id", &front_proxy_id, itemType::integer));
         _add(new configItem("archive", &archive, itemType::boolean));
         _add(new configItem("skip_auto_update", &skip_auto_update, itemType::boolean));
+        _add(new configItem("sub_update_interval", &sub_update_interval, itemType::integer));
+        _add(new configItem("sub_update_always", &sub_update_always, itemType::boolean));
         _add(new configItem("name", &name, itemType::string));
         _add(new configItem("order", &order, itemType::integerList));
         _add(new configItem("url", &url, itemType::string));

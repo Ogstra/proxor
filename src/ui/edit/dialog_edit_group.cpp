@@ -5,6 +5,7 @@
 #include "ui/mainwindow_interface.h"
 
 #include <QClipboard>
+#include <QRegularExpressionValidator>
 
 #define ADJUST_SIZE runOnUiThread([=] { adjustSize(); adjustPosition(mainwindow); }, this);
 
@@ -16,13 +17,20 @@ DialogEditGroup::DialogEditGroup(const std::shared_ptr<ProxorGui::Group> &ent, Q
         ui->cat_sub->setHidden(index == 0);
         ADJUST_SIZE
     });
+    connect(ui->skip_auto_update, &QCheckBox::toggled, this, [=](bool checked) {
+        ui->cat_update->setEnabled(!checked);
+    });
 
     ui->name->setText(ent->name);
     ui->archive->setChecked(ent->archive);
     ui->skip_auto_update->setChecked(ent->skip_auto_update);
+    ui->sub_update_interval->setText(ent->sub_update_interval > 0 ? Int2String(ent->sub_update_interval) : "");
+    ui->sub_update_interval->setValidator(new QRegularExpressionValidator(QRegularExpression("^[0-9]+$"), this));
+    ui->sub_update_always->setChecked(ent->sub_update_always);
     ui->url->setText(ent->url);
     ui->type->setCurrentIndex(ent->url.isEmpty() ? 0 : 1);
     ui->type->currentIndexChanged(ui->type->currentIndex());
+    ui->cat_update->setEnabled(!ent->skip_auto_update);
     ui->manually_column_width->setChecked(ent->manually_column_width);
     ui->cat_share->setVisible(false);
 
@@ -81,6 +89,8 @@ void DialogEditGroup::accept() {
     ent->url = ui->url->text();
     ent->archive = ui->archive->isChecked();
     ent->skip_auto_update = ui->skip_auto_update->isChecked();
+    ent->sub_update_interval = ui->sub_update_interval->text().toInt();
+    ent->sub_update_always = ui->sub_update_always->isChecked();
     ent->manually_column_width = ui->manually_column_width->isChecked();
     ent->front_proxy_id = CACHE.front_proxy;
     QDialog::accept();
@@ -92,13 +102,10 @@ void DialogEditGroup::refresh_front_proxy() {
 }
 
 void DialogEditGroup::on_front_proxy_clicked() {
-    auto parent = dynamic_cast<QWidget *>(this->parent());
-    parent->hide();
     this->hide();
     GetMainWindow()->start_select_mode(this, [=](int id) {
         CACHE.front_proxy = id;
         refresh_front_proxy();
-        parent->show();
         show();
     });
 }
