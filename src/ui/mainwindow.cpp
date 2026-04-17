@@ -225,6 +225,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             connect(dialog, &QDialog::finished, this, [=] {
                 if (dialog->result() == QDialog::Accepted) {
                     ProxorGui::profileManager->SaveGroup(group);
+                    TM_auto_update_subsctiption_Reset_Minute(ProxorGui::dataStore->sub_auto_update);
                     refresh_groups();
                 }
                 dialog->deleteLater();
@@ -687,11 +688,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     t->start(1000);
 
     TM_auto_update_subsctiption = new QTimer;
-    TM_auto_update_subsctiption_Reset_Minute = [&](int m) {
+    TM_auto_update_subsctiption_Reset_Minute = [&](int) {
         TM_auto_update_subsctiption->stop();
-        if (m >= 30) TM_auto_update_subsctiption->start(m * 60 * 1000);
+        if (UI_has_scheduled_subscription_updates()) {
+            TM_auto_update_subsctiption->start(60 * 1000);
+        }
     };
-    connect(TM_auto_update_subsctiption, &QTimer::timeout, this, [&] { UI_update_all_groups(true); });
+    connect(TM_auto_update_subsctiption, &QTimer::timeout, this, [&] { UI_update_due_groups_on_timer(); });
     TM_auto_update_subsctiption_Reset_Minute(ProxorGui::dataStore->sub_auto_update);
     const bool niLoaded = QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability);
     QNetworkInformation *ni = niLoaded ? QNetworkInformation::instance() : nullptr;
@@ -705,6 +708,16 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
                 [this](QNetworkInformation::Reachability r) {
                     if (r != QNetworkInformation::Reachability::Online) return;
                     UI_update_all_groups(true);
+                }, Qt::SingleShotConnection);
+        }
+    } else {
+        if (!ni || isOnline) {
+            setTimeout([this] { UI_update_due_groups_on_start(); }, this, 2000);
+        } else {
+            connect(ni, &QNetworkInformation::reachabilityChanged, this,
+                [this](QNetworkInformation::Reachability r) {
+                    if (r != QNetworkInformation::Reachability::Online) return;
+                    UI_update_due_groups_on_start();
                 }, Qt::SingleShotConnection);
         }
     }
@@ -1927,6 +1940,7 @@ void MainWindow::on_menu_add_subscription_triggered() {
     connect(dialog, &QDialog::finished, this, [=] {
         if (dialog->result() == QDialog::Accepted) {
             ProxorGui::profileManager->AddGroup(ent);
+            TM_auto_update_subsctiption_Reset_Minute(ProxorGui::dataStore->sub_auto_update);
             refresh_groups();
             if (!ent->url.trimmed().isEmpty()) {
                 ProxorGui_sub::groupUpdater->AsyncUpdate(ent->url, ent->id);

@@ -193,7 +193,6 @@ int main(int argc, char* argv[]) {
         if (ProxorGui::dataStore->sub_auto_update <= 0) {
             ProxorGui::dataStore->sub_auto_update = 30;
         }
-        ProxorGui::dataStore->sub_update_on_start = true;
     }
     if (ProxorGui::dataStore->last_run_version != currentVersion) {
         ProxorGui::dataStore->last_run_version = currentVersion;

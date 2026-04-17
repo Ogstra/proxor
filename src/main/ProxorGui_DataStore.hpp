@@ -126,7 +126,7 @@ namespace ProxorGui {
         bool sub_clear = false;
         bool sub_insecure = true;
         int sub_auto_update = 30;
-        bool sub_update_on_start = true;
+        bool sub_update_on_start = false;
         bool check_update_on_start = true;
 
         // Security

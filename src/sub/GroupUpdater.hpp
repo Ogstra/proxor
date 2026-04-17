@@ -32,3 +32,6 @@ namespace ProxorGui_sub {
 
 // 更新所有订阅 关闭分组窗口时 更新动作继续执行
 void UI_update_all_groups(bool onlyAllowed = false);
+void UI_update_due_groups_on_start();
+void UI_update_due_groups_on_timer();
+bool UI_has_scheduled_subscription_updates();

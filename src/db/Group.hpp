@@ -9,6 +9,8 @@ namespace ProxorGui {
         int id = -1;
         bool archive = false;
         bool skip_auto_update = false;
+        int sub_update_interval = 0;
+        bool sub_update_always = false;
         QString name = "";
         QString url = "";
         QString info = "";

@@ -6,6 +6,7 @@
 #include "GroupUpdater.hpp"
 
 #include <QInputDialog>
+#include <QDateTime>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -18,11 +19,15 @@
 
 #endif
 
+bool UI_update_all_groups_Updating = false;
+
 namespace ProxorGui_sub {
 
     GroupUpdater *groupUpdater = new GroupUpdater;
 
-    namespace {
+    namespace detail {
+        constexpr int kMinimumAutoUpdateMinutes = 30;
+
         QString JsonString(const QJsonObject &obj, const std::initializer_list<const char *> &keys) {
             for (const auto *key: keys) {
                 const auto value = obj.value(key);
@@ -85,6 +90,83 @@ namespace ProxorGui_sub {
             return NameFromSubscriptionUrl(url);
         }
 
+        int NormalizeAutoUpdateInterval(int minutes) {
+            return minutes >= kMinimumAutoUpdateMinutes ? minutes : 0;
+        }
+
+        int ParseAutoUpdateIntervalHeader(const QString &header) {
+            bool ok = false;
+            const auto interval = header.trimmed().toInt(&ok);
+            return ok ? NormalizeAutoUpdateInterval(interval) : 0;
+        }
+
+        bool ParseUpdateAlwaysHeader(const QString &header) {
+            const auto value = header.trimmed().toLower();
+            return value == "true" || value == "1" || value == "yes";
+        }
+
+        bool CanAutoUpdateGroup(const std::shared_ptr<ProxorGui::Group> &group) {
+            return group != nullptr && !group->url.isEmpty() && !group->archive && !group->skip_auto_update;
+        }
+
+        qint64 CurrentUnixTimeSeconds() {
+            return QDateTime::currentSecsSinceEpoch();
+        }
+
+        int GlobalAutoUpdateIntervalMinutes() {
+            return NormalizeAutoUpdateInterval(std::abs(ProxorGui::dataStore->sub_auto_update));
+        }
+
+        int GroupAutoUpdateIntervalMinutes(const std::shared_ptr<ProxorGui::Group> &group) {
+            if (!CanAutoUpdateGroup(group)) return 0;
+            const auto specificInterval = NormalizeAutoUpdateInterval(group->sub_update_interval);
+            if (specificInterval > 0) return specificInterval;
+            return GlobalAutoUpdateIntervalMinutes();
+        }
+
+        bool IsGroupUpdateDue(const std::shared_ptr<ProxorGui::Group> &group, int intervalMinutes) {
+            if (!CanAutoUpdateGroup(group) || intervalMinutes <= 0) return false;
+            if (group->sub_last_update <= 0) return true;
+            return CurrentUnixTimeSeconds() - group->sub_last_update >= intervalMinutes * 60LL;
+        }
+
+        bool ShouldAutoUpdateGroupOnStart(const std::shared_ptr<ProxorGui::Group> &group) {
+            if (!CanAutoUpdateGroup(group)) return false;
+            if (ProxorGui::dataStore->sub_update_on_start) return true;
+            if (group->sub_update_always) return true;
+            return IsGroupUpdateDue(group, NormalizeAutoUpdateInterval(group->sub_update_interval));
+        }
+
+        bool ShouldAutoUpdateGroupOnTimer(const std::shared_ptr<ProxorGui::Group> &group) {
+            return IsGroupUpdateDue(group, GroupAutoUpdateIntervalMinutes(group));
+        }
+
+        template<typename Predicate>
+        void serialUpdateSubscription(const QList<int> &groupsTabOrder, int order, const Predicate &shouldUpdate) {
+            if (order >= groupsTabOrder.size()) {
+                UI_update_all_groups_Updating = false;
+                return;
+            }
+
+            auto group = ProxorGui::profileManager->GetGroup(groupsTabOrder[order]);
+            if (!shouldUpdate(group)) {
+                serialUpdateSubscription(groupsTabOrder, order + 1, shouldUpdate);
+                return;
+            }
+
+            int nextOrder = order + 1;
+            while (nextOrder < groupsTabOrder.size()) {
+                auto nextGroup = ProxorGui::profileManager->GetGroup(groupsTabOrder[nextOrder]);
+                if (shouldUpdate(nextGroup)) break;
+                nextOrder += 1;
+            }
+
+            UI_update_all_groups_Updating = true;
+            ProxorGui_sub::groupUpdater->AsyncUpdate(group->url, group->id, [=] {
+                serialUpdateSubscription(groupsTabOrder, nextOrder, shouldUpdate);
+            });
+        }
+
         bool UpdateSip008(const QString &str, RawUpdater *updater) {
             QJsonParseError error;
             const auto doc = QJsonDocument::fromJson(str.toUtf8(), &error);
@@ -127,7 +209,7 @@ namespace ProxorGui_sub {
 
             return true;
         }
-    } // namespace
+    } // namespace detail
 
     void RawUpdater_FixEnt(const std::shared_ptr<ProxorGui::ProxyEntity> &ent) {
         if (ent == nullptr) return;
@@ -159,7 +241,7 @@ namespace ProxorGui_sub {
         }
 
         // SIP008 / multi-server Shadowsocks JSON
-        if (UpdateSip008(str, this)) {
+        if (detail::UpdateSip008(str, this)) {
             return;
         }
 
@@ -654,19 +736,28 @@ namespace ProxorGui_sub {
             sub_user_info = NetworkRequestHelper::GetHeader(resp.header, "Subscription-UserInfo");
 
             auto profileUpdateInterval = NetworkRequestHelper::GetHeader(resp.header, "profile-update-interval");
-            if (!profileUpdateInterval.isEmpty()) {
-                bool ok = false;
-                int intervalMinutes = profileUpdateInterval.trimmed().toInt(&ok);
-                if (ok && intervalMinutes > 0) {
-                    MW_show_log(QObject::tr("Server recommends update interval: %1 minutes").arg(intervalMinutes));
-                }
-            }
             auto updateAlways = NetworkRequestHelper::GetHeader(resp.header, "update-always");
-            if (updateAlways.toLower() == "true") {
+
+            const auto intervalMinutes = detail::ParseAutoUpdateIntervalHeader(profileUpdateInterval);
+            const auto alwaysUpdate = detail::ParseUpdateAlwaysHeader(updateAlways);
+            if (intervalMinutes > 0) {
+                MW_show_log(QObject::tr("Server recommends update interval: %1 minutes").arg(intervalMinutes));
+            }
+            if (alwaysUpdate) {
                 MW_show_log(QObject::tr("Server indicates always-update mode"));
             }
+            if (group != nullptr) {
+                if (group->skip_auto_update) {
+                    if (intervalMinutes > 0 || alwaysUpdate) {
+                        MW_show_log(QObject::tr("Ignoring subscription update headers because automatic update is disabled for this subscription."));
+                    }
+                } else {
+                    group->sub_update_interval = intervalMinutes;
+                    group->sub_update_always = alwaysUpdate;
+                }
+            }
 
-            auto sub_name = ResolveSubscriptionName(subscriptionUrl, resp.header);
+            auto sub_name = detail::ResolveSubscriptionName(subscriptionUrl, resp.header);
             if (group != nullptr && !sub_name.isEmpty()) {
                 group->name = sub_name;
             }
@@ -760,46 +851,15 @@ namespace ProxorGui_sub {
             auto change_separator = change_text.contains('\n') ? "\n" : " ";
             MW_show_log(change_prefix + change_separator + change_text);
             MW_dialog_message("SubUpdater", "finish-dingyue");
+            if (TM_auto_update_subsctiption_Reset_Minute != nullptr) {
+                TM_auto_update_subsctiption_Reset_Minute(ProxorGui::dataStore->sub_auto_update);
+            }
         } else {
             ProxorGui::dataStore->imported_count = rawUpdater->updated_order.count();
             MW_dialog_message("SubUpdater", "finish");
         }
     }
 } // namespace ProxorGui_sub
-
-bool UI_update_all_groups_Updating = false;
-
-#define should_skip_group(g) (g == nullptr || g->url.isEmpty() || g->archive || (onlyAllowed && g->skip_auto_update))
-
-void serialUpdateSubscription(const QList<int> &groupsTabOrder, int _order, bool onlyAllowed) {
-    if (_order >= groupsTabOrder.size()) {
-        UI_update_all_groups_Updating = false;
-        return;
-    }
-
-    // calculate this group
-    auto group = ProxorGui::profileManager->GetGroup(groupsTabOrder[_order]);
-    if (group == nullptr || should_skip_group(group)) {
-        serialUpdateSubscription(groupsTabOrder, _order + 1, onlyAllowed);
-        return;
-    }
-
-    int nextOrder = _order + 1;
-    while (nextOrder < groupsTabOrder.size()) {
-        auto nextGid = groupsTabOrder[nextOrder];
-        auto nextGroup = ProxorGui::profileManager->GetGroup(nextGid);
-        if (!should_skip_group(nextGroup)) {
-            break;
-        }
-        nextOrder += 1;
-    }
-
-    // Async update current group
-    UI_update_all_groups_Updating = true;
-    ProxorGui_sub::groupUpdater->AsyncUpdate(group->url, group->id, [=] {
-        serialUpdateSubscription(groupsTabOrder, nextOrder, onlyAllowed);
-    });
-}
 
 void UI_update_all_groups(bool onlyAllowed) {
     if (UI_update_all_groups_Updating) {
@@ -808,5 +868,39 @@ void UI_update_all_groups(bool onlyAllowed) {
     }
 
     auto groupsTabOrder = ProxorGui::profileManager->groupsTabOrder;
-    serialUpdateSubscription(groupsTabOrder, 0, onlyAllowed);
+    ProxorGui_sub::detail::serialUpdateSubscription(groupsTabOrder, 0, [=](const std::shared_ptr<ProxorGui::Group> &group) {
+        return group != nullptr && !group->url.isEmpty() && !group->archive && !(onlyAllowed && group->skip_auto_update);
+    });
+}
+
+void UI_update_due_groups_on_start() {
+    if (UI_update_all_groups_Updating) {
+        MW_show_log("The last subscription update has not exited.");
+        return;
+    }
+
+    ProxorGui_sub::detail::serialUpdateSubscription(ProxorGui::profileManager->groupsTabOrder, 0,
+        [](const std::shared_ptr<ProxorGui::Group> &group) {
+            return ProxorGui_sub::detail::ShouldAutoUpdateGroupOnStart(group);
+        });
+}
+
+void UI_update_due_groups_on_timer() {
+    if (UI_update_all_groups_Updating) {
+        MW_show_log("The last subscription update has not exited.");
+        return;
+    }
+
+    ProxorGui_sub::detail::serialUpdateSubscription(ProxorGui::profileManager->groupsTabOrder, 0,
+        [](const std::shared_ptr<ProxorGui::Group> &group) {
+            return ProxorGui_sub::detail::ShouldAutoUpdateGroupOnTimer(group);
+        });
+}
+
+bool UI_has_scheduled_subscription_updates() {
+    for (const auto groupId: ProxorGui::profileManager->groupsTabOrder) {
+        const auto group = ProxorGui::profileManager->GetGroup(groupId);
+        if (ProxorGui_sub::detail::GroupAutoUpdateIntervalMinutes(group) > 0) return true;
+    }
+    return false;
 }

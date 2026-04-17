@@ -116,26 +116,60 @@
     </widget>
    </item>
    <item>
-    <widget class="QGroupBox" name="cat_sub">
+   <widget class="QGroupBox" name="cat_sub">
      <property name="title">
       <string>Subscription</string>
      </property>
-     <layout class="QGridLayout" name="_2">
-      <item row="0" column="0">
-       <widget class="QLabel" name="label_4">
-        <property name="text">
-         <string>URL</string>
-        </property>
-       </widget>
+     <layout class="QVBoxLayout" name="verticalLayout_3">
+      <item>
+       <layout class="QGridLayout" name="_2">
+        <item row="0" column="0">
+         <widget class="QLabel" name="label_4">
+          <property name="text">
+           <string>URL</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="MyLineEdit" name="url"/>
+        </item>
+        <item row="1" column="1">
+         <widget class="QCheckBox" name="skip_auto_update">
+          <property name="text">
+           <string>Skip automatic update</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
       </item>
-      <item row="0" column="1">
-       <widget class="MyLineEdit" name="url"/>
-      </item>
-      <item row="1" column="1">
-       <widget class="QCheckBox" name="skip_auto_update">
-        <property name="text">
-         <string>Skip automatic update</string>
+      <item>
+       <widget class="QGroupBox" name="cat_update">
+        <property name="title">
+         <string>Update</string>
         </property>
+        <layout class="QGridLayout" name="gridLayout_update">
+         <item row="0" column="0">
+          <widget class="QLabel" name="label_update_interval">
+           <property name="text">
+            <string>Profile update interval</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QLineEdit" name="sub_update_interval">
+           <property name="placeholderText">
+            <string>Use automatic update interval</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QCheckBox" name="sub_update_always">
+           <property name="text">
+            <string>Update always</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </widget>
       </item>
      </layout>
@@ -189,6 +223,8 @@
   <tabstop>archive</tabstop>
   <tabstop>url</tabstop>
   <tabstop>skip_auto_update</tabstop>
+  <tabstop>sub_update_interval</tabstop>
+  <tabstop>sub_update_always</tabstop>
   <tabstop>copy_links</tabstop>
   <tabstop>copy_links_nkr</tabstop>
  </tabstops>
