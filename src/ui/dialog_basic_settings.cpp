@@ -17,6 +17,7 @@
 
 namespace {
 int ThemeModeIndexForTheme(const QString &themeName) {
+    if (themeManager->NormalizeTheme(themeName) == QStringLiteral("System")) return 2;
     if (themeName.endsWith(QStringLiteral("|Light"), Qt::CaseInsensitive)) return 1;
     if (themeName.endsWith(QStringLiteral("|Dark"), Qt::CaseInsensitive)) return 2;
     if (themeName.endsWith(QStringLiteral("|System"), Qt::CaseInsensitive)) return 0;
@@ -46,6 +47,9 @@ QString ResolveThemeSelection(const QString &comboTheme, int modeIndex) {
         if (modeIndex == 2) return QStringLiteral("FusionDark");
         return QStringLiteral("Fusion");
     }
+    if (comboTheme == QStringLiteral("System")) {
+        return QStringLiteral("System");
+    }
     if (comboTheme == QStringLiteral("QDarkStyle") || comboTheme == QStringLiteral("FusionArcDark")) {
         return comboTheme;
     }
@@ -56,21 +60,21 @@ QString ResolveThemeSelection(const QString &comboTheme, int modeIndex) {
 
 void RefreshThemeModeOptions(QComboBox *themeCombo, QComboBox *modeCombo) {
     const auto themeKey = themeCombo->currentData().toString();
-    const bool isWindowsVista = themeKey.compare(QStringLiteral("WindowsVista"), Qt::CaseInsensitive) == 0;
+    const bool isSystem = themeKey.compare(QStringLiteral("System"), Qt::CaseInsensitive) == 0;
     const bool isQDarkStyle = themeKey.compare(QStringLiteral("QDarkStyle"), Qt::CaseInsensitive) == 0;
     if (auto *model = qobject_cast<QStandardItemModel *>(modeCombo->model())) {
         if (auto *item = model->item(1)) {
-            item->setEnabled(!isQDarkStyle);
+            item->setEnabled(!isQDarkStyle && !isSystem);
         }
         if (auto *item = model->item(2)) {
-            item->setEnabled(!isWindowsVista);
+            item->setEnabled(true);
         }
     }
     if (isQDarkStyle && modeCombo->currentIndex() == 1) {
         modeCombo->setCurrentIndex(2);
     }
-    if (isWindowsVista && modeCombo->currentIndex() == 2) {
-        modeCombo->setCurrentIndex(0);
+    if (isSystem && modeCombo->currentIndex() == 1) {
+        modeCombo->setCurrentIndex(2);
     }
 }
 }
