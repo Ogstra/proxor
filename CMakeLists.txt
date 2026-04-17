@@ -6,7 +6,7 @@ if (POLICY CMP0077)
     cmake_policy(SET CMP0077 NEW)
 endif ()
 
-project(proxor VERSION 1.5.1 LANGUAGES CXX)
+project(proxor VERSION 1.5.2 LANGUAGES CXX)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(PROXOR_SRC_DIR "${CMAKE_SOURCE_DIR}/src")
