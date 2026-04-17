@@ -18,24 +18,78 @@ QString loadStyleSheet(const QString &resourcePath) {
     return ReadFileText(resourcePath);
 }
 
+QStyle *createStyleOrNull(const QString &styleName) {
+    return QStyleFactory::create(styleName);
+}
+
+void copyActiveToInactive(QPalette *palette) {
+    const auto roles = {
+        QPalette::Window,
+        QPalette::WindowText,
+        QPalette::Base,
+        QPalette::AlternateBase,
+        QPalette::ToolTipBase,
+        QPalette::ToolTipText,
+        QPalette::Text,
+        QPalette::Button,
+        QPalette::ButtonText,
+        QPalette::BrightText,
+        QPalette::Link,
+        QPalette::Highlight,
+        QPalette::HighlightedText,
+        QPalette::Light,
+        QPalette::Midlight,
+        QPalette::Mid,
+        QPalette::Dark,
+        QPalette::Shadow,
+        QPalette::PlaceholderText
+    };
+    for (const auto role : roles) {
+        palette->setColor(QPalette::Inactive, role, palette->color(QPalette::Active, role));
+    }
+}
+
+QString extractThemeMode(QString *themeName) {
+    const int separator = themeName->lastIndexOf('|');
+    if (separator < 0) return {};
+    const auto mode = themeName->mid(separator + 1).trimmed().toLower();
+    *themeName = themeName->left(separator).trimmed();
+    if (mode == QStringLiteral("light") || mode == QStringLiteral("dark") || mode == QStringLiteral("system")) {
+        return mode;
+    }
+    return {};
+}
+
 QPalette makeLightPalette() {
     QPalette palette;
-    palette.setColor(QPalette::Window, QColor(245, 245, 245));
-    palette.setColor(QPalette::WindowText, QColor(30, 30, 30));
-    palette.setColor(QPalette::Base, QColor(255, 255, 255));
-    palette.setColor(QPalette::AlternateBase, QColor(238, 238, 238));
-    palette.setColor(QPalette::ToolTipBase, QColor(255, 255, 255));
-    palette.setColor(QPalette::ToolTipText, QColor(30, 30, 30));
-    palette.setColor(QPalette::Text, QColor(30, 30, 30));
-    palette.setColor(QPalette::Button, QColor(240, 240, 240));
-    palette.setColor(QPalette::ButtonText, QColor(30, 30, 30));
+    palette.setColor(QPalette::Window, QColor(241, 243, 246));
+    palette.setColor(QPalette::WindowText, QColor(20, 24, 29));
+    palette.setColor(QPalette::Base, QColor(229, 233, 238));
+    palette.setColor(QPalette::AlternateBase, QColor(221, 226, 232));
+    palette.setColor(QPalette::ToolTipBase, QColor(245, 247, 250));
+    palette.setColor(QPalette::ToolTipText, QColor(24, 28, 33));
+    palette.setColor(QPalette::Text, QColor(24, 28, 33));
+    palette.setColor(QPalette::Button, QColor(223, 228, 234));
+    palette.setColor(QPalette::ButtonText, QColor(20, 24, 29));
+    palette.setColor(QPalette::Light, QColor(250, 251, 252));
+    palette.setColor(QPalette::Midlight, QColor(233, 237, 242));
+    palette.setColor(QPalette::PlaceholderText, QColor(106, 115, 127));
+    palette.setColor(QPalette::Mid, QColor(164, 173, 185));
+    palette.setColor(QPalette::Dark, QColor(128, 137, 149));
+    palette.setColor(QPalette::Shadow, QColor(84, 93, 105));
     palette.setColor(QPalette::BrightText, QColor(255, 255, 255));
-    palette.setColor(QPalette::Link, QColor(33, 99, 186));
-    palette.setColor(QPalette::Highlight, QColor(61, 129, 220));
+    palette.setColor(QPalette::Link, QColor(18, 87, 176));
+    palette.setColor(QPalette::Highlight, QColor(25, 105, 205));
     palette.setColor(QPalette::HighlightedText, QColor(255, 255, 255));
-    palette.setColor(QPalette::Disabled, QPalette::Text, QColor(135, 135, 135));
-    palette.setColor(QPalette::Disabled, QPalette::ButtonText, QColor(135, 135, 135));
-    palette.setColor(QPalette::Disabled, QPalette::WindowText, QColor(135, 135, 135));
+    palette.setColor(QPalette::Disabled, QPalette::Base, QColor(235, 238, 242));
+    palette.setColor(QPalette::Disabled, QPalette::Button, QColor(231, 234, 238));
+    palette.setColor(QPalette::Disabled, QPalette::Window, QColor(237, 240, 243));
+    palette.setColor(QPalette::Disabled, QPalette::Text, QColor(123, 132, 143));
+    palette.setColor(QPalette::Disabled, QPalette::ButtonText, QColor(123, 132, 143));
+    palette.setColor(QPalette::Disabled, QPalette::WindowText, QColor(123, 132, 143));
+    palette.setColor(QPalette::Disabled, QPalette::Highlight, QColor(160, 186, 221));
+    palette.setColor(QPalette::Disabled, QPalette::HighlightedText, QColor(243, 246, 249));
+    copyActiveToInactive(&palette);
     return palette;
 }
 
@@ -57,6 +111,7 @@ QPalette makeDarkPalette() {
     palette.setColor(QPalette::Disabled, QPalette::Text, QColor(127, 127, 127));
     palette.setColor(QPalette::Disabled, QPalette::ButtonText, QColor(127, 127, 127));
     palette.setColor(QPalette::Disabled, QPalette::WindowText, QColor(127, 127, 127));
+    copyActiveToInactive(&palette);
     return palette;
 }
 
@@ -78,7 +133,28 @@ QPalette makeArcDarkPalette() {
     palette.setColor(QPalette::Disabled, QPalette::Text, QColor(131, 140, 155));
     palette.setColor(QPalette::Disabled, QPalette::ButtonText, QColor(131, 140, 155));
     palette.setColor(QPalette::Disabled, QPalette::WindowText, QColor(131, 140, 155));
+    copyActiveToInactive(&palette);
     return palette;
+}
+
+bool applyWindowsVistaIntegratedTheme(const QString &mode, const QString &fallbackStyleName) {
+    if (mode == QStringLiteral("dark")) {
+        if (const auto fusionStyle = QStyleFactory::create("Fusion")) {
+            qApp->setStyle(fusionStyle);
+        } else if (auto *fallbackStyle = createStyleOrNull(fallbackStyleName)) {
+            qApp->setStyle(fallbackStyle);
+        }
+        qApp->setPalette(makeDarkPalette());
+        return true;
+    }
+
+    if (auto *vistaStyle = createStyleOrNull(QStringLiteral("WindowsVista"))) {
+        qApp->setStyle(vistaStyle);
+        qApp->setPalette(vistaStyle->standardPalette());
+        return true;
+    }
+
+    return false;
 }
 }
 
@@ -110,6 +186,7 @@ QList<ThemeManager::ThemeOption> ThemeManager::AvailableThemes() const {
 
 QString ThemeManager::NormalizeTheme(const QString &theme) const {
     auto normalizedTheme = theme.trimmed();
+    extractThemeMode(&normalizedTheme);
     if (normalizedTheme.isEmpty()) {
         return QStringLiteral("System");
     }
@@ -155,9 +232,11 @@ void ThemeManager::ApplyTheme(const QString &theme, bool force) {
         this->system_style_name = qApp->style()->name();
     }
 
-    auto normalizedTheme = NormalizeTheme(theme);
+    auto requestedTheme = theme.trimmed();
+    const auto requestedMode = extractThemeMode(&requestedTheme);
+    auto normalizedTheme = NormalizeTheme(requestedTheme);
 
-    if (this->current_theme == normalizedTheme && !force) {
+    if (this->current_theme == theme && !force) {
         return;
     }
 
@@ -166,14 +245,27 @@ void ThemeManager::ApplyTheme(const QString &theme, bool force) {
 
     if (lowerTheme == "system") {
         qApp->setStyleSheet("");
-        qApp->setPalette(QPalette());
-        qApp->setStyle(this->system_style_name);
+        if (requestedMode == QStringLiteral("light")) {
+            if (!applyWindowsVistaIntegratedTheme(QStringLiteral("light"), this->system_style_name)) {
+                qApp->setStyle(this->system_style_name);
+                qApp->setPalette(QPalette());
+            }
+        } else {
+            qApp->setStyle(this->system_style_name);
+            qApp->setPalette(QPalette());
+        }
     } else if (lowerTheme == "fusion") {
         qApp->setStyleSheet("");
         if (const auto fusionStyle = QStyleFactory::create("Fusion")) {
             qApp->setStyle(fusionStyle);
         }
-        qApp->setPalette(QPalette());
+        if (requestedMode == QStringLiteral("light")) {
+            qApp->setPalette(makeLightPalette());
+        } else if (requestedMode == QStringLiteral("dark")) {
+            qApp->setPalette(makeDarkPalette());
+        } else {
+            qApp->setPalette(QPalette());
+        }
     } else if (lowerTheme == "fusionlight") {
         qApp->setStyleSheet("");
         if (const auto fusionStyle = QStyleFactory::create("Fusion")) {
@@ -201,16 +293,29 @@ void ThemeManager::ApplyTheme(const QString &theme, bool force) {
         baseStyleSheet = loadStyleSheet(":/qdarkstyle/dark/darkstyle.qss");
         baseStyleSheet.append(loadStyleSheet(":/proxor/qdarkstyle_overrides.qss"));
     } else {
-        const auto style = QStyleFactory::create(normalizedTheme);
-        if (style != nullptr) {
+        if (lowerTheme == "windowsvista" &&
+            applyWindowsVistaIntegratedTheme(requestedMode, this->system_style_name)) {
             qApp->setStyleSheet("");
-            qApp->setPalette(QPalette());
-            qApp->setStyle(style);
         } else {
-            qApp->setStyleSheet("");
-            qApp->setPalette(QPalette());
-            qApp->setStyle(this->system_style_name);
-            normalizedTheme = "System";
+            const auto style = QStyleFactory::create(normalizedTheme);
+            if (style != nullptr) {
+                qApp->setStyleSheet("");
+                qApp->setStyle(style);
+                if (lowerTheme == "windowsvista" && requestedMode == QStringLiteral("light")) {
+                    qApp->setPalette(style->standardPalette());
+                } else if (requestedMode == QStringLiteral("light")) {
+                    qApp->setPalette(makeLightPalette());
+                } else if (requestedMode == QStringLiteral("dark")) {
+                    qApp->setPalette(makeDarkPalette());
+                } else {
+                    qApp->setPalette(QPalette());
+                }
+            } else {
+                qApp->setStyleSheet("");
+                qApp->setPalette(QPalette());
+                qApp->setStyle(this->system_style_name);
+                normalizedTheme = "System";
+            }
         }
     }
     qApp->setStyleSheet(baseStyleSheet);
@@ -224,6 +329,6 @@ void ThemeManager::ApplyTheme(const QString &theme, bool force) {
         w->update();
     }
 
-    current_theme = normalizedTheme;
-    emit themeChanged(normalizedTheme);
+    current_theme = theme;
+    emit themeChanged(current_theme);
 }

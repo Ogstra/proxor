@@ -12,10 +12,14 @@
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QSignalBlocker>
+#include <QStandardItemModel>
 #include <QTimer>
 
 namespace {
 int ThemeModeIndexForTheme(const QString &themeName) {
+    if (themeName.endsWith(QStringLiteral("|Light"), Qt::CaseInsensitive)) return 1;
+    if (themeName.endsWith(QStringLiteral("|Dark"), Qt::CaseInsensitive)) return 2;
+    if (themeName.endsWith(QStringLiteral("|System"), Qt::CaseInsensitive)) return 0;
     const auto normalized = themeManager->NormalizeTheme(themeName);
     if (normalized == QStringLiteral("FusionLight")) return 1;
     if (normalized == QStringLiteral("FusionDark") ||
@@ -42,7 +46,32 @@ QString ResolveThemeSelection(const QString &comboTheme, int modeIndex) {
         if (modeIndex == 2) return QStringLiteral("FusionDark");
         return QStringLiteral("Fusion");
     }
-    return comboTheme;
+    if (comboTheme == QStringLiteral("QDarkStyle") || comboTheme == QStringLiteral("FusionArcDark")) {
+        return comboTheme;
+    }
+    if (modeIndex == 1) return comboTheme + QStringLiteral("|Light");
+    if (modeIndex == 2) return comboTheme + QStringLiteral("|Dark");
+    return comboTheme + QStringLiteral("|System");
+}
+
+void RefreshThemeModeOptions(QComboBox *themeCombo, QComboBox *modeCombo) {
+    const auto themeKey = themeCombo->currentData().toString();
+    const bool isWindowsVista = themeKey.compare(QStringLiteral("WindowsVista"), Qt::CaseInsensitive) == 0;
+    const bool isQDarkStyle = themeKey.compare(QStringLiteral("QDarkStyle"), Qt::CaseInsensitive) == 0;
+    if (auto *model = qobject_cast<QStandardItemModel *>(modeCombo->model())) {
+        if (auto *item = model->item(1)) {
+            item->setEnabled(!isQDarkStyle);
+        }
+        if (auto *item = model->item(2)) {
+            item->setEnabled(!isWindowsVista);
+        }
+    }
+    if (isQDarkStyle && modeCombo->currentIndex() == 1) {
+        modeCombo->setCurrentIndex(2);
+    }
+    if (isWindowsVista && modeCombo->currentIndex() == 2) {
+        modeCombo->setCurrentIndex(0);
+    }
 }
 }
 
@@ -157,9 +186,11 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
         ui->theme->setCurrentIndex(currentThemeIndex);
     }
     ui->theme_mode->setCurrentIndex(ThemeModeIndexForTheme(currentTheme));
+    RefreshThemeModeOptions(ui->theme, ui->theme_mode);
 
     connect(ui->theme, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int index) {
         const auto comboThemeName = ui->theme->itemData(index).toString();
+        RefreshThemeModeOptions(ui->theme, ui->theme_mode);
         const auto themeName = ResolveThemeSelection(comboThemeName, ui->theme_mode->currentIndex());
         if (themeName.isEmpty()) return;
         const QSignalBlocker blocker(ui->theme_mode);
