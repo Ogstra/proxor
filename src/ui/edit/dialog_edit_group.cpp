@@ -9,6 +9,18 @@
 
 #define ADJUST_SIZE runOnUiThread([=] { adjustSize(); adjustPosition(mainwindow); }, this);
 
+namespace {
+void RefreshUpdateIntervalUi(Ui::DialogEditGroup *ui, int subIntervalMinutes) {
+    if (subIntervalMinutes > 0) {
+        ui->label_update_interval->setText(QObject::tr("Profile update interval (replaces global):"));
+        ui->sub_update_interval->setPlaceholderText(QObject::tr("Provided by subscription header"));
+    } else {
+        ui->label_update_interval->setText(QObject::tr("Profile update interval (optional):"));
+        ui->sub_update_interval->setPlaceholderText(QObject::tr("Use global automatic update interval"));
+    }
+}
+}
+
 DialogEditGroup::DialogEditGroup(const std::shared_ptr<ProxorGui::Group> &ent, QWidget *parent) : QDialog(parent), ui(new Ui::DialogEditGroup) {
     ui->setupUi(this);
     this->ent = ent;
@@ -26,11 +38,14 @@ DialogEditGroup::DialogEditGroup(const std::shared_ptr<ProxorGui::Group> &ent, Q
     ui->skip_auto_update->setChecked(ent->skip_auto_update);
     ui->sub_update_interval->setText(ent->sub_update_interval > 0 ? Int2String(ent->sub_update_interval) : "");
     ui->sub_update_interval->setValidator(new QRegularExpressionValidator(QRegularExpression("^[0-9]+$"), this));
+    ui->sub_update_interval->setToolTip(tr("When the subscription sends profile-update-interval, that value replaces the global automatic update interval for this subscription."));
     ui->sub_update_always->setChecked(ent->sub_update_always);
+    ui->sub_update_always->setToolTip(tr("When enabled, this subscription updates on startup even if the global startup toggle is disabled."));
     ui->url->setText(ent->url);
     ui->type->setCurrentIndex(ent->url.isEmpty() ? 0 : 1);
     ui->type->currentIndexChanged(ui->type->currentIndex());
     ui->cat_update->setEnabled(!ent->skip_auto_update);
+    RefreshUpdateIntervalUi(ui, ent->sub_update_interval);
     ui->manually_column_width->setChecked(ent->manually_column_width);
     ui->cat_share->setVisible(false);
 
@@ -102,10 +117,12 @@ void DialogEditGroup::refresh_front_proxy() {
 }
 
 void DialogEditGroup::on_front_proxy_clicked() {
-    this->hide();
+    setEnabled(false);
     GetMainWindow()->start_select_mode(this, [=](int id) {
         CACHE.front_proxy = id;
         refresh_front_proxy();
-        show();
+        setEnabled(true);
+        raise();
+        activateWindow();
     });
 }
