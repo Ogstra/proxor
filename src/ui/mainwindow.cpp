@@ -1453,7 +1453,8 @@ void MainWindow::refresh_status(const QString &traffic_update) {
     if (icon_status_new != icon_status) {
         auto newIcon = Icon::GetTrayIcon(icon_status_new);
         QApplication::setWindowIcon(newIcon);
-        setWindowIcon(newIcon); // force taskbar update via WM_SETICON on the actual HWND
+        for (QWidget *w : QApplication::topLevelWidgets())
+            w->setWindowIcon(newIcon);
     }
 
     // refresh tray
