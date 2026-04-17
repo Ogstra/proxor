@@ -26,7 +26,7 @@ namespace ProxorGui_sub {
     GroupUpdater *groupUpdater = new GroupUpdater;
 
     namespace detail {
-        constexpr int kMinimumAutoUpdateMinutes = 30;
+        constexpr int kMinimumGlobalAutoUpdateMinutes = 30;
 
         QString JsonString(const QJsonObject &obj, const std::initializer_list<const char *> &keys) {
             for (const auto *key: keys) {
@@ -90,14 +90,14 @@ namespace ProxorGui_sub {
             return NameFromSubscriptionUrl(url);
         }
 
-        int NormalizeAutoUpdateInterval(int minutes) {
-            return minutes >= kMinimumAutoUpdateMinutes ? minutes : 0;
+        int NormalizeGlobalAutoUpdateInterval(int minutes) {
+            return minutes >= kMinimumGlobalAutoUpdateMinutes ? minutes : 0;
         }
 
         int ParseAutoUpdateIntervalHeader(const QString &header) {
             bool ok = false;
             const auto interval = header.trimmed().toInt(&ok);
-            return ok ? NormalizeAutoUpdateInterval(interval) : 0;
+            return ok && interval > 0 ? interval * 60 : 0;
         }
 
         bool ParseUpdateAlwaysHeader(const QString &header) {
@@ -114,12 +114,12 @@ namespace ProxorGui_sub {
         }
 
         int GlobalAutoUpdateIntervalMinutes() {
-            return NormalizeAutoUpdateInterval(std::abs(ProxorGui::dataStore->sub_auto_update));
+            return NormalizeGlobalAutoUpdateInterval(std::abs(ProxorGui::dataStore->sub_auto_update));
         }
 
         int GroupAutoUpdateIntervalMinutes(const std::shared_ptr<ProxorGui::Group> &group) {
             if (!CanAutoUpdateGroup(group)) return 0;
-            const auto specificInterval = NormalizeAutoUpdateInterval(group->sub_update_interval);
+            const auto specificInterval = group->sub_update_interval > 0 ? group->sub_update_interval : 0;
             if (specificInterval > 0) return specificInterval;
             return GlobalAutoUpdateIntervalMinutes();
         }
@@ -134,7 +134,7 @@ namespace ProxorGui_sub {
             if (!CanAutoUpdateGroup(group)) return false;
             if (ProxorGui::dataStore->sub_update_on_start) return true;
             if (group->sub_update_always) return true;
-            return IsGroupUpdateDue(group, NormalizeAutoUpdateInterval(group->sub_update_interval));
+            return IsGroupUpdateDue(group, group->sub_update_interval > 0 ? group->sub_update_interval : 0);
         }
 
         bool ShouldAutoUpdateGroupOnTimer(const std::shared_ptr<ProxorGui::Group> &group) {

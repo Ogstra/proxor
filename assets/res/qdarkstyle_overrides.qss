@@ -5,6 +5,7 @@ QTabWidget QWidget {
 QTabWidget::pane {
   top: -1px;
   margin-top: -1px;
+  background-color: #19232D;
 }
 
 QTabWidget::pane:selected {
@@ -13,22 +14,6 @@ QTabWidget::pane:selected {
 
 QTabBar::tab:top:!selected {
   margin-top: 0px;
-}
-
-QLineEdit:focus,
-QLineEdit:hover,
-QTextEdit:focus,
-QTextEdit:hover,
-QPlainTextEdit:focus,
-QPlainTextEdit:hover,
-QComboBox:focus,
-QComboBox:hover,
-QAbstractSpinBox:focus,
-QAbstractSpinBox:hover,
-QAbstractItemView:focus,
-QAbstractView:hover,
-QAbstractScrollArea:focus {
-  border: 1px solid #455364;
 }
 
 QSplitter#splitter {
@@ -50,50 +35,13 @@ QSplitter#splitter::handle:vertical {
   image: none;
 }
 
-QCheckBox::indicator {
+QMenu::item {
+  padding: 4px 20px 4px 22px;
+}
+
+QMenu::indicator {
   width: 14px;
   height: 14px;
-  border: 1px solid #455364;
-  border-radius: 3px;
-  background-color: #19232D;
-}
-
-QCheckBox::indicator:hover {
-  border-color: #37AEFE;
-}
-
-QCheckBox::indicator:checked {
-  background-color: #1464A0;
-  border-color: #1464A0;
-  image: none;
-}
-
-QCheckBox::indicator:checked:hover {
-  background-color: #37AEFE;
-  border-color: #37AEFE;
-}
-
-QCheckBox::indicator:disabled {
-  border-color: #2D4257;
-  background-color: #14222E;
-}
-
-QToolButton#toolButton_program::menu-indicator,
-QToolButton#toolButton_preferences::menu-indicator,
-QToolButton#toolButton_server::menu-indicator,
-QToolButton#toolButton_program::menu-arrow,
-QToolButton#toolButton_preferences::menu-arrow,
-QToolButton#toolButton_server::menu-arrow {
-  image: none;
-  width: 0px;
-  height: 0px;
-  subcontrol-position: center;
-}
-
-QToolButton#toolButton_program::menu-button,
-QToolButton#toolButton_preferences::menu-button,
-QToolButton#toolButton_server::menu-button {
-  width: 0px;
   padding: 0px;
-  border: none;
+  margin: 0px 4px 0px 4px;
 }
