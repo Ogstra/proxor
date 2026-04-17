@@ -137,25 +137,6 @@ QPalette makeArcDarkPalette() {
     return palette;
 }
 
-bool applyWindowsVistaIntegratedTheme(const QString &mode, const QString &fallbackStyleName) {
-    if (mode == QStringLiteral("dark")) {
-        if (const auto fusionStyle = QStyleFactory::create("Fusion")) {
-            qApp->setStyle(fusionStyle);
-        } else if (auto *fallbackStyle = createStyleOrNull(fallbackStyleName)) {
-            qApp->setStyle(fallbackStyle);
-        }
-        qApp->setPalette(makeDarkPalette());
-        return true;
-    }
-
-    if (auto *vistaStyle = createStyleOrNull(QStringLiteral("WindowsVista"))) {
-        qApp->setStyle(vistaStyle);
-        qApp->setPalette(vistaStyle->standardPalette());
-        return true;
-    }
-
-    return false;
-}
 }
 
 QList<ThemeManager::ThemeOption> ThemeManager::AvailableThemes() const {
@@ -172,7 +153,7 @@ QList<ThemeManager::ThemeOption> ThemeManager::AvailableThemes() const {
         if (key.compare(QStringLiteral("Windows"), Qt::CaseInsensitive) == 0) {
             displayName = QStringLiteral("Windows Classic");
         } else if (key.compare(QStringLiteral("WindowsVista"), Qt::CaseInsensitive) == 0) {
-            displayName = QStringLiteral("Windows Native (Vista)");
+            continue;
         }
         themes.append({key, displayName});
     }
@@ -245,15 +226,8 @@ void ThemeManager::ApplyTheme(const QString &theme, bool force) {
 
     if (lowerTheme == "system") {
         qApp->setStyleSheet("");
-        if (requestedMode == QStringLiteral("light")) {
-            if (!applyWindowsVistaIntegratedTheme(QStringLiteral("light"), this->system_style_name)) {
-                qApp->setStyle(this->system_style_name);
-                qApp->setPalette(QPalette());
-            }
-        } else {
-            qApp->setStyle(this->system_style_name);
-            qApp->setPalette(QPalette());
-        }
+        qApp->setStyle(this->system_style_name);
+        qApp->setPalette(QPalette());
     } else if (lowerTheme == "fusion") {
         qApp->setStyleSheet("");
         if (const auto fusionStyle = QStyleFactory::create("Fusion")) {
@@ -293,29 +267,22 @@ void ThemeManager::ApplyTheme(const QString &theme, bool force) {
         baseStyleSheet = loadStyleSheet(":/qdarkstyle/dark/darkstyle.qss");
         baseStyleSheet.append(loadStyleSheet(":/proxor/qdarkstyle_overrides.qss"));
     } else {
-        if (lowerTheme == "windowsvista" &&
-            applyWindowsVistaIntegratedTheme(requestedMode, this->system_style_name)) {
+        const auto style = QStyleFactory::create(normalizedTheme);
+        if (style != nullptr) {
             qApp->setStyleSheet("");
-        } else {
-            const auto style = QStyleFactory::create(normalizedTheme);
-            if (style != nullptr) {
-                qApp->setStyleSheet("");
-                qApp->setStyle(style);
-                if (lowerTheme == "windowsvista" && requestedMode == QStringLiteral("light")) {
-                    qApp->setPalette(style->standardPalette());
-                } else if (requestedMode == QStringLiteral("light")) {
-                    qApp->setPalette(makeLightPalette());
-                } else if (requestedMode == QStringLiteral("dark")) {
-                    qApp->setPalette(makeDarkPalette());
-                } else {
-                    qApp->setPalette(QPalette());
-                }
+            qApp->setStyle(style);
+            if (requestedMode == QStringLiteral("light")) {
+                qApp->setPalette(makeLightPalette());
+            } else if (requestedMode == QStringLiteral("dark")) {
+                qApp->setPalette(makeDarkPalette());
             } else {
-                qApp->setStyleSheet("");
                 qApp->setPalette(QPalette());
-                qApp->setStyle(this->system_style_name);
-                normalizedTheme = "System";
             }
+        } else {
+            qApp->setStyleSheet("");
+            qApp->setPalette(QPalette());
+            qApp->setStyle(this->system_style_name);
+            normalizedTheme = "System";
         }
     }
     qApp->setStyleSheet(baseStyleSheet);
