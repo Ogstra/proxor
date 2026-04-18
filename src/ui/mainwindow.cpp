@@ -1429,22 +1429,12 @@ void MainWindow::refresh_status(const QString &traffic_update) {
     auto icon_status_new = Icon::NONE;
 
     if (running != nullptr) {
-        switch (ProxorGui_sys::DetectActiveNetworkType()) {
-        case ProxorGui_sys::ActiveNetworkType::Wifi:
-            icon_status_new = Icon::ACTIVE_WIFI;
-            break;
-        case ProxorGui_sys::ActiveNetworkType::Ethernet:
-            icon_status_new = Icon::ACTIVE_ETHERNET;
-            break;
-        case ProxorGui_sys::ActiveNetworkType::Unknown:
-            if (ProxorGui::dataStore->spmode_vpn) {
-                icon_status_new = Icon::VPN;
-            } else if (ProxorGui::dataStore->spmode_system_proxy) {
-                icon_status_new = Icon::SYSTEM_PROXY;
-            } else {
-                icon_status_new = Icon::RUNNING;
-            }
-            break;
+        if (ProxorGui::dataStore->spmode_vpn) {
+            icon_status_new = Icon::VPN;
+        } else if (ProxorGui::dataStore->spmode_system_proxy) {
+            icon_status_new = Icon::SYSTEM_PROXY;
+        } else {
+            icon_status_new = Icon::RUNNING;
         }
     }
 

@@ -9,8 +9,6 @@ namespace Icon {
         RUNNING,
         SYSTEM_PROXY,
         VPN,
-        ACTIVE_WIFI,
-        ACTIVE_ETHERNET,
     };
 
     QPixmap GetTrayIcon(TrayIconStatus status);
