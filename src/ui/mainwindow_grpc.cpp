@@ -14,6 +14,7 @@
 #include <QDesktopServices>
 #include <QMessageBox>
 #include <QDialogButtonBox>
+#include "dialog_update_available.h"
 
 // ext core
 
@@ -603,6 +604,7 @@ void MainWindow::proxor_stop(bool crash, bool sem) {
 void MainWindow::CheckUpdate(bool silent) {
     // on new thread...
 #ifndef NKR_NO_GRPC
+
     bool ok;
     libcore::UpdateReq request;
     request.set_action(libcore::UpdateAction::Check);
@@ -631,28 +633,21 @@ void MainWindow::CheckUpdate(bool silent) {
         auto allow_updater = !ProxorGui::dataStore->flag_use_appdata;
         auto notePreRelease = response.is_pre_release() ? QObject::tr("Prerelease") : QObject::tr("Release");
         auto releasePageUrl = QUrl(response.release_url().c_str());
-        QString details = QObject::tr("Current version: %1\nAvailable package: %2\nChannel: %3")
-                              .arg(QString(NKR_VERSION), response.assets_name().c_str(), notePreRelease);
-        if (!response.release_note().empty()) {
-            details += QObject::tr("\n\nRelease notes:\n%1").arg(response.release_note().c_str());
-        }
+        QString releaseNote = response.release_note().c_str();
         if (!allow_updater) {
-            details += QObject::tr("\n\nAutomatic installation is disabled in appdata mode.");
+            releaseNote += QObject::tr("\n\n*Automatic installation is disabled in appdata mode.*");
         }
 
-        bool dialogClosed = false;
-        while (!dialogClosed) {
-            QMessageBox box(QMessageBox::Question, QObject::tr("Update Available"), details, QMessageBox::NoButton, this);
-            QAbstractButton *downloadButton = nullptr;
-            if (allow_updater) {
-                downloadButton = box.addButton(QObject::tr("Download and Restart"), QMessageBox::AcceptRole);
-            }
-            QAbstractButton *openButton = box.addButton(QObject::tr("Open Release Page"), QMessageBox::AcceptRole);
-            box.addButton(QObject::tr("Cancel"), QMessageBox::RejectRole);
-            box.exec();
+        auto *dlg = new DialogUpdateAvailable(
+            NKR_VERSION,
+            response.assets_name().c_str(),
+            notePreRelease,
+            releaseNote,
+            allow_updater,
+            this);
 
-            if (downloadButton == box.clickedButton() && allow_updater) {
-                dialogClosed = true;
+        connect(dlg, &QDialog::accepted, this, [=] {
+            if (dlg->chosenAction() == DialogUpdateAvailable::Download && allow_updater) {
                 updateProgressDialog = new UpdateProgressDialog(response.assets_name().c_str(), this);
                 connect(updateProgressDialog, &UpdateProgressDialog::downloadComplete, this, &MainWindow::onUpdateStaged);
                 updateProgressDialog->show();
@@ -670,12 +665,12 @@ void MainWindow::CheckUpdate(bool silent) {
                         });
                     }
                 });
-            } else if (openButton == box.clickedButton() && releasePageUrl.isValid()) {
+            } else if (dlg->chosenAction() == DialogUpdateAvailable::OpenPage && releasePageUrl.isValid()) {
                 QDesktopServices::openUrl(releasePageUrl);
-            } else {
-                dialogClosed = true;
             }
-        }
+        });
+
+        dlg->open();
     });
 #endif
 }

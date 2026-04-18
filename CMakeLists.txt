@@ -210,6 +210,9 @@ set(PROJECT_SOURCES
         src/ui/mainwindow.h
         src/ui/dialog_update_progress.h
         src/ui/dialog_update_progress.cpp
+        src/ui/dialog_update_available.h
+        src/ui/dialog_update_available.cpp
+        src/ui/dialog_update_available.ui
         src/ui/mainwindow.ui
 
         src/ui/edit/dialog_edit_profile.h
@@ -355,6 +358,7 @@ target_include_directories(${PROXOR_GUI_TARGET} PRIVATE
         ${PROXOR_SRC_DIR}
         ${CMAKE_SOURCE_DIR}
 )
+
 
 if (WIN32)
     target_link_libraries(proxor PRIVATE
