@@ -2,6 +2,7 @@
 #include "ui_edit_naive.h"
 
 #include "fmt/NaiveBean.hpp"
+#include "main/ProxorGui_Utils.hpp"
 
 #include <QInputDialog>
 
@@ -30,7 +31,7 @@ void EditNaive::onStart(std::shared_ptr<ProxorGui::ProxyEntity> _ent) {
 bool EditNaive::onEnd() {
     auto bean = this->ent->NaiveBean();
 
-    P_SAVE_STRING(username);
+    bean->username = StripLeadingFlag(ui->username->text());
     P_SAVE_STRING(password);
     P_SAVE_COMBO_STRING(protocol);
     P_C_SAVE_STRING(extra_headers);
