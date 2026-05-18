@@ -90,7 +90,11 @@ if ($BuildGo) {
     $versionStandalone = "proxor-" + $(if ($Version) { $Version } else { (Get-Content (Join-Path $repoRoot "VERSION.txt") -TotalCount 1).Trim() })
 
     if (Test-Path $resolvedOutputDir) {
-        Remove-Item -Recurse -Force $resolvedOutputDir
+        try {
+            Remove-Item -Recurse -Force $resolvedOutputDir
+        } catch {
+            throw "Failed to clean output directory '$resolvedOutputDir'. Close any running Proxor/app.exe process using that directory and retry.`n$_"
+        }
     }
     New-Item -ItemType Directory -Force -Path $resolvedOutputDir | Out-Null
 
