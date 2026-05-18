@@ -15,4 +15,6 @@ namespace Icon {
 
     QPixmap GetMaterialIcon(const QString &name);
 
+    QPixmap GetCountryFlag(const QString &countryCode);
+
 } // namespace Icon

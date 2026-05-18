@@ -13,6 +13,7 @@ ProxyListView::ProxyListView(QWidget *parent) : QTableView(parent) {
     setDragDropOverwriteMode(false);
     setDragEnabled(true);
     setAcceptDrops(true);
+    setIconSize(QSize(22, 16));
 }
 
 QList<int> ProxyListView::selectedProfileIds() const {

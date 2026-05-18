@@ -10,16 +10,16 @@ namespace ProxorGui_fmt {
     if (linkN.isEmpty()) return false;                                                                                          \
     auto hasRemarks = link.contains("#");                                                                                       \
     if (hasRemarks) linkN += "#" + SubStrAfter(link, "#");                                                                      \
-    auto url = QUrl("https://" + linkN);
+    auto url = ParseUrlWithUnicodeFragment("https://" + linkN);
 
     bool SocksHttpBean::TryParseLink(const QString &link) {
-        auto url = QUrl(link);
+        auto url = ParseUrlWithUnicodeFragment(link);
         if (!url.isValid()) return false;
         auto query = GetQuery(url);
 
         if (link.startsWith("socks4")) socks_http_type = type_Socks4;
         if (link.startsWith("http")) socks_http_type = type_HTTP;
-        name = url.fragment(QUrl::FullyDecoded);
+        name = DecodePercentEncodedText(url.fragment(QUrl::FullyDecoded));
         serverAddress = url.host();
         serverPort = url.port();
         username = url.userName();
@@ -43,11 +43,11 @@ namespace ProxorGui_fmt {
     }
 
     bool TrojanVLESSBean::TryParseLink(const QString &link) {
-        auto url = QUrl(link);
+        auto url = ParseUrlWithUnicodeFragment(link);
         if (!url.isValid()) return false;
         auto query = GetQuery(url);
 
-        name = url.fragment(QUrl::FullyDecoded);
+        name = DecodePercentEncodedText(url.fragment(QUrl::FullyDecoded));
         serverAddress = url.host();
         serverPort = url.port();
         password = url.userName();
@@ -112,10 +112,10 @@ namespace ProxorGui_fmt {
     bool ShadowSocksBean::TryParseLink(const QString &link) {
         if (SubStrBefore(link, "#").contains("@")) {
             // SS
-            auto url = QUrl(link);
+            auto url = ParseUrlWithUnicodeFragment(link);
             if (!url.isValid()) return false;
 
-            name = url.fragment(QUrl::FullyDecoded);
+            name = DecodePercentEncodedText(url.fragment(QUrl::FullyDecoded));
             serverAddress = url.host();
             serverPort = url.port();
 
@@ -140,7 +140,7 @@ namespace ProxorGui_fmt {
             // v2rayN
             DECODE_V2RAY_N_1
 
-            if (hasRemarks) name = url.fragment(QUrl::FullyDecoded);
+            if (hasRemarks) name = DecodePercentEncodedText(url.fragment(QUrl::FullyDecoded));
             serverAddress = url.host();
             serverPort = url.port();
             method = url.userName();
@@ -160,7 +160,7 @@ namespace ProxorGui_fmt {
             serverAddress = objN["add"].toString();
             serverPort = objN["port"].toVariant().toInt();
             // OPTIONAL
-            name = objN["ps"].toString();
+            name = DecodePercentEncodedText(objN["ps"].toString());
             aid = objN["aid"].toVariant().toInt();
             stream->host = objN["host"].toString();
             stream->path = objN["path"].toString();
@@ -182,11 +182,11 @@ namespace ProxorGui_fmt {
             return true;
         } else {
             // https://github.com/XTLS/Xray-core/discussions/716
-            auto url = QUrl(link);
+            auto url = ParseUrlWithUnicodeFragment(link);
             if (!url.isValid()) return false;
             auto query = GetQuery(url);
 
-            name = url.fragment(QUrl::FullyDecoded);
+            name = DecodePercentEncodedText(url.fragment(QUrl::FullyDecoded));
             serverAddress = url.host();
             serverPort = url.port();
             uuid = url.userName();
@@ -242,13 +242,13 @@ namespace ProxorGui_fmt {
     }
 
     bool NaiveBean::TryParseLink(const QString &link) {
-        auto url = QUrl(link);
+        auto url = ParseUrlWithUnicodeFragment(link);
         if (!url.isValid()) return false;
 
         protocol = url.scheme().replace("naive+", "");
         if (protocol != "https" && protocol != "quic") return false;
 
-        name = url.fragment(QUrl::FullyDecoded);
+        name = DecodePercentEncodedText(url.fragment(QUrl::FullyDecoded));
         serverAddress = url.host();
         serverPort = url.port();
         username = url.userName();
@@ -258,7 +258,7 @@ namespace ProxorGui_fmt {
     }
 
     bool QUICBean::TryParseLink(const QString &link) {
-        auto url = QUrl(link);
+        auto url = ParseUrlWithUnicodeFragment(link);
         auto query = QUrlQuery(url.query());
         if (url.host().isEmpty() || url.port() == -1) return false;
 
@@ -266,7 +266,7 @@ namespace ProxorGui_fmt {
             // by daeuniverse
             // https://github.com/daeuniverse/dae/discussions/182
 
-            name = url.fragment(QUrl::FullyDecoded);
+            name = DecodePercentEncodedText(url.fragment(QUrl::FullyDecoded));
             serverAddress = url.host();
             if (serverPort == -1) serverPort = 443;
             serverPort = url.port();
@@ -281,7 +281,7 @@ namespace ProxorGui_fmt {
             allowInsecure = query.queryItemValue("allow_insecure") == "1";
             disableSni = query.queryItemValue("disable_sni") == "1";
         } else if (QStringList{"hy2", "hysteria2"}.contains(url.scheme())) {
-            name = url.fragment(QUrl::FullyDecoded);
+            name = DecodePercentEncodedText(url.fragment(QUrl::FullyDecoded));
             serverAddress = url.host();
             serverPort = url.port();
             hopPort = query.queryItemValue("mport");

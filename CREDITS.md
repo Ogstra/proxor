@@ -51,6 +51,17 @@ and its source is not modified in this repository.
 
 ## Other dependencies
 
+### flag-icons
+
+**Project:** flag-icons
+**Author:** Panayiotis Lipiridis and contributors
+**Repository:** https://github.com/lipis/flag-icons
+**License:** MIT
+
+Country flag SVG assets are embedded under `assets/res/flags/` for consistent
+profile flag rendering across operating systems. The MIT license text is copied
+to `assets/res/flags/LICENSE.flag-icons.txt`.
+
 All other third-party Go and C++ dependencies are listed in:
 - `go/cmd/proxor_core/go.mod` and `go.sum`
 - `go/grpc_server/go.mod` and `go.sum`

@@ -229,6 +229,38 @@ namespace ProxorGui_fmt {
         return result;
     }
 
+    CoreObjOutboundBuildResult NaiveBean::BuildCoreObjSingBox() {
+        CoreObjOutboundBuildResult result;
+
+        QJsonObject tls{
+            {"enabled", true},
+        };
+        if (!sni.trimmed().isEmpty()) tls["server_name"] = sni.trimmed();
+        if (!certificate.trimmed().isEmpty()) tls["certificate"] = certificate.trimmed();
+
+        QJsonObject outbound{
+            {"type", "naive"},
+            {"server", serverAddress},
+            {"server_port", serverPort},
+            {"username", username},
+            {"password", password},
+            {"tls", tls},
+        };
+        if (protocol == "quic") outbound["quic"] = true;
+        if (insecure_concurrency > 0) outbound["insecure_concurrency"] = insecure_concurrency;
+        if (!extra_headers.trimmed().isEmpty()) {
+            const auto headers = QString2QJsonObject(extra_headers);
+            if (headers.isEmpty()) {
+                result.error = "Naive extra headers must be a JSON object for sing-box.";
+                return result;
+            }
+            outbound["extra_headers"] = headers;
+        }
+
+        result.outbound = outbound;
+        return result;
+    }
+
     CoreObjOutboundBuildResult CustomBean::BuildCoreObjSingBox() {
         CoreObjOutboundBuildResult result;
 
