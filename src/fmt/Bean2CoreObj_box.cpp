@@ -242,7 +242,7 @@ namespace ProxorGui_fmt {
             {"type", "naive"},
             {"server", serverAddress},
             {"server_port", serverPort},
-            {"username", username},
+            {"username", StripLeadingFlag(username)},
             {"password", password},
             {"tls", tls},
             {"udp_over_tcp", true},
