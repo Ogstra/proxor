@@ -833,6 +833,7 @@ namespace ProxorGui {
                 },
             }};
         if (!status->forTest) routeObj["final"] = dataStore->routing->def_outbound;
+        routeObj["default_domain_resolver"] = QJsonObject{{"server", "dns-direct"}};
         if (status->forExport) {
             routeObj.remove("geoip");
             routeObj.remove("geosite");
