@@ -245,6 +245,7 @@ namespace ProxorGui_fmt {
             {"username", username},
             {"password", password},
             {"tls", tls},
+            {"udp_over_tcp", true},
         };
         if (protocol == "quic") outbound["quic"] = true;
         if (insecure_concurrency > 0) outbound["insecure_concurrency"] = insecure_concurrency;
