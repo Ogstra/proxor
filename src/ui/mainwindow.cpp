@@ -2274,8 +2274,9 @@ void MainWindow::show_log_impl(const QString &log) {
     for (const auto &line : newLines) {
         m_logLines.append(line);
     }
-    while (m_logLines.size() > ProxorGui::dataStore->max_log_line) {
-        m_logLines.removeFirst();
+    const int overflow = m_logLines.size() - ProxorGui::dataStore->max_log_line;
+    if (overflow > 0) {
+        m_logLines.erase(m_logLines.begin(), m_logLines.begin() + overflow);
     }
 
     // Append to document (respecting active filter)
@@ -2428,15 +2429,20 @@ void MainWindow::refresh_connection_list(const QJsonArray &arr) {
 
     if (ProxorGui::dataStore->flag_debug) qDebug() << arr;
 
-    ui->tableWidget_conn->setRowCount(0);
-
-    int row = -1;
+    QVector<QJsonObject> visibleItems;
+    visibleItems.reserve(arr.size());
     for (const auto &_item: arr) {
         auto item = _item.toObject();
         if (ProxorGui::dataStore->ignoreConnTag.contains(item["Tag"].toString())) continue;
+        visibleItems.append(item);
+    }
+
+    ui->tableWidget_conn->setRowCount(visibleItems.size());
+
+    int row = -1;
+    for (const auto &item: visibleItems) {
 
         row++;
-        ui->tableWidget_conn->insertRow(row);
 
         auto f0 = std::make_unique<SortableTableWidgetItem>();
         f0->setData(114514, item["ID"].toInt());
