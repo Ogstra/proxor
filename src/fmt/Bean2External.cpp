@@ -26,13 +26,7 @@ namespace ProxorGui_fmt {
     // 2: Direct External
 
     int NaiveBean::NeedExternal(bool isFirstProfile) {
-        if (isFirstProfile) {
-            if (ProxorGui::dataStore->spmode_vpn) {
-                return 1;
-            }
-            return 2;
-        }
-        return 1;
+        return 0;
     }
 
     int QUICBean::NeedExternal(bool isFirstProfile) {

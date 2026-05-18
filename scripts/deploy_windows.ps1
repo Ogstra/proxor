@@ -112,7 +112,7 @@ if ($BuildGo) {
         $env:GOOS = "windows"
         $env:GOARCH = "amd64"
         $env:CGO_ENABLED = "0"
-        go build -v -o $resolvedOutputDir -trimpath -ldflags "-w -s -X github.com/Ogstra/proxorlib/proxor_common.Version_proxor=$versionStandalone" -tags "with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_conntrack,with_grpc"
+        go build -v -o $resolvedOutputDir -trimpath -ldflags "-w -s -X github.com/Ogstra/proxorlib/proxor_common.Version_proxor=$versionStandalone" -tags "with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_conntrack,with_grpc,with_naive_outbound,with_purego"
         if ($LASTEXITCODE -ne 0) {
             throw "Core go build failed."
         }

@@ -7,6 +7,7 @@
 #include "db/Group.hpp"
 #include "db/ProxyEntity.hpp"
 #include "main/GuiUtils.hpp"
+#include "ui/Icon.hpp"
 
 namespace {
 QString quotaDisplayTextForGroup(const std::shared_ptr<ProxorGui::Group> &group) {
@@ -68,7 +69,7 @@ QVariant ProxyListModel::data(const QModelIndex &index, int role) const {
     if (role == Qt::DisplayRole) {
         switch (index.column()) {
             case NameColumn:
-                return profile->summary_name;
+                return StripLeadingFlag(profile->summary_name);
             case TypeColumn:
                 return profile->DisplayTypeSummary();
             case AddressColumn:
@@ -82,6 +83,11 @@ QVariant ProxyListModel::data(const QModelIndex &index, int role) const {
             default:
                 return {};
         }
+    }
+
+    if (role == Qt::DecorationRole && index.column() == NameColumn) {
+        const auto countryCode = LeadingFlagCountryCode(profile->summary_name);
+        if (!countryCode.isEmpty()) return Icon::GetCountryFlag(countryCode);
     }
 
     if (role == Qt::ForegroundRole) {

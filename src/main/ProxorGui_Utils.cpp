@@ -22,6 +22,12 @@
 #include "sys/windows/guihelper.h"
 #endif
 
+namespace {
+bool isRegionalIndicator(uint cp) {
+    return cp >= 0x1F1E6 && cp <= 0x1F1FF;
+}
+}
+
 QStringList SplitLines(const QString &_string) {
 #if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
     return _string.split(QRegularExpression("[\r\n]"), Qt::SplitBehaviorFlags::SkipEmptyParts);
@@ -68,6 +74,41 @@ QString GetQueryValue(const QUrlQuery &q, const QString &key, const QString &def
         return def;
     }
     return a;
+}
+
+QUrl ParseUrlWithUnicodeFragment(const QString &link) {
+    const int fragmentIndex = link.indexOf('#');
+    if (fragmentIndex < 0) return QUrl(link);
+
+    const auto prefix = link.left(fragmentIndex + 1);
+    const auto fragment = link.mid(fragmentIndex + 1);
+    const auto decodedFragment = DecodePercentEncodedText(fragment);
+    const auto encodedFragment = QString::fromLatin1(QUrl::toPercentEncoding(decodedFragment));
+    return QUrl(prefix + encodedFragment);
+}
+
+QString DecodePercentEncodedText(QString text) {
+    if (!text.contains('%')) return text;
+    return QUrl::fromPercentEncoding(text.toUtf8());
+}
+
+QString LeadingFlagCountryCode(const QString &text) {
+    const auto codepoints = text.toUcs4();
+    if (codepoints.size() < 2) return {};
+    if (!isRegionalIndicator(codepoints[0]) || !isRegionalIndicator(codepoints[1])) return {};
+
+    QString countryCode;
+    countryCode.append(QChar('a' + static_cast<int>(codepoints[0] - 0x1F1E6)));
+    countryCode.append(QChar('a' + static_cast<int>(codepoints[1] - 0x1F1E6)));
+    return countryCode;
+}
+
+QString StripLeadingFlag(const QString &text) {
+    const auto codepoints = text.toUcs4();
+    if (codepoints.size() < 2) return text;
+    if (!isRegionalIndicator(codepoints[0]) || !isRegionalIndicator(codepoints[1])) return text;
+
+    return QString::fromUcs4(codepoints.constData() + 2, codepoints.size() - 2).trimmed();
 }
 
 QString GetRandomString(int randomStringLength) {
