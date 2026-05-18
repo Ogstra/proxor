@@ -4,6 +4,7 @@ use (
 	./go/cmd/proxor_core
 	./go/cmd/updater
 	./go/grpc_server
+	./go/proxorlib
 )
 
 replace github.com/sagernet/sing-box => ./3rdparty/sing-box
