@@ -123,6 +123,26 @@ if ($BuildGo) {
     New-Item -ItemType Directory -Force -Path $resolvedOutputDir | Out-Null
 }
 
+# Copy libcronet.dll from Go module cache (required by naive outbound at runtime)
+$cronetModuleDir = Join-Path $repoRoot "go\cmd\proxor_core"
+Push-Location $cronetModuleDir
+try {
+    $goPath = (go env GOPATH 2>$null).Trim()
+    $cronetModuleLine = (go list -m github.com/sagernet/cronet-go/lib/windows_amd64 2>$null).Trim()
+    if ($goPath -and $cronetModuleLine) {
+        $cronetVersion = ($cronetModuleLine -split '\s+')[1]
+        $cronetDll = Join-Path $goPath "pkg\mod\github.com\sagernet\cronet-go\lib\windows_amd64@$cronetVersion\libcronet.dll"
+        if (Test-Path $cronetDll) {
+            Copy-Item $cronetDll $resolvedOutputDir -Force
+            Write-Host "Copied libcronet.dll ($cronetVersion)"
+        } else {
+            Write-Warning "libcronet.dll not found at expected path: $cronetDll"
+        }
+    }
+} finally {
+    Pop-Location
+}
+
 foreach ($stalePath in @(
     (Join-Path $resolvedOutputDir "runtime"),
     (Join-Path $resolvedOutputDir "config\runtime"),
