@@ -415,6 +415,7 @@ namespace ProxorGui {
         _add(new configItem("use_dns_object", &this->use_dns_object, itemType::boolean));
         _add(new configItem("dns_object", &this->dns_object, itemType::string));
         _add(new configItem("dns_final_out", &this->dns_final_out, itemType::string));
+        _add(new configItem("hosts_mapping", &this->hosts_mapping, itemType::string));
     }
 
     QString Routing::DisplayRouting() const {

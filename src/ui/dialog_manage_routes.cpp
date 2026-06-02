@@ -10,6 +10,8 @@
 #include <QMessageBox>
 #include <QListWidget>
 #include <QLineEdit>
+#include <QHeaderView>
+#include <QPushButton>
 
 #define REFRESH_ACTIVE_ROUTING(name, obj)           \
     this->active_routing = name;                    \
@@ -78,6 +80,32 @@ DialogManageRoutes::DialogManageRoutes(QWidget *parent) : QDialog(parent), ui(ne
     ui->proxyIPLayout->addWidget(proxyIPTxt, 0, 0);
     ui->blockIPLayout->addWidget(blockIPTxt, 0, 0);
     //
+    hostsMapTable = new QTableWidget(0, 2, this);
+    hostsMapTable->setHorizontalHeaderLabels({tr("Hostname"), tr("IP")});
+    hostsMapTable->horizontalHeader()->setStretchLastSection(true);
+    hostsMapTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    hostsMapTable->verticalHeader()->setVisible(false);
+    hostsMapTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    auto addHostBtn = new QPushButton(tr("Add"), this);
+    auto removeHostBtn = new QPushButton(tr("Remove"), this);
+    connect(addHostBtn, &QPushButton::clicked, this, [this] {
+        const int row = hostsMapTable->rowCount();
+        hostsMapTable->insertRow(row);
+        hostsMapTable->setItem(row, 0, new QTableWidgetItem(""));
+        hostsMapTable->setItem(row, 1, new QTableWidgetItem(""));
+        hostsMapTable->editItem(hostsMapTable->item(row, 0));
+    });
+    connect(removeHostBtn, &QPushButton::clicked, this, [this] {
+        const auto rows = hostsMapTable->selectionModel()->selectedRows();
+        QList<int> rowIndexes;
+        for (const auto &idx: rows) rowIndexes << idx.row();
+        std::sort(rowIndexes.begin(), rowIndexes.end(), std::greater<int>());
+        for (int r: rowIndexes) hostsMapTable->removeRow(r);
+    });
+    ui->hostsMapLayout->addWidget(hostsMapTable, 0, 0, 1, 2);
+    ui->hostsMapLayout->addWidget(addHostBtn, 1, 0);
+    ui->hostsMapLayout->addWidget(removeHostBtn, 1, 1);
+    //
     REFRESH_ACTIVE_ROUTING(ProxorGui::dataStore->active_routing, ProxorGui::dataStore->routing.get())
 
     ADD_ASTERISK(this)
@@ -143,6 +171,16 @@ void DialogManageRoutes::UpdateDisplayRouting(ProxorGui::Routing *conf, bool qv)
     ui->direct_dns->setCurrentText(conf->direct_dns);
     ui->direct_dns_strategy->setCurrentText(conf->direct_dns_strategy);
     ui->dns_final_out->setCurrentText(conf->dns_final_out);
+    //
+    hostsMapTable->setRowCount(0);
+    for (const auto &line: SplitLinesSkipSharp(conf->hosts_mapping)) {
+        const auto parts = line.simplified().split(' ', Qt::SkipEmptyParts);
+        if (parts.size() != 2) continue;
+        const int row = hostsMapTable->rowCount();
+        hostsMapTable->insertRow(row);
+        hostsMapTable->setItem(row, 0, new QTableWidgetItem(parts[0]));
+        hostsMapTable->setItem(row, 1, new QTableWidgetItem(parts[1]));
+    }
 }
 
 void DialogManageRoutes::SaveDisplayRouting(ProxorGui::Routing *conf) {
@@ -166,6 +204,18 @@ void DialogManageRoutes::SaveDisplayRouting(ProxorGui::Routing *conf) {
     conf->direct_dns = ui->direct_dns->currentText();
     conf->direct_dns_strategy = ui->direct_dns_strategy->currentText();
     conf->dns_final_out = ui->dns_final_out->currentText();
+    //
+    QStringList hostsLines;
+    for (int r = 0; r < hostsMapTable->rowCount(); ++r) {
+        const auto hostItem = hostsMapTable->item(r, 0);
+        const auto ipItem = hostsMapTable->item(r, 1);
+        if (!hostItem || !ipItem) continue;
+        const auto host = hostItem->text().trimmed();
+        const auto ip = ipItem->text().trimmed();
+        if (host.isEmpty() || ip.isEmpty()) continue;
+        hostsLines << host + " " + ip;
+    }
+    conf->hosts_mapping = hostsLines.join("\n");
 }
 
 void DialogManageRoutes::on_load_save_clicked() {

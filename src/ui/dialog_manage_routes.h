@@ -2,6 +2,7 @@
 
 #include <QDialog>
 #include <QMenu>
+#include <QTableWidget>
 
 #include "3rdparty/qv2ray/v2/ui/QvAutoCompleteTextEdit.hpp"
 #include "main/ProxorGui.hpp"
@@ -36,6 +37,8 @@ private:
     Qv2ray::ui::widgets::AutoCompleteTextEdit *directIPTxt;
     Qv2ray::ui::widgets::AutoCompleteTextEdit *blockIPTxt;
     Qv2ray::ui::widgets::AutoCompleteTextEdit *proxyIPTxt;
+    //
+    QTableWidget *hostsMapTable = nullptr;
     //
     ProxorGui::Routing routing_cn_lan = ProxorGui::Routing(1);
     ProxorGui::Routing routing_global = ProxorGui::Routing(0);

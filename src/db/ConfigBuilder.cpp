@@ -668,6 +668,26 @@ namespace ProxorGui {
         // Underlying 100% Working DNS ?
         dnsServers += BuildTypedDnsServer("dns-local", BOX_UNDERLYING_DNS, status->forTest ? QString{} : QStringLiteral("direct"));
 
+        // Hosts mapping (user-defined hostname -> IP overrides)
+        QJsonObject hostsPredefined;
+        QStringList hostsMappingDomains;
+        for (const auto &line: SplitLinesSkipSharp(dataStore->routing->hosts_mapping)) {
+            const auto parts = line.simplified().split(' ', Qt::SkipEmptyParts);
+            if (parts.size() != 2) continue;
+            const auto host = parts[0].trimmed();
+            const auto ip = parts[1].trimmed();
+            if (host.isEmpty() || ip.isEmpty() || !IsIpAddress(ip)) continue;
+            hostsPredefined[host] = QJsonArray{ip};
+            hostsMappingDomains += "full:" + host;
+        }
+        if (!hostsPredefined.isEmpty()) {
+            dnsServers += QJsonObject{
+                {"tag", "dns-hosts"},
+                {"type", "hosts"},
+                {"predefined", hostsPredefined},
+            };
+        }
+
         // sing-box dns rule object
         auto add_rule_dns = [&](const QStringList &list, const QString &server) {
             auto rule = make_rule(list, false);
@@ -675,6 +695,14 @@ namespace ProxorGui {
             rule["server"] = server;
             dnsRules += rule;
         };
+        // Hosts rule: must come first so user-defined mappings take priority
+        if (!hostsMappingDomains.isEmpty()) {
+            auto hostsRule = make_rule(hostsMappingDomains, false);
+            if (!hostsRule.isEmpty()) {
+                hostsRule["server"] = "dns-hosts";
+                dnsRules.prepend(hostsRule);
+            }
+        }
         add_rule_dns(status->domainListDNSRemote, "dns-remote");
         add_rule_dns(status->domainListDNSDirect, "dns-direct");
 
