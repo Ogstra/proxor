@@ -402,6 +402,14 @@ For more information, see the document &quot;Configuration/DNS&quot;.</string>
          </layout>
         </widget>
        </item>
+       <item>
+        <widget class="QGroupBox" name="hostsMapBox">
+         <property name="title">
+          <string>Hosts Mapping (hostname → IP)</string>
+         </property>
+         <layout class="QGridLayout" name="hostsMapLayout"/>
+        </widget>
+       </item>
       </layout>
      </widget>
      <widget class="QWidget" name="tab_2">

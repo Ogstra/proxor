@@ -22,6 +22,7 @@ namespace ProxorGui {
         bool use_dns_object = false;
         QString dns_object = "";
         QString dns_final_out = "proxy";
+        QString hosts_mapping = "";
 
         // Misc
         QString domain_strategy = "AsIs";
