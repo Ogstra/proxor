@@ -413,6 +413,7 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
         ProxorGui::dataStore->UpdateStartedId(ent->id);
         started_via_ssid_trigger = startedByWifiTrigger;
         running = ent;
+        syncWindowsHostsMapping(ProxorGui::dataStore->spmode_vpn && ProxorGui::dataStore->vpn_internal_tun);
 
         runOnUiThread([=] {
             start_pending = false;
@@ -563,6 +564,7 @@ void MainWindow::proxor_stop(bool crash, bool sem) {
         started_via_ssid_trigger = false;
         ProxorGui::dataStore->need_keep_vpn_off = false;
         running = nullptr;
+        syncWindowsHostsMapping(false);
 
         runOnUiThread([=] {
             refresh_status();

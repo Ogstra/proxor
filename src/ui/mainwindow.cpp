@@ -7,6 +7,7 @@
 #include "sub/GroupUpdater.hpp"
 #include "sys/ExternalProcess.hpp"
 #include "sys/AutoRun.hpp"
+#include "sys/WifiMonitor.hpp"
 
 #include "ui/ThemeManager.hpp"
 #include "ui/Icon.hpp"
@@ -59,9 +60,94 @@
 #include <QMouseEvent>
 #include <QStyleHints>
 #include <QNetworkInformation>
+#include <QProcess>
+#include <QSet>
+#include <QTextStream>
 
 namespace {
 constexpr int kAddGroupTabId = -114514;
+
+#ifdef Q_OS_WIN
+constexpr auto kProxorHostsBegin = "# BEGIN PROXOR HOSTS";
+constexpr auto kProxorHostsEnd = "# END PROXOR HOSTS";
+
+QString windowsHostsPath() {
+    const auto systemRoot = qEnvironmentVariable("SystemRoot", "C:\\Windows");
+    return QDir::fromNativeSeparators(systemRoot + "\\System32\\drivers\\etc\\hosts");
+}
+
+bool isValidHostsLabel(const QString &host) {
+    if (host.isEmpty() || host.size() > 63 || host.startsWith('-') || host.endsWith('-')) return false;
+    for (const auto ch: host) {
+        if (!(ch.isLetterOrNumber() || ch == '-')) return false;
+    }
+    return true;
+}
+
+QString removeProxorHostsBlock(QString text) {
+    text.replace("\r\n", "\n").replace('\r', '\n');
+    QStringList kept;
+    bool inBlock = false;
+    for (const auto &line: text.split('\n')) {
+        const auto trimmed = line.trimmed();
+        if (trimmed == kProxorHostsBegin) {
+            inBlock = true;
+            continue;
+        }
+        if (trimmed == kProxorHostsEnd) {
+            inBlock = false;
+            continue;
+        }
+        if (!inBlock) kept += line;
+    }
+    while (!kept.isEmpty() && kept.last().trimmed().isEmpty()) kept.removeLast();
+    return kept.join("\r\n");
+}
+
+QString buildProxorHostsBlock() {
+    if (ProxorGui::dataStore == nullptr || ProxorGui::dataStore->routing == nullptr) return {};
+
+    QStringList entries;
+    QSet<QString> seen;
+    const QString currentSsid = WifiMonitor::cachedSsid();
+    for (const auto &line: SplitLinesSkipSharp(ProxorGui::dataStore->routing->hosts_mapping)) {
+        const auto parts = line.simplified().split(' ', Qt::SkipEmptyParts);
+        if (parts.size() < 2) continue;
+
+        auto host = parts[0].trimmed().toLower();
+        const auto ip = parts[1].trimmed();
+        if (host.endsWith('.')) host.chop(1);
+        if (!host.contains('.') && isValidHostsLabel(host) && IsIpAddress(ip)) {
+            if (parts.size() >= 3 && !currentSsid.isEmpty()) {
+                bool skip = false;
+                for (const auto &ssid: parts[2].split(',', Qt::SkipEmptyParts)) {
+                    if (ssid.trimmed() == currentSsid) {
+                        skip = true;
+                        break;
+                    }
+                }
+                if (skip) continue;
+            }
+
+            const auto key = host + "=" + ip;
+            if (seen.contains(key)) continue;
+            seen += key;
+            entries += ip + "\t" + host;
+        }
+    }
+
+    if (entries.isEmpty()) return {};
+    return QString(kProxorHostsBegin) + "\r\n" + entries.join("\r\n") + "\r\n" + QString(kProxorHostsEnd);
+}
+
+bool writeTextFile(const QString &path, const QString &text) {
+    QFile file(path);
+    if (!file.open(QFile::WriteOnly | QFile::Text | QFile::Truncate)) return false;
+    QTextStream stream(&file);
+    stream << text;
+    return stream.status() == QTextStream::Ok;
+}
+#endif
 
 QRect centeredCheckboxIndicatorRect(const QStyleOptionViewItem &option, const QWidget *widget) {
     auto *style = widget ? widget->style() : QApplication::style();
@@ -1354,6 +1440,39 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
     refresh_status();
 
     if (ProxorGui::dataStore->vpn_internal_tun && ProxorGui::dataStore->started_id >= 0) proxor_start(ProxorGui::dataStore->started_id);
+}
+
+void MainWindow::syncWindowsHostsMapping(bool enable) {
+#ifdef Q_OS_WIN
+    const auto path = windowsHostsPath();
+    QFile file(path);
+    if (!file.open(QFile::ReadOnly | QFile::Text)) {
+        if (MW_show_log) MW_show_log(tr("[Warning] Failed to read Windows hosts file for hosts mapping."));
+        return;
+    }
+    QTextStream in(&file);
+    const auto current = in.readAll();
+    file.close();
+
+    auto next = removeProxorHostsBlock(current);
+    const auto block = enable ? buildProxorHostsBlock() : QString{};
+    if (!block.isEmpty()) {
+        if (!next.isEmpty()) next += "\r\n\r\n";
+        next += block;
+        next += "\r\n";
+    } else if (!next.isEmpty()) {
+        next += "\r\n";
+    }
+
+    if (next == current) return;
+    if (!writeTextFile(path, next)) {
+        if (MW_show_log) MW_show_log(tr("[Warning] Failed to write Windows hosts file for hosts mapping."));
+        return;
+    }
+    QProcess::execute("ipconfig", {"/flushdns"});
+#else
+    Q_UNUSED(enable)
+#endif
 }
 
 void MainWindow::refresh_status(const QString &traffic_update) {
