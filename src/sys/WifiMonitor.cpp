@@ -2,6 +2,12 @@
 #include <QProcess>
 #include <QStringList>
 
+QString WifiMonitor::s_cachedSsid = QString();
+
+QString WifiMonitor::cachedSsid() {
+    return s_cachedSsid;
+}
+
 WifiMonitor::WifiMonitor(QObject *parent) : QObject(parent) {
     m_timer = new QTimer(this);
     m_timer->setInterval(5000);
@@ -19,6 +25,7 @@ void WifiMonitor::stop() {
 
 void WifiMonitor::poll() {
     auto ssid = currentSsid();
+    s_cachedSsid = ssid;
     if (ssid != m_lastSsid) {
         m_lastSsid = ssid;
         emit ssidChanged(ssid);

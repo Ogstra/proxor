@@ -80,10 +80,13 @@ DialogManageRoutes::DialogManageRoutes(QWidget *parent) : QDialog(parent), ui(ne
     ui->proxyIPLayout->addWidget(proxyIPTxt, 0, 0);
     ui->blockIPLayout->addWidget(blockIPTxt, 0, 0);
     //
-    hostsMapTable = new QTableWidget(0, 2, this);
-    hostsMapTable->setHorizontalHeaderLabels({tr("Hostname"), tr("IP")});
+    hostsMapTable = new QTableWidget(0, 3, this);
+    hostsMapTable->setHorizontalHeaderLabels({tr("Hostname"), tr("IP"), tr("Skip on SSIDs")});
     hostsMapTable->horizontalHeader()->setStretchLastSection(true);
     hostsMapTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    hostsMapTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    hostsMapTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+    hostsMapTable->horizontalHeaderItem(2)->setToolTip(tr("Comma-separated SSIDs where this entry is NOT applied (skipped). Useful for using local DNS when on a known home WiFi."));
     hostsMapTable->verticalHeader()->setVisible(false);
     hostsMapTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     auto addHostBtn = new QPushButton(tr("Add"), this);
@@ -93,6 +96,7 @@ DialogManageRoutes::DialogManageRoutes(QWidget *parent) : QDialog(parent), ui(ne
         hostsMapTable->insertRow(row);
         hostsMapTable->setItem(row, 0, new QTableWidgetItem(""));
         hostsMapTable->setItem(row, 1, new QTableWidgetItem(""));
+        hostsMapTable->setItem(row, 2, new QTableWidgetItem(""));
         hostsMapTable->editItem(hostsMapTable->item(row, 0));
     });
     connect(removeHostBtn, &QPushButton::clicked, this, [this] {
@@ -175,11 +179,12 @@ void DialogManageRoutes::UpdateDisplayRouting(ProxorGui::Routing *conf, bool qv)
     hostsMapTable->setRowCount(0);
     for (const auto &line: SplitLinesSkipSharp(conf->hosts_mapping)) {
         const auto parts = line.simplified().split(' ', Qt::SkipEmptyParts);
-        if (parts.size() != 2) continue;
+        if (parts.size() < 2) continue;
         const int row = hostsMapTable->rowCount();
         hostsMapTable->insertRow(row);
         hostsMapTable->setItem(row, 0, new QTableWidgetItem(parts[0]));
         hostsMapTable->setItem(row, 1, new QTableWidgetItem(parts[1]));
+        hostsMapTable->setItem(row, 2, new QTableWidgetItem(parts.size() >= 3 ? parts[2] : ""));
     }
 }
 
@@ -209,11 +214,18 @@ void DialogManageRoutes::SaveDisplayRouting(ProxorGui::Routing *conf) {
     for (int r = 0; r < hostsMapTable->rowCount(); ++r) {
         const auto hostItem = hostsMapTable->item(r, 0);
         const auto ipItem = hostsMapTable->item(r, 1);
+        const auto skipItem = hostsMapTable->item(r, 2);
         if (!hostItem || !ipItem) continue;
         const auto host = hostItem->text().trimmed();
         const auto ip = ipItem->text().trimmed();
         if (host.isEmpty() || ip.isEmpty()) continue;
-        hostsLines << host + " " + ip;
+        QString line = host + " " + ip;
+        if (skipItem) {
+            // Normalize: remove spaces around commas so it stays single token.
+            const auto skipNorm = skipItem->text().trimmed().remove(' ');
+            if (!skipNorm.isEmpty()) line += " " + skipNorm;
+        }
+        hostsLines << line;
     }
     conf->hosts_mapping = hostsLines.join("\n");
 }

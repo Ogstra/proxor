@@ -2,6 +2,7 @@
 #include "db/Database.hpp"
 #include "fmt/includes.h"
 #include "fmt/Preset.hpp"
+#include "sys/WifiMonitor.hpp"
 
 #include <QApplication>
 #include <QFile>
@@ -669,14 +670,25 @@ namespace ProxorGui {
         dnsServers += BuildTypedDnsServer("dns-local", BOX_UNDERLYING_DNS, status->forTest ? QString{} : QStringLiteral("direct"));
 
         // Hosts mapping (user-defined hostname -> IP overrides)
+        // Format per line: "host ip [skip_ssids_csv]". If current WiFi SSID matches any in
+        // the skip list, the entry is omitted (so DNS resolves naturally via dns-direct).
+        const QString currentSsid = WifiMonitor::cachedSsid();
         QJsonObject hostsPredefined;
         QStringList hostsMappingDomains;
         for (const auto &line: SplitLinesSkipSharp(dataStore->routing->hosts_mapping)) {
             const auto parts = line.simplified().split(' ', Qt::SkipEmptyParts);
-            if (parts.size() != 2) continue;
+            if (parts.size() < 2) continue;
             const auto host = parts[0].trimmed();
             const auto ip = parts[1].trimmed();
             if (host.isEmpty() || ip.isEmpty() || !IsIpAddress(ip)) continue;
+            // Skip if current SSID is in this entry's skip list.
+            if (parts.size() >= 3 && !currentSsid.isEmpty()) {
+                bool skip = false;
+                for (const auto &ssid: parts[2].split(',', Qt::SkipEmptyParts)) {
+                    if (ssid.trimmed() == currentSsid) { skip = true; break; }
+                }
+                if (skip) continue;
+            }
             hostsPredefined[host] = QJsonArray{ip};
             hostsMappingDomains += "full:" + host;
         }
