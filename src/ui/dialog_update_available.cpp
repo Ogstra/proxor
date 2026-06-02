@@ -143,7 +143,7 @@ DialogUpdateAvailable::DialogUpdateAvailable(
     ui->groupBoxInfo->setFixedHeight(ui->groupBoxInfo->sizeHint().height());
 
     ui->labelCurrent->setText(currentVersion);
-    // Extract version number from asset filename (e.g. "proxor-1.5.3-windows-x64.zip" → "1.5.3")
+    // Extract version number from asset filename (e.g. "proxor-1.5.4-windows-x64.zip" → "1.5.4")
     static QRegularExpression verRe(R"((\d+\.\d+[\.\d]*))", QRegularExpression::CaseInsensitiveOption);
     auto vm = verRe.match(assetName);
     ui->labelAvailable->setText(vm.hasMatch() ? vm.captured(1) : assetName);

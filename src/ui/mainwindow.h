@@ -235,6 +235,8 @@ private:
 
     bool StartVPNProcess();
 
+    void syncWindowsHostsMapping(bool enable);
+
     void update_connection_statistics_polling_state();
 
     // grpc and ...

@@ -82,10 +82,7 @@ DialogManageRoutes::DialogManageRoutes(QWidget *parent) : QDialog(parent), ui(ne
     //
     hostsMapTable = new QTableWidget(0, 3, this);
     hostsMapTable->setHorizontalHeaderLabels({tr("Hostname"), tr("IP"), tr("Skip on SSIDs")});
-    hostsMapTable->horizontalHeader()->setStretchLastSection(true);
-    hostsMapTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-    hostsMapTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-    hostsMapTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+    hostsMapTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     hostsMapTable->horizontalHeaderItem(2)->setToolTip(tr("Comma-separated SSIDs where this entry is NOT applied (skipped). Useful for using local DNS when on a known home WiFi."));
     hostsMapTable->verticalHeader()->setVisible(false);
     hostsMapTable->setSelectionBehavior(QAbstractItemView::SelectRows);
