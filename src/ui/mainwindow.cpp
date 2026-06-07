@@ -432,7 +432,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         for (auto *button: toolbarButtons) {
             button->setIconSize(QSize(24, 24));
             button->setMinimumHeight(referenceHeight);
-            button->setMinimumWidth(qMax(referenceHeight, button->sizeHint().width()));
+            button->setMinimumWidth(referenceHeight);
         }
     }, this, 0);
     connect(ui->toolButton_url_test, &QToolButton::clicked, this, [=] { speedtest_current_group(1, true); });
@@ -584,7 +584,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     // search box
     ui->search->setPlaceholderText(tr("Search profiles"));
-    ui->search->setMinimumWidth(180);
+    ui->search->setMinimumWidth(120);
     ui->search->setVisible(false);
     connect(shortcut_ctrl_f, &QShortcut::activated, this, [=] {
         ui->search->setVisible(true);
