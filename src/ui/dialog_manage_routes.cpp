@@ -100,7 +100,6 @@ DialogManageRoutes::DialogManageRoutes(QWidget *parent) : QDialog(parent), ui(ne
                      ui->directDomainBox, ui->proxyDomainBox, ui->blockDomainBox}) {
         box->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
     }
-    ui->gb2->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
     //
     hostsMapTable = new QTableWidget(0, 3, this);
     hostsMapTable->setHorizontalHeaderLabels({tr("Hostname"), tr("IP"), tr("Skip on SSIDs")});
