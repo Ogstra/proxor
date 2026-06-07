@@ -176,6 +176,42 @@ func TestMatchingReleaseAssetReportsNoCompatiblePackage(t *testing.T) {
 	}
 }
 
+func TestMatchingReleaseAssetDoesNotDowngradeFromPrereleaseCurrent(t *testing.T) {
+	releases := []githubRelease{
+		{
+			TagName: "proxor-1.6",
+			Assets: []githubReleaseAsset{
+				{Name: "proxor-1.6-windows64.zip", BrowserDownloadURL: "https://example.com/154.zip"},
+			},
+		},
+	}
+
+	release, asset, selection := matchingReleaseAsset(releases, "v1.6-beta-1", []string{"windows64.zip"}, false)
+	if release != nil || asset != nil || selection != updateSelectionCurrent {
+		t.Fatalf("expected current-version match, got release=%v asset=%v selection=%v", release, asset, selection)
+	}
+}
+
+func TestMatchingReleaseAssetAllowsNewPrereleaseWhenEnabled(t *testing.T) {
+	releases := []githubRelease{
+		{
+			TagName:    "proxor-1.6-beta-2",
+			Prerelease: true,
+			Assets: []githubReleaseAsset{
+				{Name: "proxor-1.6-beta-2-windows64.zip", BrowserDownloadURL: "https://example.com/beta2.zip"},
+			},
+		},
+	}
+
+	release, asset, selection := matchingReleaseAsset(releases, "v1.6-beta-1", []string{"windows64.zip"}, true)
+	if release == nil || asset == nil || selection != updateSelectionAvailable {
+		t.Fatalf("expected prerelease update, got release=%v asset=%v selection=%v", release, asset, selection)
+	}
+	if release.TagName != "proxor-1.6-beta-2" || asset.Name != "proxor-1.6-beta-2-windows64.zip" {
+		t.Fatalf("unexpected prerelease candidate: release=%v asset=%v", release.TagName, asset.Name)
+	}
+}
+
 func TestUpdateRepoConstants(t *testing.T) {
 	if updateRepoName != "proxor" {
 		t.Fatalf("updateRepoName = %q, want %q", updateRepoName, "proxor")

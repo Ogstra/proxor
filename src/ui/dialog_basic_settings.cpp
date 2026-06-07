@@ -5,12 +5,25 @@
 #include "fmt/Preset.hpp"
 #include "ui/ThemeManager.hpp"
 #include "ui/Icon.hpp"
+#include "ui/dialog_manage_routes.h"
+#include "ui/dialog_vpn_settings.h"
+#include "ui/dialog_ssid_settings.h"
+#include "ui/dialog_hotkey.h"
 #include "main/GuiUtils.hpp"
 #include "main/ProxorGui.hpp"
+#include "sys/AutoRun.hpp"
+
+#include <QDialogButtonBox>
 
 #include <QFileDialog>
+#include <QGridLayout>
+#include <QHBoxLayout>
 #include <QInputDialog>
+#include <QEvent>
+#include <QListWidget>
 #include <QMessageBox>
+#include <QScrollArea>
+#include <QVBoxLayout>
 #include <QSignalBlocker>
 #include <QStandardItemModel>
 #include <QTimer>
@@ -122,6 +135,91 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     ui->setupUi(this);
     ADD_ASTERISK(this);
 
+    setWindowTitle(tr("Settings"));
+    if (auto *grid = qobject_cast<QGridLayout *>(this->layout())) {
+        grid->setContentsMargins(8, 8, 8, 8);
+        grid->setSpacing(8);
+    }
+    ui->tabWidget->tabBar()->hide();
+    ui->tabWidget->setDocumentMode(true);
+
+    ui->verticalLayout->addWidget(ui->extra_core_box);
+    if (const int extraCoreIdx = ui->tabWidget->indexOf(ui->tab_6); extraCoreIdx >= 0) {
+        ui->tabWidget->removeTab(extraCoreIdx);
+    }
+
+    const auto hideButtonBox = [](QWidget *page) {
+        page->setWindowFlags(Qt::Widget);
+        if (auto *bb = page->findChild<QDialogButtonBox *>()) bb->hide();
+    };
+    auto *routingHost = new QWidget(this);
+    auto *routingLay = new QVBoxLayout(routingHost);
+    routingLay->setContentsMargins(0, 0, 0, 0);
+    const int routingIdx = ui->tabWidget->addTab(routingHost, tr("Routing"));
+    auto *vpnHost = new QWidget(this);
+    auto *vpnLay = new QVBoxLayout(vpnHost);
+    vpnLay->setContentsMargins(0, 0, 0, 0);
+    const int vpnIdx = ui->tabWidget->addTab(vpnHost, tr("VPN"));
+    auto *ssidHost = new QWidget(this);
+    auto *ssidLay = new QVBoxLayout(ssidHost);
+    ssidLay->setContentsMargins(0, 0, 0, 0);
+    const int ssidIdx = ui->tabWidget->addTab(ssidHost, tr("On-Demand"));
+    auto *hotkeyHost = new QWidget(this);
+    auto *hotkeyLay = new QVBoxLayout(hotkeyHost);
+    hotkeyLay->setContentsMargins(0, 0, 0, 0);
+    const int hotkeyIdx = ui->tabWidget->addTab(hotkeyHost, tr("Hotkeys"));
+
+    connect(ui->tabWidget, &QTabWidget::currentChanged, this, [=](int idx) {
+        if (idx == routingIdx && m_routingPage == nullptr) {
+            m_routingPage = new DialogManageRoutes(routingHost);
+            hideButtonBox(m_routingPage);
+            routingLay->addWidget(m_routingPage);
+        } else if (idx == vpnIdx && m_vpnPage == nullptr) {
+            m_vpnPage = new DialogVPNSettings(vpnHost);
+            hideButtonBox(m_vpnPage);
+            vpnLay->addWidget(m_vpnPage);
+        } else if (idx == ssidIdx && m_ssidPage == nullptr) {
+            m_ssidPage = new DialogSSIDSettings(ssidHost);
+            hideButtonBox(m_ssidPage);
+            ssidLay->addWidget(m_ssidPage);
+        } else if (idx == hotkeyIdx && m_hotkeyPage == nullptr) {
+            m_hotkeyPage = new DialogHotkey(hotkeyHost);
+            hideButtonBox(m_hotkeyPage);
+            hotkeyLay->addWidget(m_hotkeyPage);
+        }
+    });
+
+    m_settingsNav = new QListWidget(this);
+    m_settingsNav->setObjectName(QStringLiteral("settingsNav"));
+    for (int i = 0; i < ui->tabWidget->count(); ++i) {
+        m_settingsNav->addItem(ui->tabWidget->tabText(i));
+    }
+    m_settingsNav->setCurrentRow(ui->tabWidget->currentIndex());
+    m_settingsNav->setFrameShape(QFrame::NoFrame);
+    m_settingsNav->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_settingsNav->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    m_settingsNav->setStyleSheet(QStringLiteral("QListWidget::item{padding:4px 10px;}"));
+    m_settingsNav->setFixedWidth(m_settingsNav->sizeHintForColumn(0) + 32);
+    connect(m_settingsNav, &QListWidget::currentRowChanged, ui->tabWidget, &QTabWidget::setCurrentIndex);
+    m_settingsScroll = new QScrollArea(this);
+    m_settingsScroll->setFrameShape(QFrame::NoFrame);
+    m_settingsScroll->setWidgetResizable(false);
+    m_settingsScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_settingsScroll->setWidget(ui->tabWidget);
+    m_settingsScroll->viewport()->installEventFilter(this);
+    connect(ui->tabWidget, &QTabWidget::currentChanged, this, [this](int) {
+        QTimer::singleShot(0, this, [this] { relayoutSettingsScroll(); });
+    });
+    if (auto *grid = qobject_cast<QGridLayout *>(this->layout())) {
+        auto *navRow = new QHBoxLayout();
+        navRow->setContentsMargins(0, 0, 0, 0);
+        navRow->setSpacing(8);
+        navRow->addWidget(m_settingsNav);
+        navRow->addWidget(m_settingsScroll, 1);
+        grid->addLayout(navRow, 2, 3);
+    }
+    resize(820, 560);
+
     // Common
 
     ui->log_level->addItems(QStringLiteral("trace debug info warn error fatal panic").split(" "));
@@ -138,6 +236,9 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     D_LOAD_STRING(test_latency_url)
     D_LOAD_STRING(test_download_url)
     D_LOAD_BOOL(old_share_link_format)
+    ui->start_with_system->setChecked(AutoRun_IsEnabled());
+    ui->remember_enable->setChecked(ProxorGui::dataStore->remember_enable);
+    ui->allow_lan->setChecked(QStringList{"::", "0.0.0.0"}.contains(ProxorGui::dataStore->inbound_address));
 
     connect(ui->custom_inbound_edit, &QPushButton::clicked, this, [=] {
         C_EDIT_JSON_ALLOW_EMPTY(custom_inbound)
@@ -160,8 +261,6 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     // Style
     D_LOAD_BOOL(check_update_on_start)
     D_LOAD_BOOL(check_include_pre)
-    D_LOAD_BOOL(connection_statistics)
-    CACHE.initialConnectionStatistics = ProxorGui::dataStore->connection_statistics;
     D_LOAD_BOOL(start_minimal)
     D_LOAD_INT(max_log_line)
     //
@@ -245,7 +344,7 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     if (!CACHE.extraCore.contains("hysteria2")) CACHE.extraCore.insert("hysteria2", "");
     if (!CACHE.extraCore.contains("tuic")) CACHE.extraCore.insert("tuic", "");
     //
-    auto extra_core_layout = ui->extra_core_box_scrollAreaWidgetContents->layout();
+    auto extra_core_layout = ui->extra_core_box->layout();
     for (const auto &s: CACHE.extraCore.keys()) {
         extra_core_layout->addWidget(new ExtraCoreWidget(&CACHE.extraCore, s));
     }
@@ -308,10 +407,12 @@ void DialogBasicSettings::accept() {
     D_SAVE_STRING(test_latency_url)
     D_SAVE_STRING(test_download_url)
     D_SAVE_BOOL(old_share_link_format)
+    AutoRun_SetEnabled(ui->start_with_system->isChecked());
+    ProxorGui::dataStore->remember_enable = ui->remember_enable->isChecked();
+    ProxorGui::dataStore->inbound_address = ui->allow_lan->isChecked() ? "::" : "127.0.0.1";
 
     // Style
 
-    D_SAVE_BOOL(connection_statistics)
     D_SAVE_BOOL(check_update_on_start)
     D_SAVE_BOOL(check_include_pre)
     D_SAVE_BOOL(start_minimal)
@@ -369,16 +470,48 @@ void DialogBasicSettings::accept() {
     D_SAVE_BOOL(skip_cert)
     ProxorGui::dataStore->utlsFingerprint = ui->utlsFingerprint->currentText();
 
-    // 关闭连接统计，停止刷新前清空记录。
-    if (ProxorGui::dataStore->traffic_loop_interval == 0 || !ProxorGui::dataStore->connection_statistics) {
+    // 停止刷新前清空记录。
+    if (ProxorGui::dataStore->traffic_loop_interval == 0) {
         MW_dialog_message("", "ClearConnectionList");
     }
 
     QStringList str{"UpdateDataStore"};
     if (CACHE.needRestart) str << "NeedRestart";
-    if (CACHE.initialConnectionStatistics != ProxorGui::dataStore->connection_statistics) str << "ConnStatChanged";
+    if (m_routingPage && !m_routingPage->save(str)) return;
+    if (m_vpnPage && !m_vpnPage->save(str)) return;
+    if (m_ssidPage && !m_ssidPage->save(str)) return;
+    if (m_hotkeyPage && !m_hotkeyPage->save(str)) return;
     MW_dialog_message(Dialog_DialogBasicSettings, str.join(","));
     QDialog::accept();
+}
+
+void DialogBasicSettings::relayoutSettingsScroll() {
+    if (m_settingsScroll == nullptr) return;
+    auto *page = ui->tabWidget->currentWidget();
+    const int w = m_settingsScroll->viewport()->width();
+    int h = ui->tabWidget->sizeHint().height();
+    if (page != nullptr) {
+        h = qMax(page->sizeHint().height(), page->minimumSizeHint().height()) + 12;
+    }
+    ui->tabWidget->resize(qMax(w, 0), qMax(h, 0));
+}
+
+bool DialogBasicSettings::eventFilter(QObject *watched, QEvent *event) {
+    if (m_settingsScroll != nullptr && watched == m_settingsScroll->viewport() &&
+        event->type() == QEvent::Resize) {
+        relayoutSettingsScroll();
+    }
+    return QDialog::eventFilter(watched, event);
+}
+
+void DialogBasicSettings::selectSection(const QString &title) {
+    if (m_settingsNav == nullptr) return;
+    for (int i = 0; i < ui->tabWidget->count(); ++i) {
+        if (ui->tabWidget->tabText(i) == title) {
+            m_settingsNav->setCurrentRow(i);
+            break;
+        }
+    }
 }
 
 // slots

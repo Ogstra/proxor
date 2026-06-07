@@ -2,6 +2,7 @@
 #define PROXOR_DIALOG_VPN_SETTINGS_H
 
 #include <QDialog>
+#include <QStringList>
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -23,6 +24,8 @@ private:
 public slots:
 
     void accept() override;
+
+    bool save(QStringList &flags);
 
     void on_troubleshooting_clicked();
 };

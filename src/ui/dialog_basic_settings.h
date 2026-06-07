@@ -8,6 +8,13 @@ namespace Ui {
     class DialogBasicSettings;
 }
 
+class QScrollArea;
+class QListWidget;
+class DialogManageRoutes;
+class DialogVPNSettings;
+class DialogSSIDSettings;
+class DialogHotkey;
+
 class DialogBasicSettings : public QDialog {
     Q_OBJECT
 
@@ -20,6 +27,8 @@ public slots:
 
     void accept();
 
+    void selectSection(const QString &title);
+
 private:
     Ui::DialogBasicSettings *ui;
 
@@ -27,8 +36,19 @@ private:
         QJsonObject extraCore;
         QString custom_inbound;
         bool needRestart = false;
-        bool initialConnectionStatistics = false;
     } CACHE;
+
+    DialogManageRoutes *m_routingPage = nullptr;
+    DialogVPNSettings *m_vpnPage = nullptr;
+    DialogSSIDSettings *m_ssidPage = nullptr;
+    DialogHotkey *m_hotkeyPage = nullptr;
+    QScrollArea *m_settingsScroll = nullptr;
+    QListWidget *m_settingsNav = nullptr;
+
+    void relayoutSettingsScroll();
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private slots:
 
