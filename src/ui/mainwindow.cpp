@@ -409,8 +409,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     // any associated QMenu causes UxTheme to draw a native drop arrow that
     // cannot be suppressed via QSS on the Windows platform style.
     auto attachMenuOnClick = [](QToolButton *btn, QMenu *menu) {
+        btn->setFocusPolicy(Qt::NoFocus);
         QObject::connect(btn, &QToolButton::clicked, btn, [btn, menu]() {
             menu->popup(btn->mapToGlobal(QPoint(0, btn->height())));
+        });
+        QObject::connect(menu, &QMenu::aboutToHide, btn, [btn]() {
+            btn->setDown(false);
+            btn->update();
         });
     };
     attachMenuOnClick(ui->toolButton_program, ui->menu_program);
