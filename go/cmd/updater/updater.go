@@ -10,12 +10,71 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/codeclysm/extract"
 )
 
 const (
 	updateExtractDir = "./update-package"
 )
+
+func ShouldUpdate(currentVersion, latestVersion string, allowPreReleases bool) (bool, error) {
+	current, err := parseSemVer(currentVersion)
+	if err != nil {
+		return false, fmt.Errorf("invalid current version %q: %w", currentVersion, err)
+	}
+
+	latest, err := parseSemVer(latestVersion)
+	if err != nil {
+		return false, fmt.Errorf("invalid latest version %q: %w", latestVersion, err)
+	}
+
+	if latest.Prerelease() != "" && !allowPreReleases {
+		return false, nil
+	}
+
+	return latest.GreaterThan(current), nil
+}
+
+func parseSemVer(version string) (*semver.Version, error) {
+	normalized, err := normalizeSemVer(version)
+	if err != nil {
+		return nil, err
+	}
+
+	return semver.NewVersion(normalized)
+}
+
+func normalizeSemVer(version string) (string, error) {
+	version = strings.TrimSpace(version)
+	version = strings.TrimPrefix(version, "v")
+	version = strings.TrimPrefix(version, "V")
+	if version == "" {
+		return "", errors.New("version is empty")
+	}
+
+	core := version
+	suffix := ""
+	if idx := strings.IndexAny(version, "-+"); idx >= 0 {
+		core = version[:idx]
+		suffix = version[idx:]
+	}
+
+	parts := strings.Split(core, ".")
+	if len(parts) < 1 || len(parts) > 3 {
+		return "", fmt.Errorf("invalid semantic version core %q", core)
+	}
+	for len(parts) < 3 {
+		parts = append(parts, "0")
+	}
+	for _, part := range parts {
+		if part == "" {
+			return "", fmt.Errorf("invalid semantic version core %q", core)
+		}
+	}
+
+	return strings.Join(parts, ".") + suffix, nil
+}
 
 func Updater() {
 	updatePackagePath, err := findUpdatePackage()
