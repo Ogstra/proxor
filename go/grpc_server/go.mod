@@ -4,6 +4,7 @@ go 1.26.1
 
 require (
 	github.com/Ogstra/proxorlib v1.0.0 // replaced
+	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.3
 	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.11

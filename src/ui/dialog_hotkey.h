@@ -17,6 +17,8 @@ public:
 
     ~DialogHotkey() override;
 
+    bool save(QStringList &flags);
+
 private:
     Ui::DialogHotkey *ui;
 };

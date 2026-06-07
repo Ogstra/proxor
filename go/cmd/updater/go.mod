@@ -4,6 +4,8 @@ go 1.26.1
 
 require github.com/codeclysm/extract v2.2.0+incompatible
 
+require github.com/Masterminds/semver/v3 v3.4.0
+
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/h2non/filetype v1.1.3 // indirect

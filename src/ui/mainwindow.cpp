@@ -6,7 +6,6 @@
 #include "db/ConfigBuilder.hpp"
 #include "sub/GroupUpdater.hpp"
 #include "sys/ExternalProcess.hpp"
-#include "sys/AutoRun.hpp"
 #include "sys/WifiMonitor.hpp"
 
 #include "ui/ThemeManager.hpp"
@@ -63,9 +62,51 @@
 #include <QProcess>
 #include <QSet>
 #include <QTextStream>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QGridLayout>
+#include <QUrlQuery>
+#include <QSysInfo>
+#include <QPushButton>
 
 namespace {
 constexpr int kAddGroupTabId = -114514;
+constexpr auto kProjectOwner = "Ogstra";
+constexpr auto kProjectRepo = "proxor";
+
+QString projectRepoSlug() {
+    return QStringLiteral("%1/%2").arg(QString::fromLatin1(kProjectOwner), QString::fromLatin1(kProjectRepo));
+}
+
+QUrl projectUrl(const QString &path = QString()) {
+    return QUrl(QStringLiteral("https://github.com/%1%2").arg(projectRepoSlug(), path));
+}
+
+QString versionInfoText() {
+    return QStringLiteral("%1 %2\nQt: %3\nOS: %4\nRepository: %5")
+        .arg(software_name,
+             QStringLiteral(NKR_VERSION),
+             QString::fromLatin1(qVersion()),
+             QSysInfo::prettyProductName(),
+             projectUrl().toString());
+}
+
+QUrl bugReportUrl() {
+    QUrl url = projectUrl(QStringLiteral("/issues/new"));
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("title"), QStringLiteral("Bug: "));
+    query.addQueryItem(QStringLiteral("body"), versionInfoText() + QStringLiteral("\n\nDescribe the issue:\n"));
+    url.setQuery(query);
+    return url;
+}
+
+QUrl sponsorUrl() {
+    return QUrl(QStringLiteral("https://github.com/sponsors/%1").arg(QString::fromLatin1(kProjectOwner)));
+}
+
+QUrl maintainerUrl() {
+    return QUrl(QStringLiteral("https://github.com/%1").arg(QString::fromLatin1(kProjectOwner)));
+}
 
 #ifdef Q_OS_WIN
 constexpr auto kProxorHostsBegin = "# BEGIN PROXOR HOSTS";
@@ -267,6 +308,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     }
     ui->setupUi(this);
     themeManager->ApplyTheme(ProxorGui::dataStore->theme);
+    m_quotaLabel = new QLabel(this);
+    m_quotaLabel->setContentsMargins(0, 0, 8, 0);
+    m_quotaLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_quotaLabel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+    ui->down_tab->setCornerWidget(m_quotaLabel, Qt::TopRightCorner);
+    m_quotaLabel->hide();
     connect(ui->down_tab, &QTabWidget::currentChanged, this, &MainWindow::on_down_tab_currentChanged);
     connect(qApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState) {
         update_connection_statistics_polling_state();
@@ -372,13 +419,22 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->menubar->setVisible(false);
     ui->toolButton_toggle_proxy->setText(tr("Start"));
     ui->toolButton_toggle_proxy->setIcon(makeToggleProxyIcon(QColor(52, 199, 89)));
-    ui->toolButton_toggle_proxy->setIconSize(QSize(20, 20));
+    ui->toolButton_toggle_proxy->setIconSize(QSize(24, 24));
     ui->toolButton_toggle_proxy->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
     setTimeout([this] {
         const int referenceHeight = qMax(ui->toolButton_program->height(), ui->toolButton_program->sizeHint().height());
-        ui->toolButton_toggle_proxy->setFixedSize(referenceHeight, referenceHeight);
+        const auto toolbarButtons = {
+            ui->toolButton_toggle_proxy,
+            ui->toolButton_program,
+            ui->toolButton_preferences,
+            ui->toolButton_server,
+        };
+        for (auto *button: toolbarButtons) {
+            button->setIconSize(QSize(24, 24));
+            button->setMinimumHeight(referenceHeight);
+            button->setMinimumWidth(referenceHeight);
+        }
     }, this, 0);
-    connect(ui->toolButton_update, &QToolButton::clicked, this, [=] { runOnNewThread([=] { CheckUpdate(); }); });
     connect(ui->toolButton_url_test, &QToolButton::clicked, this, [=] { speedtest_current_group(1, true); });
     connect(ui->toolButton_update_subscription, &QToolButton::clicked, this, [=] { on_menu_update_subscription_triggered(); });
     ui->toolButton_url_test->setMinimumWidth(ui->toolButton_update_subscription->sizeHint().width());
@@ -430,6 +486,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     proxyListModel = new ProxyListModel(this);
     ui->proxyListTable->setModel(proxyListModel);
     ui->proxyListTable->setItemDelegateForColumn(ProxyListModel::ToggleColumn, new CenteredCheckBoxDelegate(ui->proxyListTable));
+    ui->proxyListTable->setShowGrid(false);
+    ui->proxyListTable->verticalHeader()->setVisible(false);
+    ui->proxyListTable->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    ui->proxyListTable->horizontalHeader()->setStretchLastSection(false);
     connect(proxyListModel, &ProxyListModel::orderChanged, this, [=](const QList<int> &order) {
         auto group = ProxorGui::profileManager->CurrentGroup();
         if (group == nullptr) return;
@@ -523,6 +583,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->proxyListTable->verticalHeader()->setDefaultSectionSize(24);
 
     // search box
+    ui->search->setPlaceholderText(tr("Search profiles"));
+    ui->search->setMinimumWidth(120);
     ui->search->setVisible(false);
     connect(shortcut_ctrl_f, &QShortcut::activated, this, [=] {
         ui->search->setVisible(true);
@@ -574,80 +636,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     // Misc menu
     connect(ui->menu_open_config_folder, &QAction::triggered, this, [=] { QDesktopServices::openUrl(QUrl::fromLocalFile(QDir::currentPath())); });
-    ui->menu_program_preference->addActions(ui->menu_preferences->actions());
+    connect(ui->menu_check_updates, &QAction::triggered, this, [=] { runOnNewThread([=] { CheckUpdate(); }); });
+    connect(ui->menu_report_bug, &QAction::triggered, this, [] { QDesktopServices::openUrl(bugReportUrl()); });
+    connect(ui->menu_donate, &QAction::triggered, this, [] { QDesktopServices::openUrl(sponsorUrl()); });
     connect(ui->actionRestart_Proxy, &QAction::triggered, this, [=] { if (ProxorGui::dataStore->started_id>=0) proxor_start(ProxorGui::dataStore->started_id); });
     connect(ui->actionRestart_Program, &QAction::triggered, this, [=] { MW_dialog_message("", "RestartProgram"); });
     connect(ui->actionShow_window, &QAction::triggered, this, [=] { tray->activated(QSystemTrayIcon::ActivationReason::Trigger); });
-    //
-    connect(ui->menu_program, &QMenu::aboutToShow, this, [=]() {
-        ui->actionRemember_last_proxy->setChecked(ProxorGui::dataStore->remember_enable);
-        ui->actionStart_with_system->setChecked(AutoRun_IsEnabled());
-        ui->actionAllow_LAN->setChecked(QStringList{"::", "0.0.0.0"}.contains(ProxorGui::dataStore->inbound_address));
-        // active server
-        for (const auto &old: ui->menuActive_Server->actions()) {
-            ui->menuActive_Server->removeAction(old);
-            old->deleteLater();
-        }
-        int active_server_item_count = 0;
-        for (const auto &pf: ProxorGui::profileManager->CurrentGroup()->ProfilesWithOrder()) {
-            auto a = new QAction(pf->bean->DisplayTypeAndName(), this);
-            a->setProperty("id", pf->id);
-            a->setCheckable(true);
-            if (ProxorGui::dataStore->started_id == pf->id) a->setChecked(true);
-            ui->menuActive_Server->addAction(a);
-            if (++active_server_item_count == 100) break;
-        }
-        // active routing
-        for (const auto &old: ui->menuActive_Routing->actions()) {
-            ui->menuActive_Routing->removeAction(old);
-            old->deleteLater();
-        }
-        for (const auto &name: ProxorGui::Routing::List()) {
-            auto a = new QAction(name, this);
-            a->setCheckable(true);
-            a->setChecked(name == ProxorGui::dataStore->active_routing);
-            ui->menuActive_Routing->addAction(a);
-        }
-    });
-    connect(ui->menuActive_Server, &QMenu::triggered, this, [=](QAction *a) {
-        bool ok;
-        auto id = a->property("id").toInt(&ok);
-        if (!ok) return;
-        if (ProxorGui::dataStore->started_id == id) {
-            proxor_stop();
-        } else {
-            proxor_start(id);
-        }
-    });
-    connect(ui->menuActive_Routing, &QMenu::triggered, this, [=](QAction *a) {
-        auto fn = a->text();
-        if (!fn.isEmpty()) {
-            ProxorGui::Routing r;
-            r.load_control_must = true;
-            r.fn = ROUTES_PREFIX + fn;
-            if (r.Load()) {
-                if (QMessageBox::question(GetMessageBoxParent(), software_name, tr("Load routing and apply: %1").arg(fn) + "\n" + r.DisplayRouting()) == QMessageBox::Yes) {
-                    ProxorGui::Routing::SetToActive(fn);
-                    if (ProxorGui::dataStore->started_id >= 0) {
-                        proxor_start(ProxorGui::dataStore->started_id);
-                    } else {
-                        refresh_status();
-                    }
-                }
-            }
-        }
-    });
-    connect(ui->actionRemember_last_proxy, &QAction::triggered, this, [=](bool checked) {
-        ProxorGui::dataStore->remember_enable = checked;
-        ProxorGui::dataStore->Save();
-    });
-    connect(ui->actionStart_with_system, &QAction::triggered, this, [=](bool checked) {
-        AutoRun_SetEnabled(checked);
-    });
-    connect(ui->actionAllow_LAN, &QAction::triggered, this, [=](bool checked) {
-        ProxorGui::dataStore->inbound_address = checked ? "::" : "127.0.0.1";
-        MW_dialog_message("", "UpdateDataStore");
-    });
     //
     connect(ui->checkBox_VPN, &QCheckBox::clicked, this, [=](bool checked) { proxor_set_spmode_vpn(checked); });
     connect(ui->checkBox_SystemProxy, &QCheckBox::clicked, this, [=](bool checked) { proxor_set_spmode_system_proxy(checked); });
@@ -1063,6 +1057,13 @@ void MainWindow::update_connection_statistics_polling_state() {
     conn_stats_window_visible.store(windowVisible, std::memory_order_relaxed);
 }
 
+void MainWindow::update_quota_display() {
+    if (m_quotaLabel == nullptr) return;
+    const auto text = ProxyListModel::quotaText(ProxorGui::profileManager->CurrentGroup());
+    m_quotaLabel->setText(text);
+    m_quotaLabel->setVisible(!text.isEmpty());
+}
+
 void MainWindow::show_group(int gid) {
     if (ProxorGui::dataStore->refreshing_group) return;
     ProxorGui::dataStore->refreshing_group = true;
@@ -1106,12 +1107,7 @@ void MainWindow::show_group(int gid) {
         ui->proxyListTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Interactive);
     }
 
-    // Quota column: only visible for subscription groups
-    bool isSub = !group->url.isEmpty();
-    ui->proxyListTable->setColumnHidden(6, !isSub);
-    if (isSub) {
-        ui->proxyListTable->horizontalHeader()->setSectionResizeMode(6, QHeaderView::ResizeToContents);
-    }
+    update_quota_display();
 
     // show proxies
     GroupSortAction gsa;
@@ -1133,9 +1129,6 @@ void MainWindow::dialog_message_impl(const QString &sender, const QString &info)
         auto suggestRestartProxy = ProxorGui::dataStore->Save();
         if (info.contains("RouteChanged")) {
             suggestRestartProxy = true;
-        }
-        if (info.contains("ConnStatChanged")) {
-            suggestRestartProxy = false;
         }
         if (info.contains("NeedRestart")) {
             suggestRestartProxy = false;
@@ -1216,8 +1209,20 @@ inline bool dialog_is_using = false;
     });                                             \
     dialog->show();
 
+void MainWindow::openSettings(const QString &section) {
+    if (dialog_is_using) return;
+    dialog_is_using = true;
+    auto *dialog = new DialogBasicSettings(this);
+    connect(dialog, &QDialog::finished, this, [=] {
+        dialog->deleteLater();
+        dialog_is_using = false;
+    });
+    if (!section.isEmpty()) dialog->selectSection(section);
+    dialog->show();
+}
+
 void MainWindow::on_menu_basic_settings_triggered() {
-    USE_DIALOG(DialogBasicSettings)
+    openSettings();
 }
 
 void MainWindow::on_menu_manage_groups_triggered() {
@@ -1225,19 +1230,99 @@ void MainWindow::on_menu_manage_groups_triggered() {
 }
 
 void MainWindow::on_menu_routing_settings_triggered() {
-    USE_DIALOG(DialogManageRoutes)
+    openSettings(tr("Routing"));
 }
 
 void MainWindow::on_menu_vpn_settings_triggered() {
-    USE_DIALOG(DialogVPNSettings)
+    openSettings(tr("VPN"));
 }
 
 void MainWindow::on_menu_ssid_settings_triggered() {
-    USE_DIALOG(DialogSSIDSettings)
+    openSettings(tr("On-Demand"));
 }
 
 void MainWindow::on_menu_hotkey_settings_triggered() {
-    USE_DIALOG(DialogHotkey)
+    openSettings(tr("Hotkeys"));
+}
+
+void MainWindow::on_menu_about_triggered() {
+    auto *dialog = new QDialog(this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->setWindowTitle(tr("About %1").arg(software_name));
+    dialog->setWindowIcon(windowIcon());
+    dialog->setModal(true);
+    dialog->resize(420, 260);
+
+    auto *mainLayout = new QVBoxLayout(dialog);
+    mainLayout->setContentsMargins(16, 16, 16, 12);
+    mainLayout->setSpacing(12);
+
+    auto *headerLayout = new QHBoxLayout();
+    headerLayout->setSpacing(12);
+    auto *iconLabel = new QLabel(dialog);
+    iconLabel->setPixmap(windowIcon().pixmap(48, 48));
+    iconLabel->setFixedSize(48, 48);
+    auto *titleLayout = new QVBoxLayout();
+    titleLayout->setSpacing(2);
+    auto *titleLabel = new QLabel(software_name, dialog);
+    auto titleFont = titleLabel->font();
+    titleFont.setPointSize(titleFont.pointSize() + 4);
+    titleFont.setBold(true);
+    titleLabel->setFont(titleFont);
+    auto *versionLabel = new QLabel(tr("Version %1").arg(QStringLiteral(NKR_VERSION)), dialog);
+    titleLayout->addWidget(titleLabel);
+    titleLayout->addWidget(versionLabel);
+    titleLayout->addStretch(1);
+    headerLayout->addWidget(iconLabel);
+    headerLayout->addLayout(titleLayout, 1);
+    mainLayout->addLayout(headerLayout);
+
+    auto *infoGrid = new QGridLayout();
+    infoGrid->setHorizontalSpacing(16);
+    infoGrid->setVerticalSpacing(6);
+    const auto addInfoRow = [=](int row, const QString &label, const QString &value, const QUrl &url = QUrl()) {
+        auto *labelWidget = new QLabel(label, dialog);
+        labelWidget->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        auto labelFont = labelWidget->font();
+        labelFont.setBold(true);
+        labelWidget->setFont(labelFont);
+        auto *valueWidget = new QLabel(value, dialog);
+        valueWidget->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        if (url.isValid()) {
+            valueWidget->setText(QStringLiteral("<a href=\"%1\">%2</a>").arg(url.toString(), value.toHtmlEscaped()));
+            valueWidget->setTextFormat(Qt::RichText);
+            valueWidget->setTextInteractionFlags(Qt::TextBrowserInteraction);
+            valueWidget->setOpenExternalLinks(true);
+        }
+        infoGrid->addWidget(labelWidget, row, 0);
+        infoGrid->addWidget(valueWidget, row, 1);
+    };
+    addInfoRow(0, tr("Repository"), projectRepoSlug(), projectUrl());
+    addInfoRow(1, tr("Maintainer"), QString::fromLatin1(kProjectOwner), maintainerUrl());
+    addInfoRow(2, tr("License"), tr("GPL v3"));
+    addInfoRow(3, tr("Qt"), QString::fromLatin1(qVersion()));
+    addInfoRow(4, tr("OS"), QSysInfo::prettyProductName());
+    mainLayout->addLayout(infoGrid);
+    mainLayout->addStretch(1);
+
+    auto *buttons = new QDialogButtonBox(dialog);
+    auto *checkUpdates = buttons->addButton(tr("Check for Updates"), QDialogButtonBox::ActionRole);
+    auto *reportBug = buttons->addButton(tr("Report Bug"), QDialogButtonBox::ActionRole);
+    auto *donate = buttons->addButton(tr("Donate"), QDialogButtonBox::ActionRole);
+    buttons->addButton(QDialogButtonBox::Ok);
+    connect(checkUpdates, &QPushButton::clicked, this, [=] {
+        runOnNewThread([=] { CheckUpdate(); });
+    });
+    connect(reportBug, &QPushButton::clicked, dialog, [] {
+        QDesktopServices::openUrl(bugReportUrl());
+    });
+    connect(donate, &QPushButton::clicked, dialog, [] {
+        QDesktopServices::openUrl(sponsorUrl());
+    });
+    connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    mainLayout->addWidget(buttons);
+
+    dialog->show();
 }
 
 void MainWindow::on_commitDataRequest() {

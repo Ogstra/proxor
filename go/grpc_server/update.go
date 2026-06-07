@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/Ogstra/proxorlib/proxor_common"
 )
 
@@ -84,6 +85,7 @@ type releaseVersion struct {
 }
 
 var releaseVersionPattern = regexp.MustCompile(`(\d+)\.(\d+)\.(\d+)`)
+var semverPattern = regexp.MustCompile(`(?i)(\d+(?:\.\d+){0,2}(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)`)
 
 func updateArchiveSuffixes(goos, goarch string) ([]string, error) {
 	switch {
@@ -137,6 +139,73 @@ func compareReleaseVersions(left, right releaseVersion) int {
 	}
 }
 
+func normalizeSemVer(raw string) (string, bool) {
+	match := semverPattern.FindStringSubmatch(raw)
+	if len(match) != 2 {
+		return "", false
+	}
+
+	version := strings.TrimSpace(match[1])
+	version = strings.TrimPrefix(version, "v")
+	version = strings.TrimPrefix(version, "V")
+	if version == "" {
+		return "", false
+	}
+
+	core := version
+	suffix := ""
+	if idx := strings.IndexAny(version, "-+"); idx >= 0 {
+		core = version[:idx]
+		suffix = version[idx:]
+	}
+
+	parts := strings.Split(core, ".")
+	if len(parts) < 1 || len(parts) > 3 {
+		return "", false
+	}
+	for len(parts) < 3 {
+		parts = append(parts, "0")
+	}
+	for _, part := range parts {
+		if part == "" {
+			return "", false
+		}
+	}
+
+	return strings.Join(parts, ".") + suffix, true
+}
+
+func parseSemVerVersion(raw string) (*semver.Version, bool) {
+	normalized, ok := normalizeSemVer(raw)
+	if !ok {
+		return nil, false
+	}
+	version, err := semver.NewVersion(normalized)
+	if err != nil {
+		return nil, false
+	}
+	return version, true
+}
+
+func compareSemVerVersions(left, right string) (int, bool) {
+	lv, ok := parseSemVerVersion(left)
+	if !ok {
+		return 0, false
+	}
+	rv, ok := parseSemVerVersion(right)
+	if !ok {
+		return 0, false
+	}
+	switch {
+	case lv.Equal(rv):
+		return 0, true
+	case lv.GreaterThan(rv):
+		return 1, true
+	default:
+		return -1, true
+	}
+}
+
 func releaseAssetVersion(release githubRelease, asset githubReleaseAsset) (releaseVersion, bool) {
 	if version, ok := parseReleaseVersion(asset.Name); ok {
 		return version, true
@@ -145,10 +214,11 @@ func releaseAssetVersion(release githubRelease, asset githubReleaseAsset) (relea
 }
 
 func matchingReleaseAsset(releases []githubRelease, currentVersion string, suffixes []string, includePrerelease bool) (*githubRelease, *githubReleaseAsset, updateSelection) {
-	currentParsed, hasCurrentVersion := parseReleaseVersion(currentVersion)
+	currentParsed, hasCurrentVersion := parseSemVerVersion(currentVersion)
 	var bestRelease *githubRelease
 	var bestAsset *githubReleaseAsset
-	var bestVersion releaseVersion
+	var bestVersion *semver.Version
+	var sawCompatibleAsset bool
 
 	for _, release := range releases {
 		if release.Prerelease && !includePrerelease {
@@ -159,6 +229,7 @@ func matchingReleaseAsset(releases []githubRelease, currentVersion string, suffi
 				if !strings.HasSuffix(asset.Name, suffix) {
 					continue
 				}
+				sawCompatibleAsset = true
 
 				if !hasCurrentVersion {
 					if bestRelease == nil {
@@ -170,23 +241,23 @@ func matchingReleaseAsset(releases []githubRelease, currentVersion string, suffi
 					continue
 				}
 
-				candidateVersion, ok := releaseAssetVersion(release, asset)
+				candidateVersion, ok := parseSemVerVersion(asset.Name)
+				if !ok {
+					candidateVersion, ok = parseSemVerVersion(release.TagName)
+				}
 				if !ok {
 					continue
 				}
 
-				cmp := compareReleaseVersions(candidateVersion, currentParsed)
-				if cmp < 0 {
-					continue
-				}
-				if cmp == 0 {
-					// found a release matching current version — no older release can be an update
-					if bestRelease == nil {
-						return nil, nil, updateSelectionCurrent
+				if currentParsed.Prerelease() != "" && !release.Prerelease {
+					coreVer, err := semver.NewVersion(fmt.Sprintf("%d.%d.%d", currentParsed.Major(), currentParsed.Minor(), currentParsed.Patch()))
+					if err != nil || !candidateVersion.GreaterThan(coreVer) {
+						continue
 					}
+				} else if !candidateVersion.GreaterThan(currentParsed) {
 					continue
 				}
-				if bestRelease == nil || compareReleaseVersions(candidateVersion, bestVersion) > 0 {
+				if bestVersion == nil || candidateVersion.GreaterThan(bestVersion) {
 					releaseCopy := release
 					assetCopy := asset
 					bestRelease = &releaseCopy
@@ -199,6 +270,9 @@ func matchingReleaseAsset(releases []githubRelease, currentVersion string, suffi
 
 	if bestRelease != nil && bestAsset != nil {
 		return bestRelease, bestAsset, updateSelectionAvailable
+	}
+	if hasCurrentVersion && sawCompatibleAsset {
+		return nil, nil, updateSelectionCurrent
 	}
 	return nil, nil, updateSelectionNoCompatible
 }
