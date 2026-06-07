@@ -179,9 +179,9 @@ func TestMatchingReleaseAssetReportsNoCompatiblePackage(t *testing.T) {
 func TestMatchingReleaseAssetDoesNotDowngradeFromPrereleaseCurrent(t *testing.T) {
 	releases := []githubRelease{
 		{
-			TagName: "proxor-1.5.4",
+			TagName: "proxor-1.6",
 			Assets: []githubReleaseAsset{
-				{Name: "proxor-1.5.4-windows64.zip", BrowserDownloadURL: "https://example.com/154.zip"},
+				{Name: "proxor-1.6-windows64.zip", BrowserDownloadURL: "https://example.com/154.zip"},
 			},
 		},
 	}
