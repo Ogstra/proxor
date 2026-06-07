@@ -13,13 +13,15 @@ DialogHotkey::DialogHotkey(QWidget *parent) : QDialog(parent), ui(new Ui::Dialog
 }
 
 DialogHotkey::~DialogHotkey() {
-    if (result() == QDialog::Accepted) {
-        ProxorGui::dataStore->hotkey_mainwindow = ui->show_mainwindow->keySequence().toString();
-        ProxorGui::dataStore->hotkey_group = ui->show_groups->keySequence().toString();
-        ProxorGui::dataStore->hotkey_route = ui->show_routes->keySequence().toString();
-        ProxorGui::dataStore->hotkey_system_proxy_menu = ui->system_proxy->keySequence().toString();
-        ProxorGui::dataStore->Save();
-    }
     GetMainWindow()->RegisterHotkey(false);
     delete ui;
+}
+
+bool DialogHotkey::save(QStringList &flags) {
+    Q_UNUSED(flags)
+    ProxorGui::dataStore->hotkey_mainwindow = ui->show_mainwindow->keySequence().toString();
+    ProxorGui::dataStore->hotkey_group = ui->show_groups->keySequence().toString();
+    ProxorGui::dataStore->hotkey_route = ui->show_routes->keySequence().toString();
+    ProxorGui::dataStore->hotkey_system_proxy_menu = ui->system_proxy->keySequence().toString();
+    return true;
 }

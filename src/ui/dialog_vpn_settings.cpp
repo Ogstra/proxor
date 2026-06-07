@@ -42,7 +42,13 @@ DialogVPNSettings::~DialogVPNSettings() {
 }
 
 void DialogVPNSettings::accept() {
-    //
+    QStringList flags{"UpdateDataStore"};
+    if (!save(flags)) return;
+    MW_dialog_message("", flags.join(","));
+    QDialog::accept();
+}
+
+bool DialogVPNSettings::save(QStringList &flags) {
     auto mtu = ui->vpn_mtu->currentText().toInt();
     if (mtu > 10000 || mtu < 1000) mtu = 9000;
     ProxorGui::dataStore->vpn_implementation = ui->vpn_implementation->currentIndex();
@@ -58,14 +64,12 @@ void DialogVPNSettings::accept() {
     D_SAVE_STRING_PLAIN(vpn_rule_cidr)
     D_SAVE_STRING_PLAIN(vpn_rule_process)
     //
-    QStringList msg{"UpdateDataStore"};
     if (isInternalChanged) {
-        msg << "NeedRestart";
+        flags << "NeedRestart";
     } else {
-        msg << "VPNChanged";
+        flags << "VPNChanged";
     }
-    MW_dialog_message("", msg.join(","));
-    QDialog::accept();
+    return true;
 }
 
 void DialogVPNSettings::on_troubleshooting_clicked() {

@@ -50,6 +50,8 @@ public slots:
 
     void accept() override;
 
+    bool save(QStringList &flags);
+
     QList<QAction *> getBuiltInSchemes();
 
     QAction *schemeToAction(const QString &name, const ProxorGui::Routing &scheme);

@@ -9,8 +9,7 @@
 #include "main/GuiUtils.hpp"
 #include "ui/Icon.hpp"
 
-namespace {
-QString quotaDisplayTextForGroup(const std::shared_ptr<ProxorGui::Group> &group) {
+QString ProxyListModel::quotaText(const std::shared_ptr<ProxorGui::Group> &group) {
     if (group == nullptr || group->url.isEmpty()) return {};
 
     qint64 upload = 0;
@@ -31,7 +30,6 @@ QString quotaDisplayTextForGroup(const std::shared_ptr<ProxorGui::Group> &group)
     const QString usedGiB = QString::number(static_cast<double>(upload + download) / 1073741824.0, 'f', 2) + " GiB";
     const QString totalGiB = QString::number(static_cast<double>(total) / 1073741824.0, 'f', 2) + " GiB";
     return usedGiB + " / " + totalGiB;
-}
 }
 
 ProxyListModel::ProxyListModel(QObject *parent) : QAbstractTableModel(parent) {
@@ -78,8 +76,6 @@ QVariant ProxyListModel::data(const QModelIndex &index, int role) const {
                 return profile->DisplayLatency();
             case TrafficColumn:
                 return profile->traffic_data->DisplayTraffic();
-            case QuotaColumn:
-                return quotaDisplayText();
             default:
                 return {};
         }
@@ -98,10 +94,6 @@ QVariant ProxyListModel::data(const QModelIndex &index, int role) const {
         if (isRunning && index.column() >= NameColumn && index.column() <= AddressColumn) {
             return QApplication::palette().link();
         }
-    }
-
-    if (role == Qt::TextAlignmentRole && index.column() == QuotaColumn) {
-        return Qt::AlignCenter;
     }
 
     return {};
@@ -146,8 +138,6 @@ QVariant ProxyListModel::headerData(int section, Qt::Orientation orientation, in
                 return QObject::tr("Test Result");
             case TrafficColumn:
                 return QObject::tr("Traffic");
-            case QuotaColumn:
-                return QObject::tr("Quota");
             default:
                 return {};
         }
@@ -237,8 +227,4 @@ void ProxyListModel::rebuildIndex() {
     for (int row = 0; row < m_rowIds.size(); ++row) {
         m_idToRow.insert(m_rowIds[row], row);
     }
-}
-
-QString ProxyListModel::quotaDisplayText() const {
-    return quotaDisplayTextForGroup(ProxorGui::profileManager->CurrentGroup());
 }

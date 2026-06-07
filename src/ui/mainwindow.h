@@ -39,6 +39,7 @@ QT_BEGIN_NAMESPACE
 namespace Ui {
     class MainWindow;
 }
+class QLabel;
 QT_END_NAMESPACE
 
 class MainWindow : public QMainWindow {
@@ -75,6 +76,10 @@ public:
 
     [[nodiscard]] bool should_refresh_connection_statistics() const;
 
+    void update_quota_display();
+
+    void openSettings(const QString &section = QString());
+
     void RegisterHotkey(bool unregister);
 
     bool StopVPNProcess(bool unconditional = false);
@@ -106,6 +111,8 @@ private slots:
     void on_menu_ssid_settings_triggered();
 
     void on_menu_hotkey_settings_triggered();
+
+    void on_menu_about_triggered();
 
     void on_menu_add_from_input_triggered();
 
@@ -176,6 +183,7 @@ private:
     bool update_staged = false;
     QPointer<UpdateProgressDialog> updateProgressDialog;
     ProxyListModel *proxyListModel = nullptr;
+    QLabel *m_quotaLabel = nullptr;
     //
     bool qvLogAutoScoll = true;
     QTextDocument *qvLogDocument = new QTextDocument(this);

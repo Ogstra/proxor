@@ -88,3 +88,4 @@ out.planning/
 .claude/
 .cache/
 .tmp/
+/tmp/
