@@ -249,7 +249,12 @@ func matchingReleaseAsset(releases []githubRelease, currentVersion string, suffi
 					continue
 				}
 
-				if !candidateVersion.GreaterThan(currentParsed) {
+				if currentParsed.Prerelease() != "" && !release.Prerelease {
+					coreVer, err := semver.NewVersion(fmt.Sprintf("%d.%d.%d", currentParsed.Major(), currentParsed.Minor(), currentParsed.Patch()))
+					if err != nil || !candidateVersion.GreaterThan(coreVer) {
+						continue
+					}
+				} else if !candidateVersion.GreaterThan(currentParsed) {
 					continue
 				}
 				if bestVersion == nil || candidateVersion.GreaterThan(bestVersion) {
