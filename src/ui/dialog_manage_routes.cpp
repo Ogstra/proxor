@@ -12,6 +12,8 @@
 #include <QLineEdit>
 #include <QHeaderView>
 #include <QPushButton>
+#include <QVBoxLayout>
+#include <QPlainTextEdit>
 
 #define REFRESH_ACTIVE_ROUTING(name, obj)           \
     this->active_routing = name;                    \
@@ -21,6 +23,10 @@
 DialogManageRoutes::DialogManageRoutes(QWidget *parent) : QDialog(parent), ui(new Ui::DialogManageRoutes) {
     ui->setupUi(this);
     title_base = windowTitle();
+    if (auto *vbox = qobject_cast<QVBoxLayout *>(this->layout())) {
+        vbox->setContentsMargins(8, 8, 8, 8);
+        vbox->setSpacing(8);
+    }
 
     QStringList qsValue = {""};
     //
@@ -79,6 +85,22 @@ DialogManageRoutes::DialogManageRoutes(QWidget *parent) : QDialog(parent), ui(ne
     ui->directIPLayout->addWidget(directIPTxt, 0, 0);
     ui->proxyIPLayout->addWidget(proxyIPTxt, 0, 0);
     ui->blockIPLayout->addWidget(blockIPTxt, 0, 0);
+    const auto prepareRuleEditor = [](QPlainTextEdit *editor, const QString &placeholder) {
+        editor->setFixedHeight(82);
+        editor->setPlaceholderText(placeholder);
+        editor->setLineWrapMode(QPlainTextEdit::NoWrap);
+    };
+    prepareRuleEditor(directIPTxt, tr("geoip:private\ngeoip:cn"));
+    prepareRuleEditor(proxyIPTxt, tr("geoip:telegram"));
+    prepareRuleEditor(blockIPTxt, tr("geoip:private"));
+    prepareRuleEditor(directDomainTxt, tr("geosite:private\ngeosite:cn"));
+    prepareRuleEditor(proxyDomainTxt, tr("geosite:geolocation-!cn"));
+    prepareRuleEditor(blockDomainTxt, tr("geosite:category-ads-all"));
+    for (auto *box: {ui->directIpBox, ui->proxyIpBox, ui->blockIpBox,
+                     ui->directDomainBox, ui->proxyDomainBox, ui->blockDomainBox}) {
+        box->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
+    }
+    ui->gb2->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
     //
     hostsMapTable = new QTableWidget(0, 3, this);
     hostsMapTable->setHorizontalHeaderLabels({tr("Hostname"), tr("IP"), tr("Skip on SSIDs")});
@@ -110,6 +132,29 @@ DialogManageRoutes::DialogManageRoutes(QWidget *parent) : QDialog(parent), ui(ne
     REFRESH_ACTIVE_ROUTING(ProxorGui::dataStore->active_routing, ProxorGui::dataStore->routing.get())
 
     ADD_ASTERISK(this)
+
+    ui->tabWidget->tabBar()->hide();
+    ui->tabWidget->setDocumentMode(true);
+    auto *routeNav = new QListWidget(this);
+    for (int i = 0; i < ui->tabWidget->count(); ++i) {
+        routeNav->addItem(ui->tabWidget->tabText(i));
+    }
+    routeNav->setCurrentRow(ui->tabWidget->currentIndex());
+    routeNav->setFrameShape(QFrame::NoFrame);
+    routeNav->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    routeNav->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    routeNav->setStyleSheet(QStringLiteral("QListWidget::item{padding:4px 10px;}"));
+    routeNav->setFixedWidth(routeNav->sizeHintForColumn(0) + 32);
+    connect(routeNav, &QListWidget::currentRowChanged, ui->tabWidget, &QTabWidget::setCurrentIndex);
+    if (auto *vbox = qobject_cast<QVBoxLayout *>(this->layout())) {
+        const int idx = vbox->indexOf(ui->tabWidget);
+        auto *navRow = new QHBoxLayout();
+        navRow->setContentsMargins(0, 0, 0, 0);
+        navRow->setSpacing(8);
+        navRow->addWidget(routeNav);
+        navRow->addWidget(ui->tabWidget, 1);
+        vbox->insertLayout(idx, navRow);
+    }
 }
 
 DialogManageRoutes::~DialogManageRoutes() {
@@ -117,6 +162,13 @@ DialogManageRoutes::~DialogManageRoutes() {
 }
 
 void DialogManageRoutes::accept() {
+    QStringList flags{"UpdateDataStore"};
+    if (!save(flags)) return;
+    MW_dialog_message(Dialog_DialogManageRoutes, flags.join(""));
+    QDialog::accept();
+}
+
+bool DialogManageRoutes::save(QStringList &flags) {
     D_C_SAVE_STRING(custom_route_global)
     bool routeChanged = false;
     if (ProxorGui::dataStore->active_routing != active_routing) routeChanged = true;
@@ -124,11 +176,8 @@ void DialogManageRoutes::accept() {
     ProxorGui::dataStore->active_routing = active_routing;
     ProxorGui::dataStore->routing->fn = ROUTES_PREFIX + ProxorGui::dataStore->active_routing;
     if (ProxorGui::dataStore->routing->Save()) routeChanged = true;
-    //
-    QString info = "UpdateDataStore";
-    if (routeChanged) info += "RouteChanged";
-    MW_dialog_message(Dialog_DialogManageRoutes, info);
-    QDialog::accept();
+    if (routeChanged) flags << "RouteChanged";
+    return true;
 }
 
 // built in settings

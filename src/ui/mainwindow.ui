@@ -46,10 +46,10 @@
       <item>
        <widget class="QToolButton" name="toolButton_program">
         <property name="text">
-         <string>Program</string>
+         <string>App</string>
         </property>
         <property name="icon">
-         <iconset theme="b-system-run">
+         <iconset theme="b-papirus-applications-all">
           <normaloff>.</normaloff>.</iconset>
         </property>
         <property name="iconSize">
@@ -69,10 +69,10 @@
       <item>
        <widget class="QToolButton" name="toolButton_preferences">
         <property name="text">
-         <string>Preferences</string>
+         <string>Settings</string>
         </property>
         <property name="icon">
-         <iconset theme="b-preferences">
+         <iconset theme="b-papirus-preferences-desktop">
           <normaloff>.</normaloff>.</iconset>
         </property>
         <property name="iconSize">
@@ -92,33 +92,10 @@
       <item>
        <widget class="QToolButton" name="toolButton_server">
         <property name="text">
-         <string>Server</string>
+         <string>Profiles</string>
         </property>
         <property name="icon">
-         <iconset theme="b-network-server">
-          <normaloff>.</normaloff>.</iconset>
-        </property>
-        <property name="iconSize">
-         <size>
-          <width>24</width>
-          <height>24</height>
-         </size>
-        </property>
-        <property name="popupMode">
-         <enum>QToolButton::InstantPopup</enum>
-        </property>
-        <property name="toolButtonStyle">
-         <enum>Qt::ToolButtonTextUnderIcon</enum>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QToolButton" name="toolButton_update">
-        <property name="text">
-         <string>Update</string>
-        </property>
-        <property name="icon">
-         <iconset theme="b-system-software-update">
+         <iconset theme="b-papirus-network-server">
           <normaloff>.</normaloff>.</iconset>
         </property>
         <property name="iconSize">
@@ -366,7 +343,7 @@
           </widget>
           <widget class="QWidget" name="tab_2">
            <attribute name="title">
-            <string>Connection</string>
+            <string>Connections</string>
            </attribute>
            <layout class="QVBoxLayout" name="verticalLayout_2">
             <property name="spacing">
@@ -508,43 +485,23 @@
    </property>
    <widget class="QMenu" name="menu_program">
     <property name="title">
-     <string>Program</string>
+     <string>App</string>
     </property>
     <widget class="QMenu" name="menu_spmode">
      <property name="title">
-      <string>System Proxy</string>
+      <string>Proxy Mode</string>
      </property>
      <addaction name="menu_spmode_system_proxy"/>
      <addaction name="menu_spmode_vpn"/>
      <addaction name="menu_spmode_disabled"/>
     </widget>
-    <widget class="QMenu" name="menu_program_preference">
-     <property name="title">
-      <string>Preferences</string>
-     </property>
-     <addaction name="actionfake"/>
-    </widget>
-    <widget class="QMenu" name="menuActive_Server">
-     <property name="title">
-      <string>Active Server</string>
-     </property>
-     <addaction name="actionfake_2"/>
-    </widget>
-    <widget class="QMenu" name="menuActive_Routing">
-     <property name="title">
-      <string>Active Routing</string>
-     </property>
-     <addaction name="actionfake_3"/>
-    </widget>
     <addaction name="actionShow_window"/>
     <addaction name="separator"/>
-    <addaction name="actionStart_with_system"/>
-    <addaction name="actionRemember_last_proxy"/>
-    <addaction name="actionAllow_LAN"/>
-    <addaction name="menuActive_Server"/>
-    <addaction name="menuActive_Routing"/>
     <addaction name="menu_spmode"/>
-    <addaction name="menu_program_preference"/>
+    <addaction name="menu_check_updates"/>
+    <addaction name="menu_about"/>
+    <addaction name="menu_report_bug"/>
+    <addaction name="menu_donate"/>
     <addaction name="separator"/>
     <addaction name="actionRestart_Proxy"/>
     <addaction name="actionRestart_Program"/>
@@ -552,19 +509,15 @@
    </widget>
    <widget class="QMenu" name="menu_preferences">
     <property name="title">
-     <string>Preferences</string>
+     <string>Settings</string>
     </property>
     <addaction name="menu_manage_groups"/>
     <addaction name="menu_basic_settings"/>
-    <addaction name="menu_routing_settings"/>
-    <addaction name="menu_vpn_settings"/>
-    <addaction name="menu_ssid_settings"/>
-    <addaction name="menu_hotkey_settings"/>
     <addaction name="menu_open_config_folder"/>
    </widget>
    <widget class="QMenu" name="menu_server">
     <property name="title">
-     <string>Server</string>
+     <string>Profiles</string>
     </property>
     <widget class="QMenu" name="menu_share_item">
      <property name="title">
@@ -578,7 +531,7 @@
     </widget>
     <widget class="QMenu" name="menuCurrent_Group">
      <property name="title">
-      <string>Current Group</string>
+      <string>Group</string>
      </property>
      <addaction name="actionfake_5"/>
      <addaction name="menu_tcp_ping"/>
@@ -590,18 +543,18 @@
      <addaction name="separator"/>
      <addaction name="menu_remove_unavailable"/>
      <addaction name="menu_delete_repeat"/>
-     <addaction name="separator"/>
-     <addaction name="menu_update_subscription"/>
-     <addaction name="menu_add_subscription"/>
-    </widget>
+    <addaction name="separator"/>
+    <addaction name="menu_update_subscription"/>
+   </widget>
     <widget class="QMenu" name="menuCurrent_Select">
      <property name="title">
-      <string>Current Select</string>
+      <string>Selection</string>
      </property>
      <addaction name="actionfake_4"/>
     </widget>
     <addaction name="menu_add_from_input"/>
     <addaction name="menu_add_from_clipboard"/>
+    <addaction name="menu_add_subscription"/>
     <addaction name="separator"/>
     <addaction name="menu_select_all"/>
     <addaction name="menu_move"/>
@@ -628,7 +581,7 @@
   </action>
   <action name="menu_add_subscription">
    <property name="text">
-    <string>Add subscription</string>
+    <string>Add Subscription…</string>
    </property>
   </action>
   <action name="actionShow_window">
@@ -638,12 +591,32 @@
   </action>
   <action name="menu_basic_settings">
    <property name="text">
-    <string>Basic Settings</string>
+    <string>Settings</string>
    </property>
   </action>
   <action name="menu_add_from_input">
    <property name="text">
-    <string>New profile</string>
+    <string>New Profile…</string>
+   </property>
+  </action>
+  <action name="menu_about">
+   <property name="text">
+    <string>About Proxor</string>
+   </property>
+  </action>
+  <action name="menu_check_updates">
+   <property name="text">
+    <string>Check for Updates</string>
+   </property>
+  </action>
+  <action name="menu_report_bug">
+   <property name="text">
+    <string>Report Bug</string>
+   </property>
+  </action>
+  <action name="menu_donate">
+   <property name="text">
+    <string>Donate</string>
    </property>
   </action>
   <action name="menu_manage_groups">
@@ -674,7 +647,7 @@
   </action>
   <action name="menu_add_from_clipboard">
    <property name="text">
-    <string>Add profile from clipboard</string>
+    <string>Add from Clipboard</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+V</string>
@@ -690,7 +663,7 @@
   </action>
   <action name="menu_profile_debug_info">
    <property name="text">
-    <string>Debug Info</string>
+    <string>Profile Debug Info</string>
    </property>
   </action>
   <action name="menu_qr">
@@ -786,30 +759,6 @@
     <string notr="true">Ctrl+M</string>
    </property>
   </action>
-  <action name="actionStart_with_system">
-   <property name="checkable">
-    <bool>true</bool>
-   </property>
-   <property name="text">
-    <string>Start with system</string>
-   </property>
-  </action>
-  <action name="actionRemember_last_proxy">
-   <property name="checkable">
-    <bool>true</bool>
-   </property>
-   <property name="text">
-    <string>Remember last profile</string>
-   </property>
-  </action>
-  <action name="actionAllow_LAN">
-   <property name="checkable">
-    <bool>true</bool>
-   </property>
-   <property name="text">
-    <string>Allow other devices to connect</string>
-   </property>
-  </action>
   <action name="menu_remove_unavailable">
    <property name="text">
     <string>Remove Unavailable</string>
@@ -847,22 +796,6 @@
     <string notr="true">Ctrl+N</string>
    </property>
   </action>
-  <action name="actionfake_2">
-   <property name="text">
-    <string>fake</string>
-   </property>
-   <property name="visible">
-    <bool>false</bool>
-   </property>
-  </action>
-  <action name="actionfake_3">
-   <property name="text">
-    <string>fake</string>
-   </property>
-   <property name="visible">
-    <bool>false</bool>
-   </property>
-  </action>
   <action name="menu_copy_links">
    <property name="text">
     <string>Copy links of selected</string>
@@ -889,7 +822,7 @@
   </action>
   <action name="menu_update_subscription">
    <property name="text">
-    <string>Update subscription</string>
+    <string>Update Subscription</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+U</string>
@@ -897,7 +830,7 @@
   </action>
   <action name="menu_resolve_domain">
    <property name="text">
-    <string>Resolve domain</string>
+    <string>Resolve Domain</string>
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+Alt+I</string>

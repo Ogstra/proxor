@@ -150,13 +150,21 @@ void DialogSSIDSettings::on_btn_remove_ssid_clicked() {
 }
 
 void DialogSSIDSettings::accept() {
+    QStringList flags;
+    if (!save(flags)) return;
+    ProxorGui::dataStore->Save();
+    QDialog::accept();
+}
+
+bool DialogSSIDSettings::save(QStringList &flags) {
+    Q_UNUSED(flags)
     D_SAVE_BOOL(ssid_on_demand_enabled);
     const int selectedProfileId = ui->ssid_on_demand_profile->currentData().toInt();
     std::shared_ptr<ProxorGui::ProxyEntity> selectedProfile =
         ProxorGui::profileManager->GetProfile(selectedProfileId);
     if (ProxorGui::dataStore->ssid_on_demand_enabled && selectedProfile == nullptr) {
         MessageBoxWarning(windowTitle(), tr("Select a target profile for WiFi on-demand before enabling it."));
-        return;
+        return false;
     }
 
     QStringList list;
@@ -165,6 +173,5 @@ void DialogSSIDSettings::accept() {
     }
     ProxorGui::dataStore->ssid_trigger_list = list;
     storeOnDemandProfileRef(selectedProfile);
-    ProxorGui::dataStore->Save();
-    QDialog::accept();
+    return true;
 }

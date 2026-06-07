@@ -60,18 +60,6 @@ inline bool speedtesting = false;
 inline QList<QThread *> speedtesting_threads = {};
 
 void MainWindow::speedtest_current_group(int mode, bool test_group) {
-    if (speedtesting) {
-        MessageBoxWarning(software_name, QObject::tr("The last speed test did not exit completely, please wait. If it persists, please restart the program."));
-        return;
-    }
-
-    auto profiles = get_selected_or_group();
-    if (test_group) profiles = ProxorGui::profileManager->CurrentGroup()->ProfilesWithOrder();
-    if (profiles.isEmpty()) return;
-    auto group = ProxorGui::profileManager->CurrentGroup();
-    if (group->archive) return;
-
-    // menu_stop_testing
     if (mode == 114514) {
         while (!speedtesting_threads.isEmpty()) {
             auto t = speedtesting_threads.takeFirst();
@@ -80,6 +68,17 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
         speedtesting = false;
         return;
     }
+
+    if (speedtesting) {
+        MW_show_log(QObject::tr("A speed test is already running; ignoring the new request."));
+        return;
+    }
+
+    auto profiles = get_selected_or_group();
+    if (test_group) profiles = ProxorGui::profileManager->CurrentGroup()->ProfilesWithOrder();
+    if (profiles.isEmpty()) return;
+    auto group = ProxorGui::profileManager->CurrentGroup();
+    if (group->archive) return;
 
 #ifndef NKR_NO_GRPC
     QStringList full_test_flags;

@@ -5,6 +5,12 @@
 #include <QList>
 #include <QSet>
 
+#include <memory>
+
+namespace ProxorGui {
+    class Group;
+}
+
 class ProxyListModel : public QAbstractTableModel {
     Q_OBJECT
 
@@ -16,9 +22,10 @@ public:
         AddressColumn,
         TestResultColumn,
         TrafficColumn,
-        QuotaColumn,
         ColumnCount
     };
+
+    static QString quotaText(const std::shared_ptr<ProxorGui::Group> &group);
 
     enum Role {
         ProfileIdRole = Qt::UserRole + 1
@@ -60,6 +67,4 @@ private:
     QHash<int, int> m_idToRow;
 
     void rebuildIndex();
-
-    [[nodiscard]] QString quotaDisplayText() const;
 };
