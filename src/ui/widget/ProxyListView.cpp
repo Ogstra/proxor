@@ -1,9 +1,20 @@
 #include "ProxyListView.h"
 
 #include <QDropEvent>
+#include <QEvent>
 #include <QItemSelectionModel>
+#include <QMouseEvent>
+#include <QTimer>
 
 #include "ui/model/ProxyListModel.h"
+
+namespace {
+bool isPlainLeftClick(const QMouseEvent *event) {
+    return event != nullptr &&
+           event->button() == Qt::LeftButton &&
+           !(event->modifiers() & (Qt::ControlModifier | Qt::ShiftModifier));
+}
+}
 
 ProxyListView::ProxyListView(QWidget *parent) : QTableView(parent) {
     setDragDropMode(QAbstractItemView::InternalMove);
@@ -41,6 +52,63 @@ void ProxyListView::reapplySearchFilter() {
 
     for (int row = 0; row < proxyModel->rowCount(); ++row) {
         setRowHidden(row, !proxyModel->rowMatchesText(row, m_searchText));
+    }
+}
+
+QItemSelectionModel::SelectionFlags ProxyListView::selectionCommand(const QModelIndex &index, const QEvent *event) const {
+    if (event != nullptr && (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonDblClick)) {
+        auto *mouseEvent = static_cast<const QMouseEvent *>(event);
+        if (isPlainLeftClick(mouseEvent) && index.isValid()) {
+            return QItemSelectionModel::ClearAndSelect;
+        }
+    }
+    return QTableView::selectionCommand(index, event);
+}
+
+void ProxyListView::selectionChanged(const QItemSelection &selected, const QItemSelection &deselected) {
+    QTableView::selectionChanged(selected, deselected);
+    if (viewport() == nullptr) return;
+
+    viewport()->update();
+    viewport()->repaint();
+    QTimer::singleShot(0, viewport(), [viewport = viewport()] {
+        if (viewport == nullptr) return;
+        viewport->update();
+        viewport->repaint();
+    });
+}
+
+void ProxyListView::currentChanged(const QModelIndex &current, const QModelIndex &previous) {
+    QTableView::currentChanged(current, previous);
+    if (viewport() != nullptr) {
+        viewport()->update();
+        viewport()->repaint();
+    }
+}
+
+void ProxyListView::mousePressEvent(QMouseEvent *event) {
+    if (isPlainLeftClick(event) && indexAt(event->pos()).isValid()) {
+        clearSelection();
+    }
+    QTableView::mousePressEvent(event);
+}
+
+void ProxyListView::mouseDoubleClickEvent(QMouseEvent *event) {
+    const auto index = indexAt(event->pos());
+    if (isPlainLeftClick(event) && index.isValid()) {
+        clearSelection();
+        selectionModel()->select(index, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+        setCurrentIndex(index);
+        if (viewport() != nullptr) viewport()->repaint();
+    }
+    QTableView::mouseDoubleClickEvent(event);
+}
+
+void ProxyListView::mouseReleaseEvent(QMouseEvent *event) {
+    QTableView::mouseReleaseEvent(event);
+    if (viewport() != nullptr) {
+        viewport()->update();
+        viewport()->repaint();
     }
 }
 

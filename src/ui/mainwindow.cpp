@@ -867,6 +867,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
 void MainWindow::closeEvent(QCloseEvent *event) {
     if (tray->isVisible()) {
+        ui->proxyListTable->clearSelection();
         hide();          // 隐藏窗口
         event->ignore(); // 忽略事件
     }
