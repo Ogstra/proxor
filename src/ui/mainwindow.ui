@@ -194,11 +194,6 @@
        <enum>Qt::Vertical</enum>
       </property>
       <widget class="QTabWidget" name="tabWidget">
-       <property name="styleSheet">
-        <string notr="true">QTabWidget#tabWidget::tab-bar {
-    left: -2px;
-}</string>
-       </property>
        <property name="currentIndex">
         <number>0</number>
        </property>
