@@ -558,6 +558,15 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         ui->toolButton_update_subscription->setMinimumHeight(bottomButtonHeight);
         ui->toolButton_update_subscription->setMaximumHeight(bottomButtonHeight);
         ui->toolButton_url_test->setMinimumWidth(ui->toolButton_update_subscription->sizeHint().width());
+
+        const int checkboxSpacing = ui->verticalLayout_4->spacing();
+        const int checkboxAvailableHeight = qMax(2, referenceHeight - checkboxSpacing);
+        const int topCheckboxHeight = checkboxAvailableHeight / 2;
+        const int bottomCheckboxHeight = checkboxAvailableHeight - topCheckboxHeight;
+        ui->checkBox_VPN->setMinimumHeight(topCheckboxHeight);
+        ui->checkBox_VPN->setMaximumHeight(topCheckboxHeight);
+        ui->checkBox_SystemProxy->setMinimumHeight(bottomCheckboxHeight);
+        ui->checkBox_SystemProxy->setMaximumHeight(bottomCheckboxHeight);
     }, this, 0);
     connect(ui->toolButton_url_test, &QToolButton::clicked, this, [=] { speedtest_current_group(1, true); });
     connect(ui->toolButton_update_subscription, &QToolButton::clicked, this, [=] { on_menu_update_subscription_triggered(); });
