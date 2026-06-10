@@ -159,7 +159,7 @@
       <item>
        <layout class="QVBoxLayout" name="verticalLayout_url_sub">
         <property name="spacing">
-         <number>2</number>
+         <number>4</number>
         </property>
         <item>
          <widget class="QToolButton" name="toolButton_url_test">
