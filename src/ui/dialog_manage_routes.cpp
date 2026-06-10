@@ -98,7 +98,7 @@ DialogManageRoutes::DialogManageRoutes(QWidget *parent) : QDialog(parent), ui(ne
     prepareRuleEditor(blockDomainTxt, tr("geosite:category-ads-all"));
     for (auto *box: {ui->directIpBox, ui->proxyIpBox, ui->blockIpBox,
                      ui->directDomainBox, ui->proxyDomainBox, ui->blockDomainBox}) {
-        box->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
+        box->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     }
     //
     hostsMapTable = new QTableWidget(0, 3, this);
@@ -141,6 +141,7 @@ DialogManageRoutes::DialogManageRoutes(QWidget *parent) : QDialog(parent), ui(ne
     routeNav->setCurrentRow(ui->tabWidget->currentIndex());
     routeNav->setFrameShape(QFrame::NoFrame);
     routeNav->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    routeNav->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     routeNav->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
     routeNav->setStyleSheet(QStringLiteral("QListWidget::item{padding:4px 10px;}"));
     routeNav->setFixedWidth(routeNav->sizeHintForColumn(0) + 32);
