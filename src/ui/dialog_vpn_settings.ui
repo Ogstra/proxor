@@ -159,6 +159,25 @@ This needs to be run Proxor with administrator privileges.</string>
        <property name="title">
         <string>Bypass Process Name</string>
        </property>
+       <widget class="QPushButton" name="btn_pick_process">
+        <property name="geometry">
+         <rect>
+          <x>240</x>
+          <y>0</y>
+          <width>75</width>
+          <height>24</height>
+         </rect>
+        </property>
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="text">
+         <string>Pick...</string>
+        </property>
+       </widget>
        <layout class="QVBoxLayout" name="verticalLayout_4">
         <item>
          <widget class="QPlainTextEdit" name="vpn_rule_process"/>
