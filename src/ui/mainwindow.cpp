@@ -119,6 +119,14 @@ QColor subtleAlternateRowColor(const QColor &base) {
     return base.lightness() < 128 ? base.lighter(108) : base.darker(103);
 }
 
+QColor neutralSelectionColor(const QColor &base) {
+    if (!base.isValid()) return {};
+    const int value = base.lightness() < 128
+        ? qMin(255, base.lightness() + 36)
+        : qMax(0, base.lightness() - 32);
+    return QColor(value, value, value);
+}
+
 #ifdef Q_OS_WIN
 constexpr auto kProxorHostsBegin = "# BEGIN PROXOR HOSTS";
 constexpr auto kProxorHostsEnd = "# END PROXOR HOSTS";
@@ -598,11 +606,22 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     auto applyTableRowAlternation = [this](const QString &) {
         auto applyAlternation = [](QAbstractItemView *view) {
             auto palette = view->palette();
-            const auto alternate = subtleAlternateRowColor(palette.color(QPalette::Base));
+            const auto base = palette.color(QPalette::Base);
+            const auto alternate = subtleAlternateRowColor(base);
+            const auto selection = neutralSelectionColor(base);
+            const auto selectionText = palette.color(QPalette::Text);
             palette.setColor(QPalette::AlternateBase, alternate);
+            palette.setColor(QPalette::Highlight, selection);
+            palette.setColor(QPalette::HighlightedText, selectionText);
             view->setPalette(palette);
             view->setAlternatingRowColors(true);
-            view->setStyleSheet(QStringLiteral("alternate-background-color: %1;").arg(alternate.name(QColor::HexRgb)));
+            view->setStyleSheet(QStringLiteral(
+                                    "alternate-background-color: %1;"
+                                    "selection-background-color: %2;"
+                                    "selection-color: %3;")
+                                    .arg(alternate.name(QColor::HexRgb),
+                                         selection.name(QColor::HexRgb),
+                                         selectionText.name(QColor::HexRgb)));
             view->viewport()->update();
         };
         applyAlternation(ui->proxyListTable);
