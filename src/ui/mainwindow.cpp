@@ -422,6 +422,33 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     attachMenuOnClick(ui->toolButton_preferences, ui->menu_preferences);
     attachMenuOnClick(ui->toolButton_server, ui->menu_server);
     ui->menubar->setVisible(false);
+    auto applyToolbarAutoRaise = [this](const QString &themeName) {
+        const bool isSystem = (themeManager->NormalizeTheme(themeName) == QStringLiteral("System"));
+        const QList<QToolButton *> btns = {
+            ui->toolButton_toggle_proxy,
+            ui->toolButton_program,
+            ui->toolButton_preferences,
+            ui->toolButton_server,
+            ui->toolButton_url_test,
+            ui->toolButton_update_subscription,
+        };
+        static const QString systemBtnSS = QStringLiteral(
+            "QToolButton {"
+            "  background-color: palette(button);"
+            "  border: 1px solid palette(mid);"
+            "  border-radius: 6px;"
+            "}"
+            "QToolButton:hover, QToolButton:open {"
+            "  background-color: palette(light);"
+            "  border-color: palette(shadow);"
+            "}");
+        for (auto *btn : btns) {
+            btn->setAutoRaise(isSystem);
+            btn->setStyleSheet(isSystem ? systemBtnSS : QString());
+        }
+    };
+    applyToolbarAutoRaise(ProxorGui::dataStore->theme);
+    connect(themeManager, &ThemeManager::themeChanged, this, applyToolbarAutoRaise);
     ui->toolButton_toggle_proxy->setText(tr("Start"));
     ui->toolButton_toggle_proxy->setIcon(makeToggleProxyIcon(QColor(52, 199, 89)));
     ui->toolButton_toggle_proxy->setIconSize(QSize(24, 24));
