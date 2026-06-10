@@ -381,6 +381,16 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     for (auto *tabs: {ui->tabWidget, ui->down_tab}) {
         tabs->tabBar()->setUsesScrollButtons(false);
     }
+    static const QString toolbarCheckboxSS = QStringLiteral(
+        "QCheckBox#checkBox_VPN, QCheckBox#checkBox_SystemProxy {"
+        "  padding-top: 0px;"
+        "  padding-bottom: 0px;"
+        "}"
+        "QCheckBox#checkBox_VPN::indicator, QCheckBox#checkBox_SystemProxy::indicator {"
+        "  margin-top: 1px;"
+        "}");
+    ui->checkBox_VPN->setStyleSheet(toolbarCheckboxSS);
+    ui->checkBox_SystemProxy->setStyleSheet(toolbarCheckboxSS);
     m_quotaLabel = new QLabel(this);
     m_quotaLabel->setContentsMargins(0, 0, 8, 0);
     m_quotaLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
