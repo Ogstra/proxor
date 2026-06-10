@@ -39,6 +39,7 @@
 
 #include <QClipboard>
 #include <QApplication>
+#include <QAbstractItemView>
 #include <QBrush>
 #include <QColor>
 #include <QLabel>
@@ -111,6 +112,11 @@ QUrl sponsorUrl() {
 
 QUrl maintainerUrl() {
     return QUrl(QStringLiteral("https://github.com/%1").arg(QString::fromLatin1(kProjectOwner)));
+}
+
+QColor subtleAlternateRowColor(const QColor &base) {
+    if (!base.isValid()) return {};
+    return base.lightness() < 128 ? base.lighter(108) : base.darker(103);
 }
 
 #ifdef Q_OS_WIN
@@ -231,7 +237,8 @@ public:
             } else if (background.canConvert<QBrush>()) {
                 painter->fillRect(option.rect, qvariant_cast<QBrush>(background));
             } else {
-                painter->fillRect(option.rect, option.palette.color(QPalette::Base));
+                const auto role = (index.row() % 2 == 0) ? QPalette::Base : QPalette::AlternateBase;
+                painter->fillRect(option.rect, option.palette.color(role));
             }
         }
 
@@ -588,6 +595,21 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     proxyListModel = new ProxyListModel(this);
     ui->proxyListTable->setModel(proxyListModel);
     ui->proxyListTable->setItemDelegate(new ProxyListDelegate(ui->proxyListTable));
+    auto applyTableRowAlternation = [this](const QString &) {
+        auto applyAlternation = [](QAbstractItemView *view) {
+            auto palette = view->palette();
+            const auto alternate = subtleAlternateRowColor(palette.color(QPalette::Base));
+            palette.setColor(QPalette::AlternateBase, alternate);
+            view->setPalette(palette);
+            view->setAlternatingRowColors(true);
+            view->setStyleSheet(QStringLiteral("alternate-background-color: %1;").arg(alternate.name(QColor::HexRgb)));
+            view->viewport()->update();
+        };
+        applyAlternation(ui->proxyListTable);
+        applyAlternation(ui->tableWidget_conn);
+    };
+    applyTableRowAlternation(ProxorGui::dataStore->theme);
+    connect(themeManager, &ThemeManager::themeChanged, this, applyTableRowAlternation);
     ui->proxyListTable->setShowGrid(false);
     ui->proxyListTable->verticalHeader()->setVisible(false);
     ui->proxyListTable->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
