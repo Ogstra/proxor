@@ -27,9 +27,9 @@ QString ProxyListModel::quotaText(const std::shared_ptr<ProxorGui::Group> &group
 
     if (total <= 0) return {};
 
-    const QString usedGiB = QString::number(static_cast<double>(upload + download) / 1073741824.0, 'f', 2) + " GiB";
-    const QString totalGiB = QString::number(static_cast<double>(total) / 1073741824.0, 'f', 2) + " GiB";
-    return usedGiB + " / " + totalGiB;
+    const QString usedGB = QString::number(static_cast<double>(upload + download) / 1073741824.0, 'f', 2) + " GB";
+    const QString totalGB = QString::number(static_cast<double>(total) / 1073741824.0, 'f', 2) + " GB";
+    return usedGB + "/" + totalGB;
 }
 
 ProxyListModel::ProxyListModel(QObject *parent) : QAbstractTableModel(parent) {
