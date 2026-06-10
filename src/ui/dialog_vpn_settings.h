@@ -4,6 +4,8 @@
 #include <QDialog>
 #include <QStringList>
 
+class QEvent;
+
 QT_BEGIN_NAMESPACE
 namespace Ui {
     class DialogVPNSettings;
@@ -28,6 +30,12 @@ public slots:
     bool save(QStringList &flags);
 
     void on_troubleshooting_clicked();
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
+private:
+    void positionPickProcessButton();
 };
 
 #endif // PROXOR_DIALOG_VPN_SETTINGS_H

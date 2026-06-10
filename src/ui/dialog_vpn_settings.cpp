@@ -5,11 +5,22 @@
 #include "main/ProxorGui.hpp"
 #include "ui/mainwindow_interface.h"
 
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QEvent>
+#include <QListWidget>
 #include <QMessageBox>
+#include <QProcess>
+#include <QSet>
+#include <QVBoxLayout>
+
+#include <algorithm>
 
 DialogVPNSettings::DialogVPNSettings(QWidget *parent) : QDialog(parent), ui(new Ui::DialogVPNSettings) {
     ui->setupUi(this);
     ADD_ASTERISK(this);
+    ui->gb_process_name->installEventFilter(this);
+    positionPickProcessButton();
 
     ui->fake_dns->setChecked(ProxorGui::dataStore->fake_dns);
     ui->vpn_implementation->setCurrentIndex(ProxorGui::dataStore->vpn_implementation);
@@ -35,10 +46,82 @@ DialogVPNSettings::DialogVPNSettings(QWidget *parent) : QDialog(parent), ui(new 
         }
     });
     ui->whitelist_mode->setChecked(ProxorGui::dataStore->vpn_rule_white);
+
+    connect(ui->btn_pick_process, &QPushButton::clicked, this, [this] {
+        QProcess proc;
+#ifdef Q_OS_WIN
+        proc.start("tasklist", {"/fo", "csv", "/nh"});
+#else
+        proc.start("ps", {"-eo", "comm"});
+#endif
+        if (!proc.waitForFinished(4000)) return;
+
+        QSet<QString> names;
+        const QString out = proc.readAllStandardOutput();
+        for (const auto &line : out.split('\n')) {
+            const auto trimmed = line.trimmed();
+            if (trimmed.isEmpty()) continue;
+#ifdef Q_OS_WIN
+            const int comma = trimmed.indexOf(',');
+            if (comma < 2) continue;
+            auto name = trimmed.left(comma);
+            if (name.startsWith('"') && name.endsWith('"'))
+                name = name.mid(1, name.size() - 2);
+            if (!name.isEmpty()) names.insert(name);
+#else
+            if (!trimmed.isEmpty()) names.insert(trimmed);
+#endif
+        }
+
+        auto sorted = names.values();
+        std::sort(sorted.begin(), sorted.end(), [](const QString &a, const QString &b) {
+            return a.compare(b, Qt::CaseInsensitive) < 0;
+        });
+
+        auto *dlg = new QDialog(this);
+        dlg->setWindowTitle(tr("Select Process"));
+        dlg->resize(300, 400);
+        auto *layout = new QVBoxLayout(dlg);
+        auto *list = new QListWidget(dlg);
+        list->setSelectionMode(QAbstractItemView::ExtendedSelection);
+        for (const auto &name : sorted)
+            list->addItem(name);
+        auto *btns = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dlg);
+        layout->addWidget(list);
+        layout->addWidget(btns);
+        connect(btns, &QDialogButtonBox::accepted, dlg, &QDialog::accept);
+        connect(btns, &QDialogButtonBox::rejected, dlg, &QDialog::reject);
+        connect(list, &QListWidget::itemDoubleClicked, dlg, &QDialog::accept);
+
+        if (dlg->exec() != QDialog::Accepted) return;
+
+        QStringList current = ui->vpn_rule_process->toPlainText().split('\n', Qt::SkipEmptyParts);
+        for (const auto *item : list->selectedItems()) {
+            const auto name = item->text();
+            if (!current.contains(name, Qt::CaseInsensitive))
+                current.append(name);
+        }
+        ui->vpn_rule_process->setPlainText(current.join('\n'));
+    });
 }
 
 DialogVPNSettings::~DialogVPNSettings() {
     delete ui;
+}
+
+bool DialogVPNSettings::eventFilter(QObject *watched, QEvent *event) {
+    if (watched == ui->gb_process_name && event->type() == QEvent::Resize)
+        positionPickProcessButton();
+    return QDialog::eventFilter(watched, event);
+}
+
+void DialogVPNSettings::positionPickProcessButton() {
+    constexpr int margin = 8;
+    auto *button = ui->btn_pick_process;
+    const auto size = button->sizeHint();
+    button->resize(size);
+    button->move(std::max(margin, ui->gb_process_name->width() - size.width() - margin), 0);
+    button->raise();
 }
 
 void DialogVPNSettings::accept() {
