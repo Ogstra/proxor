@@ -550,11 +550,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             button->setMinimumWidth(referenceHeight);
         }
         const int stackedSpacing = ui->verticalLayout_url_sub->spacing();
-        const int stackedButtonHeight = qMax(1, (referenceHeight - stackedSpacing) / 2);
-        for (auto *button: {ui->toolButton_url_test, ui->toolButton_update_subscription}) {
-            button->setMinimumHeight(stackedButtonHeight);
-            button->setMaximumHeight(stackedButtonHeight);
-        }
+        const int stackedAvailableHeight = qMax(2, referenceHeight - stackedSpacing);
+        const int topButtonHeight = stackedAvailableHeight / 2;
+        const int bottomButtonHeight = stackedAvailableHeight - topButtonHeight;
+        ui->toolButton_url_test->setMinimumHeight(topButtonHeight);
+        ui->toolButton_url_test->setMaximumHeight(topButtonHeight);
+        ui->toolButton_update_subscription->setMinimumHeight(bottomButtonHeight);
+        ui->toolButton_update_subscription->setMaximumHeight(bottomButtonHeight);
         ui->toolButton_url_test->setMinimumWidth(ui->toolButton_update_subscription->sizeHint().width());
     }, this, 0);
     connect(ui->toolButton_url_test, &QToolButton::clicked, this, [=] { speedtest_current_group(1, true); });
