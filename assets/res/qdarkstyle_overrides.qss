@@ -16,6 +16,13 @@ QTabBar::tab:top:!selected {
   margin-top: 0px;
 }
 
+QLineEdit:hover,
+QLineEdit:focus,
+QTextEdit:focus,
+QPlainTextEdit:focus {
+  border: 1px solid #455364;
+}
+
 QSplitter#splitter {
   background-color: transparent;
 }
