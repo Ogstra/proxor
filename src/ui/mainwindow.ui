@@ -194,6 +194,11 @@
        <enum>Qt::Vertical</enum>
       </property>
       <widget class="QTabWidget" name="tabWidget">
+       <property name="styleSheet">
+        <string notr="true">QTabWidget#tabWidget::tab-bar {
+    left: -2px;
+}</string>
+       </property>
        <property name="currentIndex">
         <number>0</number>
        </property>
@@ -296,6 +301,11 @@
        <layout class="QVBoxLayout" name="aaaaaaaaaaaa" stretch="0">
         <item>
          <widget class="QTabWidget" name="down_tab">
+          <property name="styleSheet">
+           <string notr="true">QTabWidget#down_tab::tab-bar {
+    left: -2px;
+}</string>
+          </property>
           <property name="currentIndex">
            <number>0</number>
           </property>
