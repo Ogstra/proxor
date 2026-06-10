@@ -10,6 +10,7 @@
 
 #include "ui/ThemeManager.hpp"
 #include "ui/Icon.hpp"
+#include "ui/widget/ProxyListFilterHeader.h"
 #include "ui/edit/dialog_edit_profile.h"
 #include "ui/edit/dialog_edit_group.h"
 #include "ui/dialog_basic_settings.h"
@@ -377,22 +378,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     }
     ui->setupUi(this);
     themeManager->ApplyTheme(ProxorGui::dataStore->theme);
-    auto applyMainTabBarAlignment = [this](const QString &themeName) {
-        const bool isQDarkStyle = themeManager->NormalizeTheme(themeName).compare(QStringLiteral("qdarkstyle"),
-                                                                                  Qt::CaseInsensitive) == 0;
-        const QString tabBarStyle = isQDarkStyle
-            ? QStringLiteral(
-                  "QTabBar { padding-left: 0px; padding-right: 0px; }"
-                  "QTabBar::tab:top { margin-left: 0px; }")
-            : QString();
-        for (auto *tabs: {ui->tabWidget, ui->down_tab}) {
-            auto *bar = tabs->tabBar();
-            bar->setUsesScrollButtons(false);
-            bar->setStyleSheet(tabBarStyle);
-        }
-    };
-    applyMainTabBarAlignment(ProxorGui::dataStore->theme);
-    connect(themeManager, &ThemeManager::themeChanged, this, applyMainTabBarAlignment);
+    for (auto *tabs: {ui->tabWidget, ui->down_tab}) {
+        tabs->tabBar()->setUsesScrollButtons(false);
+    }
     m_quotaLabel = new QLabel(this);
     m_quotaLabel->setContentsMargins(0, 0, 8, 0);
     m_quotaLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -629,10 +617,23 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     };
     applyTableRowAlternation(ProxorGui::dataStore->theme);
     connect(themeManager, &ThemeManager::themeChanged, this, applyTableRowAlternation);
-    ui->proxyListTable->setShowGrid(false);
+    connect(themeManager, &ThemeManager::themeChanged, this, [=](const QString &) {
+        rebuildLogDocument(ui->log_filter->text());
+    });
     ui->proxyListTable->verticalHeader()->setVisible(false);
+    ui->proxyListTable->setShowGrid(false);
     ui->proxyListTable->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     ui->proxyListTable->horizontalHeader()->setStretchLastSection(false);
+    auto *filterHeader = new ProxyListFilterHeader(ui->proxyListTable->horizontalHeader());
+    connect(filterHeader, &ProxyListFilterHeader::filterChanged, ui->proxyListTable, &ProxyListView::setColumnFilter);
+    auto *btnFilter = new QToolButton(this);
+    btnFilter->setIcon(QIcon(QStringLiteral(":/icon/filter.png")));
+    btnFilter->setToolTip(QString("%1\n%2").arg(tr("Enable Filter"),
+        QKeySequence(QKeySequence::Find).toString(QKeySequence::NativeText)));
+    btnFilter->setShortcut(QKeySequence::Find);
+    btnFilter->setCheckable(true);
+    connect(btnFilter, &QToolButton::toggled, filterHeader, &ProxyListFilterHeader::setFiltersVisible);
+    ui->tabWidget->setCornerWidget(btnFilter, Qt::TopRightCorner);
     connect(proxyListModel, &ProxyListModel::orderChanged, this, [=](const QList<int> &order) {
         auto group = ProxorGui::profileManager->CurrentGroup();
         if (group == nullptr) return;
@@ -672,17 +673,23 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     connect(ui->proxyListTable->horizontalHeader(), &QHeaderView::sectionResized, this, [=](int logicalIndex, int oldSize, int newSize) {
         auto group = ProxorGui::profileManager->CurrentGroup();
         if (ProxorGui::dataStore->refreshing_group || group == nullptr || !group->manually_column_width) return;
-        // per-column minimum widths: name=-25%, address=-25%, traffic=+20% (baseline 100px)
-        static const int colMinWidths[] = {0, 75, 0, 75, 0, 120};
+        static const int colMinWidths[] = {0, 75, 60, 90, 60, 120};
+        static const int colMaxWidths[] = {0, 600, 200, 600, 200, 400};
         int minW = (logicalIndex < 6) ? colMinWidths[logicalIndex] : 0;
+        int maxW = (logicalIndex < 6) ? colMaxWidths[logicalIndex] : 0;
         if (minW > 0 && newSize < minW) {
             auto header = ui->proxyListTable->horizontalHeader();
             header->blockSignals(true);
             header->resizeSection(logicalIndex, minW);
             header->blockSignals(false);
             newSize = minW;
+        } else if (maxW > 0 && newSize > maxW) {
+            auto header = ui->proxyListTable->horizontalHeader();
+            header->blockSignals(true);
+            header->resizeSection(logicalIndex, maxW);
+            header->blockSignals(false);
+            newSize = maxW;
         }
-        // save manually column width
         group->column_width.clear();
         for (int i = 0; i < ui->proxyListTable->horizontalHeader()->count(); i++) {
             group->column_width.push_back(ui->proxyListTable->horizontalHeader()->sectionSize(i));
@@ -1228,27 +1235,38 @@ void MainWindow::show_group(int gid) {
     ui->tabWidget->widget(groupId2TabIndex(gid))->layout()->addWidget(ui->proxyListTable);
 
     // 列宽是否可调
+    auto *hdr = ui->proxyListTable->horizontalHeader();
     if (group->manually_column_width) {
-        ui->proxyListTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
-        ui->proxyListTable->horizontalHeader()->resizeSection(0, toggleColumnWidth);
-        static const int defaultColWidths[] = {0, 75, 0, 75, 0, 120};
+        static const int colDefaultWidths[] = {0, 160, 100, 200, 90, 120};
+        static const int colMinWidths[]     = {0,  75,  60,  90, 60, 120};
+        static const int colMaxWidths[]     = {0, 600, 200, 600, 200, 400};
+        hdr->setSectionResizeMode(0, QHeaderView::Fixed);
+        hdr->resizeSection(0, toggleColumnWidth);
+        const bool firstActivation = group->column_width.isEmpty();
         for (int i = 1; i <= 5; i++) {
-            ui->proxyListTable->horizontalHeader()->setSectionResizeMode(i, QHeaderView::Interactive);
-            auto size = group->column_width.value(i);
-            if (size <= 0) {
-                int defW = (i < 6) ? defaultColWidths[i] : 0;
-                size = (defW > 0) ? defW : ui->proxyListTable->horizontalHeader()->defaultSectionSize();
-            }
-            ui->proxyListTable->horizontalHeader()->resizeSection(i, size);
+            int size = group->column_width.value(i);
+            if (size <= 0) size = colDefaultWidths[i];
+            size = std::max(size, colMinWidths[i]);
+            size = std::min(size, colMaxWidths[i]);
+            hdr->setSectionResizeMode(i, QHeaderView::Interactive);
+            hdr->resizeSection(i, size);
+        }
+        if (firstActivation) {
+            group->column_width.clear();
+            for (int i = 0; i < hdr->count(); i++)
+                group->column_width.push_back(hdr->sectionSize(i));
+            ProxorGui::profileManager->SaveGroup(group);
         }
     } else {
-        ui->proxyListTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
-        ui->proxyListTable->horizontalHeader()->resizeSection(0, toggleColumnWidth);
-        ui->proxyListTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
-        ui->proxyListTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-        ui->proxyListTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
-        ui->proxyListTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
-        ui->proxyListTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Interactive);
+        hdr->setSectionResizeMode(0, QHeaderView::Fixed);
+        hdr->resizeSection(0, toggleColumnWidth);
+        hdr->setSectionResizeMode(1, QHeaderView::Stretch);
+        hdr->setSectionResizeMode(2, QHeaderView::Fixed);
+        hdr->resizeSection(2, 100);
+        hdr->setSectionResizeMode(3, QHeaderView::Stretch);
+        hdr->setSectionResizeMode(4, QHeaderView::ResizeToContents);
+        hdr->setSectionResizeMode(5, QHeaderView::Fixed);
+        hdr->resizeSection(5, 120);
     }
 
     update_quota_display();
