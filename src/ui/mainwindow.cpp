@@ -549,10 +549,16 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             button->setMinimumHeight(referenceHeight);
             button->setMinimumWidth(referenceHeight);
         }
+        const int stackedSpacing = ui->verticalLayout_url_sub->spacing();
+        const int stackedButtonHeight = qMax(1, (referenceHeight - stackedSpacing) / 2);
+        for (auto *button: {ui->toolButton_url_test, ui->toolButton_update_subscription}) {
+            button->setMinimumHeight(stackedButtonHeight);
+            button->setMaximumHeight(stackedButtonHeight);
+        }
+        ui->toolButton_url_test->setMinimumWidth(ui->toolButton_update_subscription->sizeHint().width());
     }, this, 0);
     connect(ui->toolButton_url_test, &QToolButton::clicked, this, [=] { speedtest_current_group(1, true); });
     connect(ui->toolButton_update_subscription, &QToolButton::clicked, this, [=] { on_menu_update_subscription_triggered(); });
-    ui->toolButton_url_test->setMinimumWidth(ui->toolButton_update_subscription->sizeHint().width());
 
     // Setup log UI
     ui->splitter->restoreState(DecodeB64IfValid(ProxorGui::dataStore->splitter_state));
