@@ -1,12 +1,10 @@
 #pragma once
 
-#include <QItemSelectionModel>
 #include <QTableView>
 
 class ProxyListModel;
-class QEvent;
-class QItemSelection;
 class QMouseEvent;
+class QStyleOptionViewItem;
 
 class ProxyListView : public QTableView {
     Q_OBJECT
@@ -16,6 +14,10 @@ public:
 
     [[nodiscard]] QList<int> selectedProfileIds() const;
 
+    void clearSelection();
+
+    void selectAll() override;
+
     void setSearchText(const QString &text);
 
     [[nodiscard]] QString searchText() const;
@@ -23,11 +25,7 @@ public:
     void reapplySearchFilter();
 
 protected:
-    QItemSelectionModel::SelectionFlags selectionCommand(const QModelIndex &index, const QEvent *event = nullptr) const override;
-
-    void selectionChanged(const QItemSelection &selected, const QItemSelection &deselected) override;
-
-    void currentChanged(const QModelIndex &current, const QModelIndex &previous) override;
+    void initViewItemOption(QStyleOptionViewItem *option) const override;
 
     void mousePressEvent(QMouseEvent *event) override;
 
@@ -39,4 +37,14 @@ protected:
 
 private:
     QString m_searchText;
+    int m_anchorRow = -1;
+    int m_lastClickedProfileId = -1;
+
+    [[nodiscard]] ProxyListModel *proxyModel() const;
+
+    bool handleProfileClick(QMouseEvent *event);
+
+    [[nodiscard]] int profileIdAtMouseEvent(const QMouseEvent *event) const;
+
+    void clearNativeCurrentCell();
 };

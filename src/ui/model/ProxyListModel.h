@@ -49,6 +49,20 @@ public:
 
     [[nodiscard]] const QList<int> &profileIds() const;
 
+    [[nodiscard]] QList<int> selectedProfileIds() const;
+
+    [[nodiscard]] bool isProfileSelected(int profileId) const;
+
+    void clearSelectedProfiles();
+
+    void setSelectedProfileIds(const QList<int> &ids);
+
+    void selectOnlyProfile(int profileId);
+
+    void toggleSelectedProfile(int profileId);
+
+    void selectProfileRange(int firstRow, int lastRow);
+
     [[nodiscard]] int profileIdAtRow(int row) const;
 
     [[nodiscard]] int rowForProfile(int profileId) const;
@@ -65,6 +79,9 @@ signals:
 private:
     QList<int> m_rowIds;
     QHash<int, int> m_idToRow;
+    QSet<int> m_selectedIds;
 
     void rebuildIndex();
+
+    void emitSelectionDataChanged(const QSet<int> &oldSelectedIds);
 };
