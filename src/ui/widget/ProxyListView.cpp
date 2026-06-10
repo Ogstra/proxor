@@ -1,10 +1,10 @@
 #include "ProxyListView.h"
 
 #include <QDropEvent>
-#include <QEvent>
 #include <QItemSelectionModel>
 #include <QMouseEvent>
-#include <QTimer>
+#include <QStyle>
+#include <QStyleOptionViewItem>
 
 #include "ui/model/ProxyListModel.h"
 
@@ -20,7 +20,7 @@ ProxyListView::ProxyListView(QWidget *parent) : QTableView(parent) {
     setDragDropMode(QAbstractItemView::InternalMove);
     setDropIndicatorShown(true);
     setSelectionBehavior(QAbstractItemView::SelectRows);
-    setSelectionMode(QAbstractItemView::ExtendedSelection);
+    setSelectionMode(QAbstractItemView::NoSelection);
     setDragDropOverwriteMode(false);
     setDragEnabled(true);
     setAcceptDrops(true);
@@ -28,13 +28,31 @@ ProxyListView::ProxyListView(QWidget *parent) : QTableView(parent) {
 }
 
 QList<int> ProxyListView::selectedProfileIds() const {
+    auto *proxy = proxyModel();
+    return proxy == nullptr ? QList<int>{} : proxy->selectedProfileIds();
+}
+
+void ProxyListView::clearSelection() {
+    if (auto *proxy = proxyModel()) proxy->clearSelectedProfiles();
+    QTableView::clearSelection();
+    m_anchorRow = -1;
+    if (viewport() != nullptr) viewport()->update();
+}
+
+void ProxyListView::selectAll() {
+    auto *proxy = proxyModel();
+    if (proxy == nullptr) return;
+
     QList<int> ids;
-    const auto rows = selectionModel() ? selectionModel()->selectedRows() : QModelIndexList{};
-    for (const auto &index: rows) {
-        const int id = index.data(ProxyListModel::ProfileIdRole).toInt();
-        if (id >= 0 && !ids.contains(id)) ids << id;
+    int anchorRow = -1;
+    for (int row = 0; row < proxy->rowCount(); ++row) {
+        if (isRowHidden(row)) continue;
+        ids << proxy->profileIdAtRow(row);
+        if (anchorRow < 0) anchorRow = row;
     }
-    return ids;
+    proxy->setSelectedProfileIds(ids);
+    m_anchorRow = anchorRow;
+    if (viewport() != nullptr) viewport()->update();
 }
 
 void ProxyListView::setSearchText(const QString &text) {
@@ -55,66 +73,69 @@ void ProxyListView::reapplySearchFilter() {
     }
 }
 
-QItemSelectionModel::SelectionFlags ProxyListView::selectionCommand(const QModelIndex &index, const QEvent *event) const {
-    if (event != nullptr && (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonDblClick)) {
-        auto *mouseEvent = static_cast<const QMouseEvent *>(event);
-        if (isPlainLeftClick(mouseEvent) && index.isValid()) {
-            return QItemSelectionModel::ClearAndSelect;
-        }
-    }
-    return QTableView::selectionCommand(index, event);
-}
+void ProxyListView::initViewItemOption(QStyleOptionViewItem *option) const {
+    QTableView::initViewItemOption(option);
+    if (option == nullptr) return;
 
-void ProxyListView::selectionChanged(const QItemSelection &selected, const QItemSelection &deselected) {
-    QTableView::selectionChanged(selected, deselected);
-    if (viewport() == nullptr) return;
-
-    viewport()->update();
-    viewport()->repaint();
-    QTimer::singleShot(0, viewport(), [viewport = viewport()] {
-        if (viewport == nullptr) return;
-        viewport->update();
-        viewport->repaint();
-    });
-}
-
-void ProxyListView::currentChanged(const QModelIndex &current, const QModelIndex &previous) {
-    QTableView::currentChanged(current, previous);
-    if (viewport() != nullptr) {
-        viewport()->update();
-        viewport()->repaint();
-    }
+    option->state &= ~(QStyle::State_MouseOver |
+                       QStyle::State_HasFocus |
+                       QStyle::State_Selected |
+                       QStyle::State_Sunken);
 }
 
 void ProxyListView::mousePressEvent(QMouseEvent *event) {
-    if (isPlainLeftClick(event) && indexAt(event->pos()).isValid()) {
-        clearSelection();
+    if (handleProfileClick(event)) {
+        event->accept();
+        clearNativeCurrentCell();
+        return;
     }
     QTableView::mousePressEvent(event);
+    clearNativeCurrentCell();
 }
 
 void ProxyListView::mouseDoubleClickEvent(QMouseEvent *event) {
-    const auto index = indexAt(event->pos());
-    if (isPlainLeftClick(event) && index.isValid()) {
-        clearSelection();
-        selectionModel()->select(index, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
-        setCurrentIndex(index);
-        if (viewport() != nullptr) viewport()->repaint();
+    const auto index = event == nullptr ? QModelIndex{} : indexAt(event->pos());
+    if (index.isValid() && index.column() == ProxyListModel::ToggleColumn) {
+        event->accept();
+        clearNativeCurrentCell();
+        return;
+    }
+    if (isPlainLeftClick(event)) {
+        const int profileId = profileIdAtMouseEvent(event);
+        if (profileId >= 0 && profileId != m_lastClickedProfileId) {
+            event->accept();
+            clearNativeCurrentCell();
+            return;
+        }
+    }
+    const bool handled = handleProfileClick(event);
+    if (handled && index.isValid()) {
+        emit doubleClicked(index);
+        event->accept();
+        clearNativeCurrentCell();
+        return;
     }
     QTableView::mouseDoubleClickEvent(event);
+    clearNativeCurrentCell();
 }
 
 void ProxyListView::mouseReleaseEvent(QMouseEvent *event) {
+    if (event != nullptr && event->button() == Qt::LeftButton) {
+        m_lastClickedProfileId = profileIdAtMouseEvent(event);
+        event->accept();
+        clearNativeCurrentCell();
+        return;
+    }
     QTableView::mouseReleaseEvent(event);
+    clearNativeCurrentCell();
     if (viewport() != nullptr) {
         viewport()->update();
-        viewport()->repaint();
     }
 }
 
 void ProxyListView::dropEvent(QDropEvent *event) {
-    auto *proxyModel = qobject_cast<ProxyListModel *>(model());
-    if (proxyModel == nullptr) {
+    auto *proxy = proxyModel();
+    if (proxy == nullptr) {
         QTableView::dropEvent(event);
         return;
     }
@@ -125,14 +146,75 @@ void ProxyListView::dropEvent(QDropEvent *event) {
 #else
     const auto target = indexAt(event->pos());
 #endif
-    if (!current.isValid() || !target.isValid()) {
+    const int sourceRow = current.isValid() ? current.row() : m_anchorRow;
+    if (sourceRow < 0 || !target.isValid()) {
         event->ignore();
         return;
     }
 
-    proxyModel->moveProfileRow(current.row(), target.row());
-    clearSelection();
-    selectRow(target.row());
+    const int movedProfileId = proxy->profileIdAtRow(sourceRow);
+    proxy->moveProfileRow(sourceRow, target.row());
+    proxy->selectOnlyProfile(movedProfileId);
+    m_anchorRow = proxy->rowForProfile(movedProfileId);
     reapplySearchFilter();
     event->acceptProposedAction();
+}
+
+ProxyListModel *ProxyListView::proxyModel() const {
+    return qobject_cast<ProxyListModel *>(model());
+}
+
+bool ProxyListView::handleProfileClick(QMouseEvent *event) {
+    if (event == nullptr || event->button() != Qt::LeftButton) return false;
+
+    auto *proxy = proxyModel();
+    if (proxy == nullptr) return false;
+
+    const auto index = indexAt(event->pos());
+    if (!index.isValid()) return false;
+
+    const int row = index.row();
+    const int profileId = proxy->profileIdAtRow(row);
+    if (profileId < 0) return false;
+
+    if (index.column() == ProxyListModel::ToggleColumn) {
+        const auto currentState = static_cast<Qt::CheckState>(index.data(Qt::CheckStateRole).toInt());
+        proxy->setData(index, currentState == Qt::Checked ? Qt::Unchecked : Qt::Checked, Qt::CheckStateRole);
+        return true;
+    }
+
+    if (event->modifiers() & Qt::ShiftModifier) {
+        const int firstRow = m_anchorRow >= 0 ? m_anchorRow : row;
+        proxy->selectProfileRange(firstRow, row);
+    } else if (event->modifiers() & Qt::ControlModifier) {
+        proxy->toggleSelectedProfile(profileId);
+        m_anchorRow = row;
+    } else {
+        proxy->selectOnlyProfile(profileId);
+        m_anchorRow = row;
+    }
+
+    setCurrentIndex(index);
+    if (viewport() != nullptr) viewport()->update();
+    return true;
+}
+
+int ProxyListView::profileIdAtMouseEvent(const QMouseEvent *event) const {
+    if (event == nullptr) return -1;
+
+    auto *proxy = proxyModel();
+    if (proxy == nullptr) return -1;
+
+    const auto index = indexAt(event->pos());
+    if (!index.isValid()) return -1;
+
+    return proxy->profileIdAtRow(index.row());
+}
+
+void ProxyListView::clearNativeCurrentCell() {
+    if (selectionModel() != nullptr) {
+        selectionModel()->clearCurrentIndex();
+    }
+    QTableView::setCurrentIndex(QModelIndex());
+    if (viewport() != nullptr) viewport()->update();
 }

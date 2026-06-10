@@ -3,6 +3,8 @@
 #include <QApplication>
 #include <QPalette>
 
+#include <algorithm>
+
 #include "db/Database.hpp"
 #include "db/Group.hpp"
 #include "db/ProxyEntity.hpp"
@@ -51,6 +53,7 @@ QVariant ProxyListModel::data(const QModelIndex &index, int role) const {
     if (profile == nullptr) return {};
 
     const bool isRunning = profile->id == ProxorGui::dataStore->started_id;
+    const bool isSelected = m_selectedIds.contains(profile->id);
 
     if (role == ProfileIdRole) return profile->id;
 
@@ -166,11 +169,73 @@ void ProxyListModel::setProfileIds(const QList<int> &ids) {
     beginResetModel();
     m_rowIds = ids;
     rebuildIndex();
+    QSet<int> selectedIds;
+    for (const auto id: m_selectedIds) {
+        if (m_idToRow.contains(id)) selectedIds.insert(id);
+    }
+    m_selectedIds = selectedIds;
     endResetModel();
 }
 
 const QList<int> &ProxyListModel::profileIds() const {
     return m_rowIds;
+}
+
+QList<int> ProxyListModel::selectedProfileIds() const {
+    QList<int> ids;
+    for (const auto id: m_rowIds) {
+        if (m_selectedIds.contains(id)) ids << id;
+    }
+    return ids;
+}
+
+bool ProxyListModel::isProfileSelected(int profileId) const {
+    return m_selectedIds.contains(profileId);
+}
+
+void ProxyListModel::clearSelectedProfiles() {
+    if (m_selectedIds.isEmpty()) return;
+    const auto oldSelectedIds = m_selectedIds;
+    m_selectedIds.clear();
+    emitSelectionDataChanged(oldSelectedIds);
+}
+
+void ProxyListModel::setSelectedProfileIds(const QList<int> &ids) {
+    const auto oldSelectedIds = m_selectedIds;
+    m_selectedIds.clear();
+    for (const auto id: ids) {
+        if (m_idToRow.contains(id)) m_selectedIds.insert(id);
+    }
+    emitSelectionDataChanged(oldSelectedIds);
+}
+
+void ProxyListModel::selectOnlyProfile(int profileId) {
+    setSelectedProfileIds({profileId});
+}
+
+void ProxyListModel::toggleSelectedProfile(int profileId) {
+    if (!m_idToRow.contains(profileId)) return;
+    const auto oldSelectedIds = m_selectedIds;
+    if (m_selectedIds.contains(profileId)) {
+        m_selectedIds.remove(profileId);
+    } else {
+        m_selectedIds.insert(profileId);
+    }
+    emitSelectionDataChanged(oldSelectedIds);
+}
+
+void ProxyListModel::selectProfileRange(int firstRow, int lastRow) {
+    if (m_rowIds.isEmpty()) return;
+    if (firstRow > lastRow) std::swap(firstRow, lastRow);
+    const int lastAvailableRow = static_cast<int>(m_rowIds.size()) - 1;
+    firstRow = std::max(0, firstRow);
+    lastRow = std::min(lastRow, lastAvailableRow);
+
+    QList<int> ids;
+    for (int row = firstRow; row <= lastRow; ++row) {
+        ids << m_rowIds[row];
+    }
+    setSelectedProfileIds(ids);
 }
 
 int ProxyListModel::profileIdAtRow(int row) const {
@@ -226,5 +291,15 @@ void ProxyListModel::rebuildIndex() {
     m_idToRow.clear();
     for (int row = 0; row < m_rowIds.size(); ++row) {
         m_idToRow.insert(m_rowIds[row], row);
+    }
+}
+
+void ProxyListModel::emitSelectionDataChanged(const QSet<int> &oldSelectedIds) {
+    auto changedIds = oldSelectedIds;
+    changedIds.unite(m_selectedIds);
+    for (const auto id: changedIds) {
+        const int row = rowForProfile(id);
+        if (row < 0) continue;
+        emit dataChanged(index(row, 0), index(row, ColumnCount - 1), {Qt::BackgroundRole, Qt::ForegroundRole});
     }
 }

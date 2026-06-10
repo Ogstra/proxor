@@ -39,9 +39,13 @@
 
 #include <QClipboard>
 #include <QApplication>
+#include <QBrush>
+#include <QColor>
 #include <QLabel>
 #include <QCheckBox>
+#include <QFontMetrics>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QStyledItemDelegate>
 #include <QTableWidgetItem>
 #include <QTextBlock>
@@ -200,40 +204,89 @@ QRect centeredCheckboxIndicatorRect(const QStyleOptionViewItem &option, const QW
     return QStyle::alignedRect(option.direction, Qt::AlignCenter, indicatorSize, option.rect);
 }
 
-class CenteredCheckBoxDelegate final : public QStyledItemDelegate {
+class ProxyListDelegate final : public QStyledItemDelegate {
 public:
     using QStyledItemDelegate::QStyledItemDelegate;
 
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override {
-        QStyleOptionViewItem viewOption(option);
-        initStyleOption(&viewOption, index);
-        viewOption.text.clear();
+        painter->save();
 
-        auto *style = viewOption.widget ? viewOption.widget->style() : QApplication::style();
-        style->drawPrimitive(QStyle::PE_PanelItemViewItem, &viewOption, painter, viewOption.widget);
+        const auto profileId = index.data(ProxyListModel::ProfileIdRole).toInt();
+        const auto *proxyModel = qobject_cast<const ProxyListModel *>(index.model());
+        const bool selected = proxyModel != nullptr && proxyModel->isProfileSelected(profileId);
 
-        if (!(index.flags() & Qt::ItemIsUserCheckable)) return;
-
-        auto state = static_cast<Qt::CheckState>(index.data(Qt::CheckStateRole).toInt());
-        if (state == Qt::Unchecked && !index.data(Qt::CheckStateRole).isValid()) return;
-
-        QStyleOptionButton checkbox;
-        checkbox.rect = centeredCheckboxIndicatorRect(option, viewOption.widget);
-        checkbox.state |= QStyle::State_Enabled;
-        if (option.state & QStyle::State_MouseOver) checkbox.state |= QStyle::State_MouseOver;
-        if (option.state & QStyle::State_HasFocus) checkbox.state |= QStyle::State_HasFocus;
-        if (state == Qt::Checked) {
-            checkbox.state |= QStyle::State_On;
-        } else if (state == Qt::PartiallyChecked) {
-            checkbox.state |= QStyle::State_NoChange;
+        if (selected) {
+            auto *style = option.widget ? option.widget->style() : QApplication::style();
+            QStyleOptionViewItem selectedOption(option);
+            selectedOption.state &= ~(QStyle::State_MouseOver | QStyle::State_HasFocus | QStyle::State_Sunken);
+            selectedOption.state |= QStyle::State_Selected | QStyle::State_Active;
+            selectedOption.text.clear();
+            selectedOption.icon = QIcon();
+            style->drawPrimitive(QStyle::PE_PanelItemViewItem, &selectedOption, painter, option.widget);
         } else {
-            checkbox.state |= QStyle::State_Off;
+            const auto background = index.data(Qt::BackgroundRole);
+            if (background.canConvert<QColor>()) {
+                painter->fillRect(option.rect, qvariant_cast<QColor>(background));
+            } else if (background.canConvert<QBrush>()) {
+                painter->fillRect(option.rect, qvariant_cast<QBrush>(background));
+            } else {
+                painter->fillRect(option.rect, option.palette.color(QPalette::Base));
+            }
         }
-        style->drawPrimitive(QStyle::PE_IndicatorCheckBox, &checkbox, painter, viewOption.widget);
+
+        if (index.column() == ProxyListModel::ToggleColumn) {
+            const auto checkStateData = index.data(Qt::CheckStateRole);
+            if (checkStateData.isValid()) {
+                auto *style = option.widget ? option.widget->style() : QApplication::style();
+                QStyleOptionButton checkbox;
+                checkbox.rect = centeredCheckboxIndicatorRect(option, option.widget);
+                checkbox.state = QStyle::State_Enabled;
+
+                const auto state = static_cast<Qt::CheckState>(checkStateData.toInt());
+                if (state == Qt::Checked) {
+                    checkbox.state |= QStyle::State_On;
+                } else if (state == Qt::PartiallyChecked) {
+                    checkbox.state |= QStyle::State_NoChange;
+                } else {
+                    checkbox.state |= QStyle::State_Off;
+                }
+                style->drawPrimitive(QStyle::PE_IndicatorCheckBox, &checkbox, painter, option.widget);
+            }
+            painter->restore();
+            return;
+        }
+
+        QRect textRect = option.rect.adjusted(6, 0, -6, 0);
+        const auto decoration = index.data(Qt::DecorationRole);
+        if (decoration.canConvert<QIcon>()) {
+            const QSize iconSize(22, 16);
+            const QRect iconRect = QStyle::alignedRect(option.direction, Qt::AlignLeft | Qt::AlignVCenter, iconSize, textRect);
+            qvariant_cast<QIcon>(decoration).paint(painter, iconRect);
+            textRect.setLeft(iconRect.right() + 6);
+        }
+
+        const auto foreground = index.data(Qt::ForegroundRole);
+        if (selected) {
+            painter->setPen(option.palette.color(QPalette::HighlightedText));
+        } else if (foreground.canConvert<QColor>()) {
+            painter->setPen(qvariant_cast<QColor>(foreground));
+        } else if (foreground.canConvert<QBrush>()) {
+            painter->setPen(qvariant_cast<QBrush>(foreground).color());
+        } else {
+            painter->setPen(option.palette.color(QPalette::Text));
+        }
+
+        Qt::Alignment alignment = Qt::AlignVCenter | Qt::AlignLeft;
+        const auto alignmentData = index.data(Qt::TextAlignmentRole);
+        if (alignmentData.isValid()) alignment = static_cast<Qt::Alignment>(alignmentData.toInt());
+
+        const auto text = index.data(Qt::DisplayRole).toString();
+        painter->drawText(textRect, alignment, option.fontMetrics.elidedText(text, Qt::ElideRight, textRect.width()));
+        painter->restore();
     }
 
     bool editorEvent(QEvent *event, QAbstractItemModel *model, const QStyleOptionViewItem &option, const QModelIndex &index) override {
-        if (!(index.flags() & Qt::ItemIsUserCheckable)) return false;
+        if (index.column() != ProxyListModel::ToggleColumn || !(index.flags() & Qt::ItemIsUserCheckable)) return false;
 
         if (event->type() == QEvent::MouseButtonRelease) {
             auto *mouseEvent = static_cast<QMouseEvent *>(event);
@@ -517,7 +570,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     // table UI
     proxyListModel = new ProxyListModel(this);
     ui->proxyListTable->setModel(proxyListModel);
-    ui->proxyListTable->setItemDelegateForColumn(ProxyListModel::ToggleColumn, new CenteredCheckBoxDelegate(ui->proxyListTable));
+    ui->proxyListTable->setItemDelegate(new ProxyListDelegate(ui->proxyListTable));
     ui->proxyListTable->setShowGrid(false);
     ui->proxyListTable->verticalHeader()->setVisible(false);
     ui->proxyListTable->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
