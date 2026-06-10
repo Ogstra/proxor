@@ -25,70 +25,19 @@
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_3">
        <item>
-        <widget class="QWidget" name="widget" native="true">
+        <widget class="QGroupBox" name="routing_settings_box">
+         <property name="title">
+          <string>Settings</string>
+         </property>
          <layout class="QGridLayout" name="gridLayout_2">
-          <item row="4" column="1">
-           <spacer name="verticalSpacer">
-            <property name="orientation">
-             <enum>Qt::Vertical</enum>
-            </property>
-            <property name="sizeHint" stdset="0">
-             <size>
-              <width>20</width>
-              <height>40</height>
-             </size>
-            </property>
-           </spacer>
-          </item>
-          <item row="5" column="1">
-           <widget class="QGroupBox" name="groupBox">
-            <property name="title">
-             <string>Route sets</string>
-            </property>
-            <layout class="QVBoxLayout" name="verticalLayout_7">
-             <item>
-              <widget class="QPushButton" name="load_save">
-               <property name="text">
-                <string>Mange route set</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QPushButton" name="custom_route_global_edit">
-               <property name="text">
-                <string>Custom Route (global)</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLabel" name="label_5">
-               <property name="text">
-                <string>Note: Other settings are independent for each route set.</string>
-               </property>
-              </widget>
-             </item>
-            </layout>
-           </widget>
-          </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="label_6">
-            <property name="toolTip">
-             <string notr="true">For V2Ray, it sets routing.domainStrategy
-For sing-box, it sets inbound.domain_strategy</string>
-            </property>
+          <item row="0" column="0">
+           <widget class="QLabel" name="label">
             <property name="text">
-             <string>Domain Strategy</string>
+             <string>Sniffing Mode</string>
             </property>
            </widget>
           </item>
-          <item row="3" column="1">
-           <widget class="QComboBox" name="outbound_domain_strategy">
-            <property name="editable">
-             <bool>false</bool>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
+          <item row="0" column="1">
            <widget class="QComboBox" name="sniffing_mode">
             <item>
              <property name="text">
@@ -107,28 +56,7 @@ For sing-box, it sets inbound.domain_strategy</string>
             </item>
            </widget>
           </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="label">
-            <property name="text">
-             <string>Sniffing Mode</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="label_3">
-            <property name="text">
-             <string>Server Address Strategy</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1">
-           <widget class="QComboBox" name="domainStrategyCombo">
-            <property name="editable">
-             <bool>false</bool>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="2">
+          <item row="0" column="2">
            <spacer name="horizontalSpacer_3">
             <property name="orientation">
              <enum>Qt::Horizontal</enum>
@@ -141,8 +69,83 @@ For sing-box, it sets inbound.domain_strategy</string>
             </property>
            </spacer>
           </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="label_6">
+            <property name="toolTip">
+             <string notr="true">For V2Ray, it sets routing.domainStrategy
+For sing-box, it sets inbound.domain_strategy</string>
+            </property>
+            <property name="text">
+             <string>Domain Strategy</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QComboBox" name="domainStrategyCombo">
+            <property name="editable">
+             <bool>false</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="label_3">
+            <property name="text">
+             <string>Server Address Strategy</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QComboBox" name="outbound_domain_strategy">
+            <property name="editable">
+             <bool>false</bool>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupBox">
+         <property name="title">
+          <string>Route sets</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_7">
+          <item>
+           <widget class="QPushButton" name="load_save">
+            <property name="text">
+             <string>Mange route set</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="custom_route_global_edit">
+            <property name="text">
+             <string>Custom Route (global)</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="label_5">
+            <property name="text">
+             <string>Note: Other settings are independent for each route set.</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
        </item>
       </layout>
      </widget>
@@ -237,7 +240,7 @@ For more information, see the document &quot;Configuration/DNS&quot;.</string>
              <string>Remote DNS</string>
             </property>
             <property name="buddy">
-             <cstring>widget</cstring>
+             <cstring>remote_dns_strategy</cstring>
             </property>
            </widget>
           </item>
