@@ -47,6 +47,7 @@
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QStyledItemDelegate>
+#include <QTabBar>
 #include <QTableWidgetItem>
 #include <QTextBlock>
 #include <QScrollBar>
@@ -361,6 +362,22 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     }
     ui->setupUi(this);
     themeManager->ApplyTheme(ProxorGui::dataStore->theme);
+    auto applyMainTabBarAlignment = [this](const QString &themeName) {
+        const bool isQDarkStyle = themeManager->NormalizeTheme(themeName).compare(QStringLiteral("qdarkstyle"),
+                                                                                  Qt::CaseInsensitive) == 0;
+        const QString tabBarStyle = isQDarkStyle
+            ? QStringLiteral(
+                  "QTabBar { padding-left: 0px; padding-right: 0px; }"
+                  "QTabBar::tab:top { margin-left: 0px; }")
+            : QString();
+        for (auto *tabs: {ui->tabWidget, ui->down_tab}) {
+            auto *bar = tabs->tabBar();
+            bar->setUsesScrollButtons(false);
+            bar->setStyleSheet(tabBarStyle);
+        }
+    };
+    applyMainTabBarAlignment(ProxorGui::dataStore->theme);
+    connect(themeManager, &ThemeManager::themeChanged, this, applyMainTabBarAlignment);
     m_quotaLabel = new QLabel(this);
     m_quotaLabel->setContentsMargins(0, 0, 8, 0);
     m_quotaLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
