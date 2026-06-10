@@ -301,11 +301,6 @@
        <layout class="QVBoxLayout" name="aaaaaaaaaaaa" stretch="0">
         <item>
          <widget class="QTabWidget" name="down_tab">
-          <property name="styleSheet">
-           <string notr="true">QTabWidget#down_tab::tab-bar {
-    left: -2px;
-}</string>
-          </property>
           <property name="currentIndex">
            <number>0</number>
           </property>
@@ -331,9 +326,6 @@
             </property>
             <item>
              <widget class="QLineEdit" name="log_filter">
-              <property name="frame">
-               <bool>false</bool>
-              </property>
               <property name="placeholderText">
                <string>Filter log…</string>
               </property>
@@ -346,12 +338,6 @@
              <widget class="QTextBrowser" name="masterLogBrowser">
               <property name="contextMenuPolicy">
                <enum>Qt::CustomContextMenu</enum>
-              </property>
-              <property name="frameShape">
-               <enum>QFrame::NoFrame</enum>
-              </property>
-              <property name="lineWidth">
-               <number>0</number>
               </property>
               <property name="openLinks">
                <bool>false</bool>
