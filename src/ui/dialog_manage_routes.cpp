@@ -12,6 +12,7 @@
 #include <QLineEdit>
 #include <QHeaderView>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QVBoxLayout>
 #include <QPlainTextEdit>
 
@@ -86,7 +87,8 @@ DialogManageRoutes::DialogManageRoutes(QWidget *parent) : QDialog(parent), ui(ne
     ui->proxyIPLayout->addWidget(proxyIPTxt, 0, 0);
     ui->blockIPLayout->addWidget(blockIPTxt, 0, 0);
     const auto prepareRuleEditor = [](QPlainTextEdit *editor, const QString &placeholder) {
-        editor->setFixedHeight(82);
+        editor->setMinimumHeight(82);
+        editor->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
         editor->setPlaceholderText(placeholder);
         editor->setLineWrapMode(QPlainTextEdit::NoWrap);
     };
@@ -98,7 +100,7 @@ DialogManageRoutes::DialogManageRoutes(QWidget *parent) : QDialog(parent), ui(ne
     prepareRuleEditor(blockDomainTxt, tr("geosite:category-ads-all"));
     for (auto *box: {ui->directIpBox, ui->proxyIpBox, ui->blockIpBox,
                      ui->directDomainBox, ui->proxyDomainBox, ui->blockDomainBox}) {
-        box->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+        box->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
     }
     //
     hostsMapTable = new QTableWidget(0, 3, this);
@@ -131,6 +133,7 @@ DialogManageRoutes::DialogManageRoutes(QWidget *parent) : QDialog(parent), ui(ne
     REFRESH_ACTIVE_ROUTING(ProxorGui::dataStore->active_routing, ProxorGui::dataStore->routing.get())
 
     ADD_ASTERISK(this)
+    wrapTabPagesInScrollAreas();
 
     ui->tabWidget->tabBar()->hide();
     ui->tabWidget->setDocumentMode(true);
@@ -146,6 +149,10 @@ DialogManageRoutes::DialogManageRoutes(QWidget *parent) : QDialog(parent), ui(ne
     routeNav->setStyleSheet(QStringLiteral("QListWidget::item{padding:4px 10px;}"));
     routeNav->setFixedWidth(routeNav->sizeHintForColumn(0) + 32);
     connect(routeNav, &QListWidget::currentRowChanged, ui->tabWidget, &QTabWidget::setCurrentIndex);
+    connect(ui->tabWidget, &QTabWidget::currentChanged, this, [this](int) {
+        updateGeometry();
+        emit activePageGeometryChanged();
+    });
     if (auto *vbox = qobject_cast<QVBoxLayout *>(this->layout())) {
         const int idx = vbox->indexOf(ui->tabWidget);
         auto *navRow = new QHBoxLayout();
@@ -159,6 +166,59 @@ DialogManageRoutes::DialogManageRoutes(QWidget *parent) : QDialog(parent), ui(ne
 
 DialogManageRoutes::~DialogManageRoutes() {
     delete ui;
+}
+
+void DialogManageRoutes::wrapTabPagesInScrollAreas() {
+    const int currentIndex = ui->tabWidget->currentIndex();
+    const int count = ui->tabWidget->count();
+    for (int i = 0; i < count; ++i) {
+        auto *page = ui->tabWidget->widget(i);
+        if (qobject_cast<QScrollArea *>(page) != nullptr) continue;
+
+        const auto title = ui->tabWidget->tabText(i);
+        const auto icon = ui->tabWidget->tabIcon(i);
+        const auto tooltip = ui->tabWidget->tabToolTip(i);
+        const auto whatsThis = ui->tabWidget->tabWhatsThis(i);
+        const bool enabled = ui->tabWidget->isTabEnabled(i);
+
+        auto *scroll = new QScrollArea(ui->tabWidget);
+        scroll->setFrameShape(QFrame::NoFrame);
+        scroll->setWidgetResizable(true);
+        scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        scroll->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+
+        page->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
+        ui->tabWidget->removeTab(i);
+        scroll->setWidget(page);
+        ui->tabWidget->insertTab(i, scroll, icon, title);
+        ui->tabWidget->setTabToolTip(i, tooltip);
+        ui->tabWidget->setTabWhatsThis(i, whatsThis);
+        ui->tabWidget->setTabEnabled(i, enabled);
+    }
+    ui->tabWidget->setCurrentIndex(currentIndex);
+}
+
+int DialogManageRoutes::activePageHeightHint() const {
+    auto *current = ui->tabWidget->currentWidget();
+    int height = 0;
+    if (auto *scroll = qobject_cast<QScrollArea *>(current)) {
+        if (auto *page = scroll->widget()) {
+            height = qMax(page->sizeHint().height(), page->minimumSizeHint().height());
+        }
+    } else if (current != nullptr) {
+        height = qMax(current->sizeHint().height(), current->minimumSizeHint().height());
+    }
+
+    if (height <= 0) return sizeHint().height();
+    if (auto *layout = this->layout()) {
+        const auto margins = layout->contentsMargins();
+        height += margins.top() + margins.bottom();
+        if (ui->buttonBox->isVisible()) {
+            height += layout->spacing() + ui->buttonBox->sizeHint().height();
+        }
+    }
+    return height;
 }
 
 void DialogManageRoutes::accept() {

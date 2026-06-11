@@ -421,7 +421,7 @@ For more information, see the document &quot;Configuration/DNS&quot;.</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_6">
        <item>
-        <layout class="QGridLayout" name="gridLayout_3" columnstretch="1,1,1">
+        <layout class="QGridLayout" name="gridLayout_3" rowstretch="1,1" columnstretch="1,1,1">
          <property name="horizontalSpacing">
           <number>8</number>
          </property>
