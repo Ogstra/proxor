@@ -4,7 +4,7 @@ Qt-based proxy client for managing sing-box profiles, subscriptions, routing, an
 
 Current version: `1.6.0`
 
-<img width="1432" height="1117" alt="image" src="https://github.com/user-attachments/assets/68f6fb4b-2ce0-4ba6-8595-0ac4da3c701e" />
+<img width="719" height="560" alt="image" src="https://github.com/user-attachments/assets/aa7a2894-5b0a-4526-adb2-7700a3a744ac" />
 
 ## Supported Proxy Types
 
