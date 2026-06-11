@@ -67,7 +67,7 @@ void DialogManageGroups::remove_group(int groupId) {
 
 void DialogManageGroups::update_group(int groupId) {
     auto ent = ProxorGui::profileManager->GetGroup(groupId);
-    if (ent == nullptr || ent->url.isEmpty()) return;
+    if (ent == nullptr || ent->archive || ent->url.isEmpty()) return;
     ProxorGui_sub::groupUpdater->AsyncUpdate(ent->url, ent->id);
 }
 
