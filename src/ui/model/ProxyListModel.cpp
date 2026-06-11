@@ -1,6 +1,7 @@
 #include "ProxyListModel.h"
 
 #include <QApplication>
+#include <QIcon>
 #include <QPalette>
 
 #include <algorithm>
@@ -86,7 +87,7 @@ QVariant ProxyListModel::data(const QModelIndex &index, int role) const {
 
     if (role == Qt::DecorationRole && index.column() == NameColumn) {
         const auto countryCode = LeadingFlagCountryCode(profile->summary_name);
-        if (!countryCode.isEmpty()) return Icon::GetCountryFlag(countryCode);
+        if (!countryCode.isEmpty()) return QIcon(Icon::GetCountryFlag(countryCode));
     }
 
     if (role == Qt::ForegroundRole) {
@@ -285,6 +286,13 @@ bool ProxyListModel::rowMatchesText(int row, const QString &text) const {
         if (value.contains(text, Qt::CaseInsensitive)) return true;
     }
     return false;
+}
+
+bool ProxyListModel::rowMatchesColumnText(int row, int column, const QString &text) const {
+    if (text.isEmpty()) return true;
+    if (row < 0 || row >= m_rowIds.size()) return false;
+    const auto value = data(index(row, column), Qt::DisplayRole).toString();
+    return value.contains(text, Qt::CaseInsensitive);
 }
 
 void ProxyListModel::rebuildIndex() {

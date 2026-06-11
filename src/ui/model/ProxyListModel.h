@@ -73,6 +73,8 @@ public:
 
     [[nodiscard]] bool rowMatchesText(int row, const QString &text) const;
 
+    [[nodiscard]] bool rowMatchesColumnText(int row, int column, const QString &text) const;
+
 signals:
     void orderChanged(const QList<int> &order);
 

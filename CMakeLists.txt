@@ -279,6 +279,10 @@ set(PROJECT_SOURCES
         src/ui/widget/ProxyItem.ui
         src/ui/widget/ProxyListView.cpp
         src/ui/widget/ProxyListView.h
+        src/ui/widget/ProxyListFilterHeader.cpp
+        src/ui/widget/ProxyListFilterHeader.h
+        src/ui/widget/ProxyListVerticalHeader.cpp
+        src/ui/widget/ProxyListVerticalHeader.h
         src/ui/model/GroupListModel.cpp
         src/ui/model/GroupListModel.h
         src/ui/model/ProxyListModel.cpp
