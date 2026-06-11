@@ -41,7 +41,7 @@ QString parseSubInfo(const QString &info) {
 QString groupTypeText(const std::shared_ptr<ProxorGui::Group> &group) {
     if (group == nullptr) return {};
     auto type = group->url.isEmpty() ? QObject::tr("Basic") : QObject::tr("Subscription");
-    if (group->archive) type = QObject::tr("Archive") + " " + type;
+    if (group->archive) type = QObject::tr("Archived") + " " + type;
     type += " (" + Int2String(group->Profiles().length()) + ")";
     return type;
 }
@@ -92,7 +92,7 @@ QVariant GroupListModel::data(const QModelIndex &index, int role) const {
             case InfoColumn:
                 return groupInfoText(group);
             case UpdateColumn:
-                return group->url.isEmpty() ? QString() : QObject::tr("Update");
+                return group->url.isEmpty() || group->archive ? QString() : QObject::tr("Update");
             case EditColumn:
                 return QObject::tr("Edit");
             case RemoveColumn:
@@ -107,6 +107,7 @@ QVariant GroupListModel::data(const QModelIndex &index, int role) const {
     }
 
     if (role == Qt::ForegroundRole) {
+        if (group->archive) return QColor(128, 128, 128);
         if (index.column() == TypeColumn) return QColor(251, 114, 153);
         if (index.column() == UrlColumn) return QColor(102, 102, 102);
     }
