@@ -515,10 +515,6 @@ namespace ProxorGui {
             inboundObj["type"] = "mixed";
             inboundObj["listen"] = dataStore->inbound_address;
             inboundObj["listen_port"] = dataStore->inbound_socks_port;
-            if (dataStore->routing->sniffing_mode != SniffingMode::DISABLE) {
-                inboundObj["sniff"] = true;
-                inboundObj["sniff_override_destination"] = dataStore->routing->sniffing_mode == SniffingMode::FOR_DESTINATION;
-            }
             if (dataStore->inbound_auth->NeedAuth()) {
                 inboundObj["users"] = QJsonArray{
                     QJsonObject{
@@ -527,7 +523,6 @@ namespace ProxorGui {
                     },
                 };
             }
-            inboundObj["domain_strategy"] = dataStore->routing->domain_strategy;
             status->inbounds += inboundObj;
         }
 
@@ -543,11 +538,6 @@ namespace ProxorGui {
             inboundObj["stack"] = Preset::SingBox::VpnImplementation.value(dataStore->vpn_implementation);
             inboundObj["strict_route"] = dataStore->vpn_strict_route;
             inboundObj["address"] = BuildTunAddressArray(dataStore->vpn_ipv6);
-            if (dataStore->routing->sniffing_mode != SniffingMode::DISABLE) {
-                inboundObj["sniff"] = true;
-                inboundObj["sniff_override_destination"] = dataStore->routing->sniffing_mode == SniffingMode::FOR_DESTINATION;
-            }
-            inboundObj["domain_strategy"] = dataStore->routing->domain_strategy;
             status->inbounds += inboundObj;
         }
 
@@ -760,12 +750,11 @@ namespace ProxorGui {
             };
         }
 
-        // sniff (sing-box 1.13+: sniffing is no longer automatic from inbound options,
-        // requires explicit sniff action in routing rules before protocol-based rules)
-        if (!status->forTest) {
-            status->routingRules += QJsonObject{
-                {"action", "sniff"},
-            };
+        if (!status->forTest && dataStore->routing->sniffing_mode != SniffingMode::DISABLE) {
+            QJsonObject sniffRule{{"action", "sniff"}};
+            if (dataStore->routing->sniffing_mode == SniffingMode::FOR_DESTINATION)
+                sniffRule["override_destination"] = true;
+            status->routingRules += sniffRule;
         }
 
         // dns hijack
