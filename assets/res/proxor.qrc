@@ -1,6 +1,7 @@
 <RCC>
     <qresource prefix="/">
         <file alias="qt/etc/qt.conf">runtime/qt.conf</file>
+        <file alias="icon/filter.png">icon/filter.png</file>
         <file alias="icon/b-internet-web-browser.svg">icon/internet-web-browser.svg</file>
         <file alias="icon/b-system-run.svg">icon/system-run.svg</file>
         <file alias="icon/b-papirus-applications-all.svg">icon/papirus-applications-all.svg</file>
