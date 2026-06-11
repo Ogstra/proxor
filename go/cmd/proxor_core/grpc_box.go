@@ -192,8 +192,8 @@ func (s *server) ListConnections(ctx context.Context, in *gen.EmptyReq) (*gen.Li
 			if c.Metadata.ProcessInfo.ProcessPath != "" {
 				parts := strings.Split(c.Metadata.ProcessInfo.ProcessPath, string(os.PathSeparator))
 				process = parts[len(parts)-1]
-			} else if c.Metadata.ProcessInfo.AndroidPackageName != "" {
-				process = c.Metadata.ProcessInfo.AndroidPackageName
+			} else if len(c.Metadata.ProcessInfo.AndroidPackageNames) > 0 {
+				process = c.Metadata.ProcessInfo.AndroidPackageNames[0]
 			} else if c.Metadata.ProcessInfo.UserName != "" {
 				process = c.Metadata.ProcessInfo.UserName
 			} else if c.Metadata.ProcessInfo.UserId >= 0 {
