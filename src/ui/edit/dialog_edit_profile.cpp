@@ -26,6 +26,7 @@ DialogEditProfile::DialogEditProfile(const QString &_type, int profileOrGroupId,
     // setup UI
     ui->setupUi(this);
     ui->dialog_layout->setAlignment(ui->left, Qt::AlignTop);
+    ui->apply_to_group->hide();
 
     // network changed
     network_title_base = ui->network_box->title();
@@ -124,7 +125,6 @@ DialogEditProfile::DialogEditProfile(const QString &_type, int profileOrGroupId,
             typeSelected(ui->type->itemData(index).toString());
         });
 
-        ui->apply_to_group->hide();
     } else {
         this->ent = ProxorGui::profileManager->GetProfile(profileOrGroupId);
         if (this->ent == nullptr) return;
@@ -266,6 +266,8 @@ void DialogEditProfile::typeSelected(const QString &newType) {
     innerEditor->get_edit_text_name = [&]() { return ui->name->text(); };
     innerEditor->get_edit_text_serverAddress = [&]() { return ui->address->text(); };
     innerEditor->get_edit_text_serverPort = [&]() { return ui->port->text(); };
+    innerEditor->set_edit_text_serverAddress = [&](const QString &v) { ui->address->setText(v); };
+    innerEditor->set_edit_text_serverPort = [&](const QString &v) { ui->port->setText(v); };
     innerEditor->editor_cache_updated = [=] { editor_cache_updated_impl(); };
     innerEditor->onStart(ent);
 
