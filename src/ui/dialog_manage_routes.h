@@ -21,6 +21,11 @@ public:
 
     ~DialogManageRoutes() override;
 
+    [[nodiscard]] int activePageHeightHint() const;
+
+signals:
+    void activePageGeometryChanged();
+
 private:
     Ui::DialogManageRoutes *ui;
 
@@ -45,6 +50,8 @@ private:
     //
     QString title_base;
     QString active_routing;
+
+    void wrapTabPagesInScrollAreas();
 
 public slots:
 

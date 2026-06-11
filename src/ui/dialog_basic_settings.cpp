@@ -173,6 +173,9 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
         if (idx == routingIdx && m_routingPage == nullptr) {
             m_routingPage = new DialogManageRoutes(routingHost);
             hideButtonBox(m_routingPage);
+            connect(m_routingPage, &DialogManageRoutes::activePageGeometryChanged, this, [this] {
+                QTimer::singleShot(0, this, [this] { relayoutSettingsScroll(); });
+            });
             routingLay->addWidget(m_routingPage);
         } else if (idx == vpnIdx && m_vpnPage == nullptr) {
             m_vpnPage = new DialogVPNSettings(vpnHost);
@@ -492,6 +495,11 @@ void DialogBasicSettings::relayoutSettingsScroll() {
     int h = ui->tabWidget->sizeHint().height();
     if (page != nullptr) {
         h = qMax(page->sizeHint().height(), page->minimumSizeHint().height()) + 12;
+        if (m_routingPage != nullptr && page->findChild<DialogManageRoutes *>() == m_routingPage) {
+            h = m_routingPage->activePageHeightHint() + 12;
+            const int viewportHeight = m_settingsScroll->viewport()->height();
+            if (viewportHeight > 0) h = viewportHeight;
+        }
     }
     ui->tabWidget->resize(qMax(w, 0), qMax(h, 0));
 }
