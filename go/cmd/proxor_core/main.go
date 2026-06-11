@@ -15,7 +15,7 @@ import (
 func main() {
 	versionSBox := constant.Version
 	if versionSBox == "unknown" {
-		versionSBox = "1.13.3"
+		versionSBox = "1.13.13"
 	}
 	fmt.Printf("proxor-core %s (sing-box %s)\n", proxor_common.Version_proxor, versionSBox)
 
