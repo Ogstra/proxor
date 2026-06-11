@@ -2,20 +2,6 @@ QTabWidget QWidget {
   border-radius: 0px;
 }
 
-QTabWidget::pane {
-  top: -1px;
-  margin-top: -1px;
-  background-color: #19232D;
-}
-
-QTabWidget::pane:selected {
-  background-color: #19232D;
-}
-
-QTabBar::tab:top:!selected {
-  margin-top: 0px;
-}
-
 QLineEdit:hover,
 QLineEdit:focus,
 QTextEdit:focus,
@@ -26,6 +12,20 @@ QListView:focus,
 QTableView:focus,
 QColumnView:focus {
   border: 1px solid #455364;
+}
+
+QComboBox:focus,
+QAbstractSpinBox:focus,
+QDateEdit:focus,
+QTimeEdit:focus,
+QDateTimeEdit:focus {
+  border: 1px solid #455364;
+}
+
+QPushButton:focus,
+QToolButton:focus {
+  outline: none;
+  border: none;
 }
 
 QLineEdit,
