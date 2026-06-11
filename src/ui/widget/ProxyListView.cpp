@@ -1,8 +1,10 @@
 #include "ProxyListView.h"
 
+#include <QApplication>
 #include <QDropEvent>
 #include <QItemSelectionModel>
 #include <QMouseEvent>
+#include <QPainter>
 #include <QStyle>
 #include <QStyleOptionViewItem>
 
@@ -64,12 +66,29 @@ QString ProxyListView::searchText() const {
     return m_searchText;
 }
 
+void ProxyListView::setColumnFilter(int column, const QString &text) {
+    if (text.isEmpty())
+        m_columnFilters.remove(column);
+    else
+        m_columnFilters.insert(column, text);
+    reapplySearchFilter();
+}
+
 void ProxyListView::reapplySearchFilter() {
     auto *proxyModel = qobject_cast<ProxyListModel *>(model());
     if (proxyModel == nullptr) return;
 
     for (int row = 0; row < proxyModel->rowCount(); ++row) {
-        setRowHidden(row, !proxyModel->rowMatchesText(row, m_searchText));
+        bool visible = proxyModel->rowMatchesText(row, m_searchText);
+        if (visible) {
+            for (auto it = m_columnFilters.cbegin(); it != m_columnFilters.cend(); ++it) {
+                if (!proxyModel->rowMatchesColumnText(row, it.key(), it.value())) {
+                    visible = false;
+                    break;
+                }
+            }
+        }
+        setRowHidden(row, !visible);
     }
 }
 
@@ -84,6 +103,7 @@ void ProxyListView::initViewItemOption(QStyleOptionViewItem *option) const {
 }
 
 void ProxyListView::mousePressEvent(QMouseEvent *event) {
+    beginProfileDragCandidate(event);
     if (handleProfileClick(event)) {
         event->accept();
         clearNativeCurrentCell();
@@ -119,7 +139,24 @@ void ProxyListView::mouseDoubleClickEvent(QMouseEvent *event) {
     clearNativeCurrentCell();
 }
 
+void ProxyListView::mouseMoveEvent(QMouseEvent *event) {
+    if (event != nullptr &&
+        m_dragStartProfileId >= 0 &&
+        (event->buttons() & Qt::LeftButton) &&
+        (event->pos() - m_dragStartPos).manhattanLength() >= QApplication::startDragDistance()) {
+        setDropIndicatorRow(insertionRowAtPosition(event->pos()));
+        event->accept();
+        return;
+    }
+    QTableView::mouseMoveEvent(event);
+}
+
 void ProxyListView::mouseReleaseEvent(QMouseEvent *event) {
+    if (finishProfileDragCandidate(event)) {
+        event->accept();
+        clearNativeCurrentCell();
+        return;
+    }
     if (event != nullptr && event->button() == Qt::LeftButton) {
         m_lastClickedProfileId = profileIdAtMouseEvent(event);
         event->accept();
@@ -131,6 +168,19 @@ void ProxyListView::mouseReleaseEvent(QMouseEvent *event) {
     if (viewport() != nullptr) {
         viewport()->update();
     }
+}
+
+void ProxyListView::paintEvent(QPaintEvent *event) {
+    QTableView::paintEvent(event);
+    if (m_dropIndicatorRow < 0) return;
+
+    const int y = indicatorYForInsertionRow(m_dropIndicatorRow);
+    if (y < 0) return;
+
+    QPainter painter(viewport());
+    QPen pen(palette().highlight().color(), 2);
+    painter.setPen(pen);
+    painter.drawLine(0, y, viewport()->width(), y);
 }
 
 void ProxyListView::dropEvent(QDropEvent *event) {
@@ -209,6 +259,99 @@ int ProxyListView::profileIdAtMouseEvent(const QMouseEvent *event) const {
     if (!index.isValid()) return -1;
 
     return proxy->profileIdAtRow(index.row());
+}
+
+void ProxyListView::beginProfileDragCandidate(const QMouseEvent *event) {
+    m_dragStartProfileId = -1;
+    setDropIndicatorRow(-1);
+    m_dragStartPos = {};
+    if (event == nullptr || event->button() != Qt::LeftButton) return;
+
+    auto *proxy = proxyModel();
+    if (proxy == nullptr) return;
+
+    const auto index = indexAt(event->pos());
+    if (!index.isValid() || index.column() == ProxyListModel::ToggleColumn) return;
+
+    m_dragStartProfileId = proxy->profileIdAtRow(index.row());
+    m_dragStartPos = event->pos();
+}
+
+bool ProxyListView::finishProfileDragCandidate(const QMouseEvent *event) {
+    const int draggedProfileId = m_dragStartProfileId;
+    const int insertionRow = m_dropIndicatorRow;
+    m_dragStartProfileId = -1;
+    setDropIndicatorRow(-1);
+    if (event == nullptr || event->button() != Qt::LeftButton || draggedProfileId < 0) return false;
+    if ((event->pos() - m_dragStartPos).manhattanLength() < QApplication::startDragDistance()) return false;
+
+    auto *proxy = proxyModel();
+    if (proxy == nullptr) return false;
+
+    const int dropRow = insertionRow >= 0 ? insertionRow : insertionRowAtPosition(event->pos());
+    if (dropRow < 0) return false;
+
+    const int sourceRow = proxy->rowForProfile(draggedProfileId);
+    const int targetRow = dropRow > sourceRow ? dropRow - 1 : dropRow;
+    if (sourceRow < 0 || targetRow < 0 || sourceRow == targetRow) return false;
+    if (targetRow >= proxy->rowCount()) return false;
+
+    proxy->moveProfileRow(sourceRow, targetRow);
+    proxy->selectOnlyProfile(draggedProfileId);
+    m_anchorRow = proxy->rowForProfile(draggedProfileId);
+    m_lastClickedProfileId = draggedProfileId;
+    reapplySearchFilter();
+    return true;
+}
+
+int ProxyListView::insertionRowAtPosition(const QPoint &pos) const {
+    auto *proxy = proxyModel();
+    if (proxy == nullptr || proxy->rowCount() <= 0) return -1;
+
+    const auto index = indexAt(pos);
+    if (index.isValid()) {
+        const auto rect = visualRect(index);
+        return pos.y() > rect.center().y() ? index.row() + 1 : index.row();
+    }
+
+    int lastVisibleRow = -1;
+    for (int row = 0; row < proxy->rowCount(); ++row) {
+        if (isRowHidden(row)) continue;
+        const auto rect = visualRect(proxy->index(row, 0));
+        if (rect.isValid() && pos.y() < rect.top()) return row;
+        if (rect.isValid()) lastVisibleRow = row;
+    }
+    if (lastVisibleRow >= 0) {
+        const auto rect = visualRect(proxy->index(lastVisibleRow, 0));
+        if (pos.y() > rect.bottom()) return lastVisibleRow + 1;
+    }
+    return -1;
+}
+
+int ProxyListView::indicatorYForInsertionRow(int insertionRow) const {
+    auto *proxy = proxyModel();
+    if (proxy == nullptr || insertionRow < 0 || proxy->rowCount() <= 0) return -1;
+
+    if (insertionRow < proxy->rowCount()) {
+        for (int row = insertionRow; row < proxy->rowCount(); ++row) {
+            if (isRowHidden(row)) continue;
+            const auto rect = visualRect(proxy->index(row, 0));
+            return rect.isValid() ? rect.top() : -1;
+        }
+    }
+
+    for (int row = proxy->rowCount() - 1; row >= 0; --row) {
+        if (isRowHidden(row)) continue;
+        const auto rect = visualRect(proxy->index(row, 0));
+        return rect.isValid() ? rect.bottom() + 1 : -1;
+    }
+    return -1;
+}
+
+void ProxyListView::setDropIndicatorRow(int row) {
+    if (m_dropIndicatorRow == row) return;
+    m_dropIndicatorRow = row;
+    if (viewport() != nullptr) viewport()->update();
 }
 
 void ProxyListView::clearNativeCurrentCell() {
