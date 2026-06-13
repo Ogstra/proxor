@@ -1,11 +1,21 @@
 #include <QStyle>
 #include <QApplication>
+#include <QComboBox>
+#include <QEvent>
 #include <QWidget>
 #include <QFile>
+#include <QLayout>
 #include <QPalette>
 #include <QStyleFactory>
+#include <QStyleHints>
 #include <QTextStream>
+#include <QTimer>
 #include <QColor>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#include <dwmapi.h>
+#endif
 
 #include "ThemeManager.hpp"
 
@@ -137,6 +147,155 @@ QPalette makeArcDarkPalette() {
     return palette;
 }
 
+
+bool systemPrefersDark() {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    return qApp->styleHints()->colorScheme() == Qt::ColorScheme::Dark;
+#else
+    return QPalette().color(QPalette::Window).lightness() < 128;
+#endif
+}
+
+QPalette paletteForMode(const QString &requestedMode) {
+    if (requestedMode == QStringLiteral("light")) return makeLightPalette();
+    if (requestedMode == QStringLiteral("dark")) return makeDarkPalette();
+    return systemPrefersDark() ? makeDarkPalette() : makeLightPalette();
+}
+
+QPalette nativePaletteForMode(const QString &requestedMode) {
+    if (requestedMode == QStringLiteral("light")) return makeLightPalette();
+    if (requestedMode == QStringLiteral("dark")) return makeDarkPalette();
+    return QPalette();
+}
+
+bool resolvedIsDark(const QString &lowerTheme, const QString &requestedMode) {
+    if (lowerTheme == QStringLiteral("qdarkstyle") ||
+        lowerTheme == QStringLiteral("fusionarcdark") ||
+        lowerTheme == QStringLiteral("fusiondark")) {
+        return true;
+    }
+    if (lowerTheme == QStringLiteral("fusionlight")) return false;
+    if (requestedMode == QStringLiteral("dark")) return true;
+    if (requestedMode == QStringLiteral("light")) return false;
+    return systemPrefersDark();
+}
+
+bool usesFusionMetrics(const QString &lowerTheme) {
+    return lowerTheme == QStringLiteral("fusion") ||
+           lowerTheme == QStringLiteral("fusionlight") ||
+           lowerTheme == QStringLiteral("fusiondark") ||
+           lowerTheme == QStringLiteral("fusionarcdark");
+}
+
+constexpr auto kOriginalComboMinHeightProperty = "proxorOriginalComboMinHeight";
+
+int comboBoxMinimumHeight(const QComboBox *combo) {
+    const int contentHeight = combo->fontMetrics().height() + 10;
+    return qMax(combo->sizeHint().height(), contentHeight);
+}
+
+void applyComboBoxMetrics(QComboBox *combo, bool fusionMetrics) {
+    if (combo == nullptr) return;
+
+    if (!combo->property(kOriginalComboMinHeightProperty).isValid()) {
+        combo->setProperty(kOriginalComboMinHeightProperty, combo->minimumHeight());
+    }
+
+    const int originalMinHeight = combo->property(kOriginalComboMinHeightProperty).toInt();
+    if (fusionMetrics) {
+        combo->setMinimumHeight(qMax(originalMinHeight, comboBoxMinimumHeight(combo)));
+    } else {
+        combo->setMinimumHeight(originalMinHeight);
+    }
+    combo->updateGeometry();
+}
+
+void applyComboBoxMetrics(QWidget *w, bool fusionMetrics) {
+    if (w == nullptr) return;
+    if (auto *combo = qobject_cast<QComboBox *>(w)) {
+        applyComboBoxMetrics(combo, fusionMetrics);
+    }
+    if (w->isWindow()) {
+        for (auto *combo : w->findChildren<QComboBox *>()) {
+            applyComboBoxMetrics(combo, fusionMetrics);
+        }
+    }
+}
+
+void refreshWidgetGeometry(QWidget *w) {
+    if (w == nullptr) return;
+    w->updateGeometry();
+    if (auto *layout = w->layout()) {
+        layout->invalidate();
+        layout->activate();
+    }
+}
+
+void refreshAllWidgetGeometry() {
+    for (auto *w : qApp->allWidgets()) {
+        refreshWidgetGeometry(w);
+    }
+    for (auto *w : qApp->topLevelWidgets()) {
+        refreshWidgetGeometry(w);
+    }
+}
+
+#ifdef Q_OS_WIN
+constexpr DWORD kDwmColorDefault = 0xFFFFFFFF;
+constexpr DWORD kDwmCaptionColorAttribute = 35; // DWMWA_CAPTION_COLOR
+constexpr DWORD kDwmTextColorAttribute = 36;    // DWMWA_TEXT_COLOR
+
+void setDwmAttribute(HWND hwnd, DWORD attribute, const void *value, DWORD size) {
+    DwmSetWindowAttribute(hwnd, attribute, value, size);
+}
+
+void applyDarkTitleBarToWidget(QWidget *w, bool dark) {
+    if (w == nullptr || !w->isWindow()) return;
+    const BOOL value = dark ? TRUE : FALSE;
+    HWND hwnd = reinterpret_cast<HWND>(w->winId());
+    DwmSetWindowAttribute(hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &value, sizeof(value));
+
+    const DWORD captionColor = dark ? RGB(32, 32, 32) : kDwmColorDefault;
+    const DWORD textColor = dark ? RGB(255, 255, 255) : kDwmColorDefault;
+    setDwmAttribute(hwnd, kDwmCaptionColorAttribute, &captionColor, sizeof(captionColor));
+    setDwmAttribute(hwnd, kDwmTextColorAttribute, &textColor, sizeof(textColor));
+
+    // Force an immediate non-client redraw; DWM otherwise can keep the old
+    // active/inactive title bar colors until the next frame change.
+    if (w->isVisible()) {
+        RedrawWindow(hwnd, nullptr, nullptr, RDW_FRAME | RDW_INVALIDATE | RDW_UPDATENOW);
+    }
+}
+
+void applyDarkTitleBar(bool dark) {
+    for (QWidget *w : qApp->topLevelWidgets()) {
+        applyDarkTitleBarToWidget(w, dark);
+    }
+}
+#endif
+
+void reloadWidgetStyleState(bool repolish, bool fusionMetrics) {
+    for (auto *w : qApp->allWidgets()) {
+        // A global QSS theme can leave resolved palettes on existing widgets.
+        // Clear local palette state so the widget resolves colors like it would
+        // after being constructed under the newly selected application theme.
+        w->setPalette(QPalette());
+        if (repolish) {
+            w->style()->unpolish(w);
+            w->style()->polish(w);
+        }
+        applyComboBoxMetrics(w, fusionMetrics);
+        refreshWidgetGeometry(w);
+        w->update();
+    }
+    refreshAllWidgetGeometry();
+    QApplication::sendPostedEvents(nullptr, QEvent::LayoutRequest);
+    QTimer::singleShot(0, qApp, []() {
+        refreshAllWidgetGeometry();
+        QApplication::sendPostedEvents(nullptr, QEvent::LayoutRequest);
+    });
+}
+
 }
 
 QList<ThemeManager::ThemeOption> ThemeManager::AvailableThemes() const {
@@ -212,52 +371,52 @@ void ThemeManager::ApplyTheme(const QString &theme, bool force) {
     if (this->system_style_name.isEmpty()) {
         this->system_style_name = qApp->style()->name();
     }
+    applying = true;
 
     auto requestedTheme = theme.trimmed();
     const auto requestedMode = extractThemeMode(&requestedTheme);
     auto normalizedTheme = NormalizeTheme(requestedTheme);
 
     if (this->current_theme == theme && !force) {
+        applying = false;
         return;
     }
 
     auto lowerTheme = normalizedTheme.toLower();
+    QString appliedTheme = theme;
     QString baseStyleSheet;
 
+    // Palette must be set BEFORE the style: native styles resolve their
+    // light/dark rendering at polish time (during setStyle), and the explicit
+    // setPalette keeps setStyle from resetting it to the style's standard palette.
     if (lowerTheme == "system") {
         qApp->setStyleSheet("");
-        qApp->setStyle(this->system_style_name);
         qApp->setPalette(QPalette());
+        qApp->setStyle(this->system_style_name);
     } else if (lowerTheme == "fusion") {
         qApp->setStyleSheet("");
+        qApp->setPalette(paletteForMode(requestedMode));
         if (const auto fusionStyle = QStyleFactory::create("Fusion")) {
             qApp->setStyle(fusionStyle);
-        }
-        if (requestedMode == QStringLiteral("light")) {
-            qApp->setPalette(makeLightPalette());
-        } else if (requestedMode == QStringLiteral("dark")) {
-            qApp->setPalette(makeDarkPalette());
-        } else {
-            qApp->setPalette(QPalette());
         }
     } else if (lowerTheme == "fusionlight") {
         qApp->setStyleSheet("");
+        qApp->setPalette(makeLightPalette());
         if (const auto fusionStyle = QStyleFactory::create("Fusion")) {
             qApp->setStyle(fusionStyle);
         }
-        qApp->setPalette(makeLightPalette());
     } else if (lowerTheme == "fusiondark") {
         qApp->setStyleSheet("");
+        qApp->setPalette(makeDarkPalette());
         if (const auto fusionStyle = QStyleFactory::create("Fusion")) {
             qApp->setStyle(fusionStyle);
         }
-        qApp->setPalette(makeDarkPalette());
     } else if (lowerTheme == "fusionarcdark") {
         qApp->setStyleSheet("");
+        qApp->setPalette(makeArcDarkPalette());
         if (const auto fusionStyle = QStyleFactory::create("Fusion")) {
             qApp->setStyle(fusionStyle);
         }
-        qApp->setPalette(makeArcDarkPalette());
     } else if (lowerTheme == "qdarkstyle") {
         qApp->setStyleSheet("");
         qApp->setPalette(QPalette());
@@ -270,32 +429,80 @@ void ThemeManager::ApplyTheme(const QString &theme, bool force) {
         const auto style = QStyleFactory::create(normalizedTheme);
         if (style != nullptr) {
             qApp->setStyleSheet("");
+            qApp->setPalette(nativePaletteForMode(requestedMode));
             qApp->setStyle(style);
-            if (requestedMode == QStringLiteral("light")) {
-                qApp->setPalette(makeLightPalette());
-            } else if (requestedMode == QStringLiteral("dark")) {
-                qApp->setPalette(makeDarkPalette());
-            } else {
-                qApp->setPalette(QPalette());
-            }
         } else {
             qApp->setStyleSheet("");
             qApp->setPalette(QPalette());
             qApp->setStyle(this->system_style_name);
             normalizedTheme = "System";
+            lowerTheme = normalizedTheme.toLower();
+            appliedTheme = normalizedTheme;
         }
     }
     qApp->setStyleSheet(baseStyleSheet);
 
-    // Force unpolish/repolish on every widget so QSS subcontrol overrides
-    // (e.g. arrow suppression) take effect even when the style object itself
-    // didn't change (e.g. System theme at startup).
-    for (auto *w : qApp->allWidgets()) {
-        w->style()->unpolish(w);
-        w->style()->polish(w);
-        w->update();
+    current_theme = appliedTheme;
+
+    if (!event_filter_installed) {
+        qApp->installEventFilter(this);
+        event_filter_installed = true;
     }
 
-    current_theme = theme;
+#ifdef Q_OS_WIN
+    title_bar_dark = resolvedIsDark(lowerTheme, requestedMode);
+    applyDarkTitleBar(title_bar_dark);
+#endif
+
+    // Native platform styles must not be unpolished/polished (it corrupts their
+    // UxTheme state). Fusion/QSS themes can be fully repolished. In both cases
+    // clear widget palettes so existing tables/lists don't keep colors resolved
+    // from the previous global stylesheet.
+    const bool customStyle = lowerTheme == "fusion" || lowerTheme == "fusionlight" ||
+                             lowerTheme == "fusiondark" || lowerTheme == "fusionarcdark" ||
+                             lowerTheme == "qdarkstyle";
+    reloadWidgetStyleState(customStyle, usesFusionMetrics(lowerTheme));
+
+    applying = false;
     emit themeChanged(current_theme);
+}
+
+void ThemeManager::ReapplyTitleBar() {
+#ifdef Q_OS_WIN
+    auto normalizedTheme = current_theme.trimmed();
+    extractThemeMode(&normalizedTheme);
+    const auto lowerTheme = NormalizeTheme(normalizedTheme).toLower();
+
+    QString modeTemp = current_theme.trimmed();
+    const auto requestedMode = extractThemeMode(&modeTemp);
+
+    title_bar_dark = resolvedIsDark(lowerTheme, requestedMode);
+    applyDarkTitleBar(title_bar_dark);
+#endif
+}
+
+bool ThemeManager::eventFilter(QObject *watched, QEvent *event) {
+    if (event->type() == QEvent::Show) {
+        auto normalizedTheme = current_theme.trimmed();
+        extractThemeMode(&normalizedTheme);
+        const auto lowerTheme = NormalizeTheme(normalizedTheme).toLower();
+        if (auto *w = qobject_cast<QWidget *>(watched)) {
+            applyComboBoxMetrics(w, usesFusionMetrics(lowerTheme));
+            refreshWidgetGeometry(w);
+        }
+    }
+
+#ifdef Q_OS_WIN
+    // Dialogs and other sub-windows are created after the theme was applied, so
+    // they miss the title bar attribute. Apply it as each one becomes visible.
+    if (event->type() == QEvent::Show ||
+        event->type() == QEvent::WindowActivate ||
+        event->type() == QEvent::WindowDeactivate ||
+        event->type() == QEvent::ActivationChange) {
+        if (auto *w = qobject_cast<QWidget *>(watched); w != nullptr && w->isWindow()) {
+            applyDarkTitleBarToWidget(w, title_bar_dark);
+        }
+    }
+#endif
+    return QObject::eventFilter(watched, event);
 }
