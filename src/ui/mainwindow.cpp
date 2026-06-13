@@ -46,9 +46,11 @@
 #include <QLabel>
 #include <QCheckBox>
 #include <QFontMetrics>
+#include <QHeaderView>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QStyledItemDelegate>
+#include <QStyleFactory>
 #include <QTabBar>
 #include <QTableWidgetItem>
 #include <QTextBlock>
@@ -113,19 +115,6 @@ QUrl sponsorUrl() {
 
 QUrl maintainerUrl() {
     return QUrl(QStringLiteral("https://github.com/%1").arg(QString::fromLatin1(kProjectOwner)));
-}
-
-QColor subtleAlternateRowColor(const QColor &base) {
-    if (!base.isValid()) return {};
-    return base.lightness() < 128 ? base.lighter(108) : base.darker(103);
-}
-
-QColor neutralSelectionColor(const QColor &base) {
-    if (!base.isValid()) return {};
-    const int value = base.lightness() < 128
-        ? qMin(255, base.lightness() + 36)
-        : qMax(0, base.lightness() - 32);
-    return QColor(value, value, value);
 }
 
 #ifdef Q_OS_WIN
@@ -210,8 +199,18 @@ bool writeTextFile(const QString &path, const QString &text) {
 }
 #endif
 
+// Draw the checkbox indicator with Fusion so it follows the QPalette; native
+// Windows styles render it from UxTheme data that ignores the supplied palette.
+QStyle *checkboxIndicatorStyle() {
+    static QStyle *style = [] {
+        QStyle *s = QStyleFactory::create(QStringLiteral("Fusion"));
+        return s ? s : QApplication::style();
+    }();
+    return style;
+}
+
 QRect centeredCheckboxIndicatorRect(const QStyleOptionViewItem &option, const QWidget *widget) {
-    auto *style = widget ? widget->style() : QApplication::style();
+    auto *style = checkboxIndicatorStyle();
     QStyleOptionButton checkbox;
     const QSize indicatorSize(
         style->pixelMetric(QStyle::PM_IndicatorWidth, &checkbox, widget),
@@ -254,9 +253,10 @@ public:
         if (index.column() == ProxyListModel::ToggleColumn) {
             const auto checkStateData = index.data(Qt::CheckStateRole);
             if (checkStateData.isValid()) {
-                auto *style = option.widget ? option.widget->style() : QApplication::style();
+                auto *style = checkboxIndicatorStyle();
                 QStyleOptionButton checkbox;
                 checkbox.rect = centeredCheckboxIndicatorRect(option, option.widget);
+                checkbox.palette = option.palette;
                 checkbox.state = QStyle::State_Enabled;
 
                 const auto state = static_cast<Qt::CheckState>(checkStateData.toInt());
@@ -267,7 +267,7 @@ public:
                 } else {
                     checkbox.state |= QStyle::State_Off;
                 }
-                style->drawPrimitive(QStyle::PE_IndicatorCheckBox, &checkbox, painter, option.widget);
+                style->drawPrimitive(QStyle::PE_IndicatorCheckBox, &checkbox, painter, nullptr);
             }
             painter->restore();
             return;
@@ -640,32 +640,33 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     proxyListModel = new ProxyListModel(this);
     ui->proxyListTable->setModel(proxyListModel);
     ui->proxyListTable->setItemDelegate(new ProxyListDelegate(ui->proxyListTable));
-    auto applyTableRowAlternation = [this](const QString &) {
-        auto applyAlternation = [](QAbstractItemView *view) {
-            auto palette = view->palette();
-            const auto base = palette.color(QPalette::Base);
-            const auto alternate = subtleAlternateRowColor(base);
-            const auto selection = neutralSelectionColor(base);
-            const auto selectionText = palette.color(QPalette::Text);
-            palette.setColor(QPalette::AlternateBase, alternate);
-            palette.setColor(QPalette::Highlight, selection);
-            palette.setColor(QPalette::HighlightedText, selectionText);
-            view->setPalette(palette);
-            view->setAlternatingRowColors(true);
-            view->setStyleSheet(QStringLiteral(
-                                    "alternate-background-color: %1;"
-                                    "selection-background-color: %2;"
-                                    "selection-color: %3;")
-                                    .arg(alternate.name(QColor::HexRgb),
-                                         selection.name(QColor::HexRgb),
-                                         selectionText.name(QColor::HexRgb)));
+    auto refreshTableTheme = [this](const QString &) {
+        for (auto *view : {static_cast<QAbstractItemView *>(ui->proxyListTable),
+                           static_cast<QAbstractItemView *>(ui->tableWidget_conn)}) {
+            view->setPalette(QPalette());
+            view->setStyleSheet(QString());
+            view->style()->unpolish(view);
+            view->style()->polish(view);
+            view->viewport()->setPalette(QPalette());
+            view->viewport()->style()->unpolish(view->viewport());
+            view->viewport()->style()->polish(view->viewport());
             view->viewport()->update();
-        };
-        applyAlternation(ui->proxyListTable);
-        applyAlternation(ui->tableWidget_conn);
+        }
+        for (auto *header : {ui->proxyListTable->horizontalHeader(),
+                             ui->proxyListTable->verticalHeader(),
+                             ui->tableWidget_conn->horizontalHeader(),
+                             ui->tableWidget_conn->verticalHeader()}) {
+            header->setPalette(QPalette());
+            header->setStyleSheet(QString());
+            header->style()->unpolish(header);
+            header->style()->polish(header);
+            header->update();
+        }
+        ui->proxyListTable->setAlternatingRowColors(false);
+        ui->tableWidget_conn->setAlternatingRowColors(true);
     };
-    applyTableRowAlternation(ProxorGui::dataStore->theme);
-    connect(themeManager, &ThemeManager::themeChanged, this, applyTableRowAlternation);
+    refreshTableTheme(ProxorGui::dataStore->theme);
+    connect(themeManager, &ThemeManager::themeChanged, this, refreshTableTheme);
     connect(themeManager, &ThemeManager::themeChanged, this, [=](const QString &) {
         rebuildLogDocument(ui->log_filter->text());
     });
@@ -1045,11 +1046,17 @@ void MainWindow::changeEvent(QEvent *event) {
     if (event->type() == QEvent::WindowStateChange || event->type() == QEvent::ActivationChange) {
         update_connection_statistics_polling_state();
     }
+    if (event->type() == QEvent::ApplicationPaletteChange && !themeManager->applying) {
+        themeManager->ApplyTheme(ProxorGui::dataStore->theme, true);
+    }
 }
 
 void MainWindow::showEvent(QShowEvent *event) {
     QMainWindow::showEvent(event);
     update_connection_statistics_polling_state();
+#ifdef Q_OS_WIN
+    themeManager->ReapplyTitleBar();
+#endif
 }
 
 void MainWindow::hideEvent(QHideEvent *event) {

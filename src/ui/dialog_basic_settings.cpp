@@ -25,12 +25,14 @@
 #include <QScrollArea>
 #include <QVBoxLayout>
 #include <QSignalBlocker>
+#include <QColor>
+#include <QPalette>
 #include <QStandardItemModel>
 #include <QTimer>
 
 namespace {
 int ThemeModeIndexForTheme(const QString &themeName) {
-    if (themeManager->NormalizeTheme(themeName) == QStringLiteral("System")) return 2;
+    if (themeManager->NormalizeTheme(themeName) == QStringLiteral("System")) return 0;
     if (themeName.endsWith(QStringLiteral("|Light"), Qt::CaseInsensitive)) return 1;
     if (themeName.endsWith(QStringLiteral("|Dark"), Qt::CaseInsensitive)) return 2;
     if (themeName.endsWith(QStringLiteral("|System"), Qt::CaseInsensitive)) return 0;
@@ -73,21 +75,21 @@ QString ResolveThemeSelection(const QString &comboTheme, int modeIndex) {
 
 void RefreshThemeModeOptions(QComboBox *themeCombo, QComboBox *modeCombo) {
     const auto themeKey = themeCombo->currentData().toString();
-    const bool isSystem = themeKey.compare(QStringLiteral("System"), Qt::CaseInsensitive) == 0;
-    const bool isQDarkStyle = themeKey.compare(QStringLiteral("QDarkStyle"), Qt::CaseInsensitive) == 0;
-    if (auto *model = qobject_cast<QStandardItemModel *>(modeCombo->model())) {
-        if (auto *item = model->item(1)) {
-            item->setEnabled(!isQDarkStyle && !isSystem);
-        }
-        if (auto *item = model->item(2)) {
-            item->setEnabled(true);
-        }
-    }
-    if (isQDarkStyle && modeCombo->currentIndex() == 1) {
-        modeCombo->setCurrentIndex(2);
-    }
-    if (isSystem && modeCombo->currentIndex() == 1) {
-        modeCombo->setCurrentIndex(2);
+    const bool systemModeOnly = themeKey.compare(QStringLiteral("System"), Qt::CaseInsensitive) == 0 ||
+                                themeKey.compare(QStringLiteral("Windows"), Qt::CaseInsensitive) == 0;
+    const bool darkModeOnly = themeKey.compare(QStringLiteral("QDarkStyle"), Qt::CaseInsensitive) == 0 ||
+                              themeKey.compare(QStringLiteral("FusionArcDark"), Qt::CaseInsensitive) == 0;
+
+    // Single-mode themes: disable the whole combo (reliably greyed by every
+    // style, unlike per-item disabling).
+    const bool singleMode = systemModeOnly || darkModeOnly;
+    modeCombo->setEnabled(!singleMode);
+    modeCombo->update();
+
+    const int forcedIndex = systemModeOnly ? 0 : (darkModeOnly ? 2 : -1);
+    if (forcedIndex >= 0 && modeCombo->currentIndex() != forcedIndex) {
+        const QSignalBlocker blocker(modeCombo);
+        modeCombo->setCurrentIndex(forcedIndex);
     }
 }
 }
@@ -213,6 +215,9 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     connect(ui->tabWidget, &QTabWidget::currentChanged, this, [this](int) {
         QTimer::singleShot(0, this, [this] { relayoutSettingsScroll(); });
     });
+    connect(themeManager, &ThemeManager::themeChanged, this, [this](const QString &) {
+        QTimer::singleShot(0, this, [this] { relayoutSettingsScroll(); });
+    });
     if (auto *grid = qobject_cast<QGridLayout *>(this->layout())) {
         auto *navRow = new QHBoxLayout();
         navRow->setContentsMargins(0, 0, 0, 0);
@@ -286,13 +291,17 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
         ui->theme->addItem(themeOption.second, themeOption.first);
     }
 
-    const auto currentTheme = themeManager->NormalizeTheme(ProxorGui::dataStore->theme);
+    const auto storedTheme = ProxorGui::dataStore->theme;
+    const auto currentTheme = themeManager->NormalizeTheme(storedTheme);
     const int currentThemeIndex = ui->theme->findData(ThemeComboKeyForTheme(currentTheme));
     if (currentThemeIndex >= 0) {
         ui->theme->setCurrentIndex(currentThemeIndex);
     }
-    ui->theme_mode->setCurrentIndex(ThemeModeIndexForTheme(currentTheme));
+    ui->theme_mode->setCurrentIndex(ThemeModeIndexForTheme(storedTheme));
     RefreshThemeModeOptions(ui->theme, ui->theme_mode);
+    // Re-run once shown so the disabled combo repaints greyed (the construction
+    // -time call runs before the widget is visible, so its repaint is a no-op).
+    QTimer::singleShot(0, this, [this] { RefreshThemeModeOptions(ui->theme, ui->theme_mode); });
 
     connect(ui->theme, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int index) {
         const auto comboThemeName = ui->theme->itemData(index).toString();
@@ -304,6 +313,8 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
         themeManager->ApplyTheme(themeName);
         ProxorGui::dataStore->theme = themeName;
         ProxorGui::dataStore->Save();
+        // Re-run after applying so the greyed state uses the new palette.
+        RefreshThemeModeOptions(ui->theme, ui->theme_mode);
         repaint();
         mainwindow->repaint();
     });
@@ -319,6 +330,7 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
         themeManager->ApplyTheme(themeName);
         ProxorGui::dataStore->theme = themeName;
         ProxorGui::dataStore->Save();
+        RefreshThemeModeOptions(ui->theme, ui->theme_mode);
         repaint();
         mainwindow->repaint();
     });
