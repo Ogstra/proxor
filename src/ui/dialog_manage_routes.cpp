@@ -564,14 +564,14 @@ QString DialogManageRoutes::directSiteRuleSummary(const DirectSiteRule &rule) co
     QStringList names;
     for (int gid: rule.groups) {
         const auto group = ProxorGui::profileManager->GetGroup(gid);
-        names += group != nullptr ? group->name : tr("Group #%1").arg(gid);
+        names += (group != nullptr) ? group->name : QStringLiteral("#%1").arg(gid);
     }
     for (int pid: rule.profiles) {
         const auto profile = ProxorGui::profileManager->GetProfile(pid);
-        names += profile != nullptr ? profile->summary_name : tr("Profile #%1").arg(pid);
+        names += (profile != nullptr) ? profile->summary_name : QStringLiteral("#%1").arg(pid);
     }
     const QString targets = names.isEmpty() ? tr("(no targets)") : names.join(", ");
-    return tr("%1  —  %n site(s)", nullptr, rule.sites.size()).arg(targets);
+    return tr("%1  —  %2 site(s)").arg(targets).arg(rule.sites.size());
 }
 
 void DialogManageRoutes::commitDirectSitesEditor() {
