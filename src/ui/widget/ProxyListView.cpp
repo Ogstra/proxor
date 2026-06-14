@@ -109,6 +109,13 @@ void ProxyListView::mousePressEvent(QMouseEvent *event) {
         clearNativeCurrentCell();
         return;
     }
+    if (event != nullptr && event->button() == Qt::LeftButton && !indexAt(event->pos()).isValid()) {
+        if (auto *proxy = proxyModel()) proxy->clearSelectedProfiles();
+        m_anchorRow = -1;
+        event->accept();
+        clearNativeCurrentCell();
+        return;
+    }
     QTableView::mousePressEvent(event);
     clearNativeCurrentCell();
 }
@@ -123,6 +130,7 @@ void ProxyListView::mouseDoubleClickEvent(QMouseEvent *event) {
     if (isPlainLeftClick(event)) {
         const int profileId = profileIdAtMouseEvent(event);
         if (profileId >= 0 && profileId != m_lastClickedProfileId) {
+            handleProfileClick(event);
             event->accept();
             clearNativeCurrentCell();
             return;

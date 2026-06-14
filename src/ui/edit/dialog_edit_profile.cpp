@@ -17,9 +17,16 @@
 #include "main/GuiUtils.hpp"
 
 #include <QInputDialog>
+#include <QVBoxLayout>
 
 #define ADJUST_SIZE runOnUiThread([=] { adjustSize(); adjustPosition(mainwindow); }, this);
 #define LOAD_TYPE(a) ui->type->addItem(ProxorGui::ProfileManager::NewProxyEntity(a)->bean->DisplayType(), a);
+
+namespace {
+    bool UsesCompactEditorLayout(const QString &type) {
+        return type == "shadowsocks" || type == "trojan" || type == "vless";
+    }
+}
 
 DialogEditProfile::DialogEditProfile(const QString &_type, int profileOrGroupId, QWidget *parent)
     : QDialog(parent), ui(new Ui::DialogEditProfile) {
@@ -82,6 +89,7 @@ DialogEditProfile::DialogEditProfile(const QString &_type, int profileOrGroupId,
             if (!label->isHidden()) networkBoxVisible++;
         }
         ui->network_box->setVisible(networkBoxVisible);
+        applySectionLayout();
         ADJUST_SIZE
     });
     ui->network->removeItem(0);
@@ -97,6 +105,7 @@ DialogEditProfile::DialogEditProfile(const QString &_type, int profileOrGroupId,
             ui->security_box->setVisible(false);
             ui->tls_camouflage_box->setVisible(false);
         }
+        applySectionLayout();
         ADJUST_SIZE
     });
     emit ui->security->currentTextChanged(ui->security->currentText());
@@ -320,10 +329,7 @@ void DialogEditProfile::typeSelected(const QString &newType) {
     ui->stream_box->setVisible(streamBoxVisible);
 
     // 载入 type 之后，有些类型没有右边的设置
-    auto rightNoBox = (ui->stream_box->isHidden() && ui->network_box->isHidden() && ui->security_box->isHidden());
-    if (rightNoBox && !ui->right_all_w->isHidden()) {
-        ui->right_all_w->setVisible(false);
-    }
+    applySectionLayout();
 
     editor_cache_updated_impl();
     ADJUST_SIZE
@@ -332,6 +338,25 @@ void DialogEditProfile::typeSelected(const QString &newType) {
     if (isHidden()) {
         runOnUiThread([=] { show(); }, this);
     }
+}
+
+void DialogEditProfile::applySectionLayout() {
+    const auto compactLayout = UsesCompactEditorLayout(type);
+
+    ui->left_w->setMinimumWidth(compactLayout ? 300 : 370);
+    ui->right_all_w->setMinimumWidth(compactLayout ? 300 : 370);
+
+    ui->left->removeWidget(ui->stream_box);
+    ui->right_layout->removeWidget(ui->stream_box);
+    if (compactLayout) {
+        ui->left->insertWidget(qMin(2, ui->left->count()), ui->stream_box);
+    } else {
+        ui->right_layout->insertWidget(0, ui->stream_box);
+    }
+
+    const auto streamOccupiesRight = !compactLayout && !ui->stream_box->isHidden();
+    const auto rightNoBox = !streamOccupiesRight && ui->network_box->isHidden() && ui->security_box->isHidden();
+    ui->right_all_w->setVisible(!rightNoBox);
 }
 
 bool DialogEditProfile::onEnd() {

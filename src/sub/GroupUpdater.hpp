@@ -35,3 +35,4 @@ void UI_update_all_groups(bool onlyAllowed = false);
 void UI_update_due_groups_on_start();
 void UI_update_due_groups_on_timer();
 bool UI_has_scheduled_subscription_updates();
+bool UI_subscription_updates_running();

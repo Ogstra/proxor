@@ -5,6 +5,7 @@
 #include "3rdparty/qv2ray/v3/components/GeositeReader/GeositeReader.hpp"
 #include "main/GuiUtils.hpp"
 #include "fmt/Preset.hpp"
+#include "ui/ThemeManager.hpp"
 
 #include <QFile>
 #include <QMessageBox>
@@ -15,11 +16,115 @@
 #include <QScrollArea>
 #include <QVBoxLayout>
 #include <QPlainTextEdit>
+#include <QLabel>
+#include <QTreeWidget>
+#include <QDialogButtonBox>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QJsonDocument>
 
 #define REFRESH_ACTIVE_ROUTING(name, obj)           \
     this->active_routing = name;                    \
     setWindowTitle(title_base + " [" + name + "]"); \
     UpdateDisplayRouting(obj, false);
+
+namespace {
+QString SettingsListStyleForTheme(const QString &themeName) {
+    QString style = QStringLiteral("QListWidget::item{padding:4px 10px;}");
+    if (themeManager->NormalizeTheme(themeName) != QStringLiteral("System")) {
+        style += QStringLiteral(
+            "QListWidget::item:selected{background:#455364;color:#DFE1E2;}"
+            "QListWidget::item:selected:active{background:#455364;color:#DFE1E2;}"
+            "QListWidget::item:selected:!active{background:#455364;color:#DFE1E2;}"
+        );
+    }
+    return style;
+}
+
+enum DirectSiteTargetRole {
+    TargetKindRole = Qt::UserRole,
+    TargetIdRole = Qt::UserRole + 1,
+};
+enum DirectSiteTargetKind { TargetGroup = 0, TargetProfile = 1 };
+
+// Lets the user pick which subscription groups (whole) and/or individual profiles a
+// direct-site rule applies to. Group node checked => whole subscription; child checked => that profile.
+class TargetPickerDialog final : public QDialog {
+public:
+    TargetPickerDialog(const QList<int> &groups, const QList<int> &profiles, QWidget *parent = nullptr)
+        : QDialog(parent) {
+        setWindowTitle(QObject::tr("Select Targets"));
+        resize(420, 460);
+
+        auto *layout = new QVBoxLayout(this);
+        layout->setContentsMargins(8, 8, 8, 8);
+        layout->setSpacing(8);
+
+        m_tree = new QTreeWidget(this);
+        m_tree->setHeaderHidden(true);
+        m_tree->setUniformRowHeights(true);
+        layout->addWidget(m_tree);
+
+        auto *buttonBox = new QDialogButtonBox(QDialogButtonBox::Cancel | QDialogButtonBox::Ok, this);
+        layout->addWidget(buttonBox);
+        connect(buttonBox, &QDialogButtonBox::accepted, this, &QDialog::accept);
+        connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
+
+        const auto groupSet = QSet<int>(groups.begin(), groups.end());
+        const auto profileSet = QSet<int>(profiles.begin(), profiles.end());
+        for (const auto gid: ProxorGui::profileManager->groupsTabOrder) {
+            const auto group = ProxorGui::profileManager->GetGroup(gid);
+            if (group == nullptr || group->archive) continue;
+
+            auto *groupItem = new QTreeWidgetItem(m_tree);
+            groupItem->setText(0, group->name);
+            groupItem->setFlags(groupItem->flags() | Qt::ItemIsUserCheckable);
+            groupItem->setData(0, TargetKindRole, TargetGroup);
+            groupItem->setData(0, TargetIdRole, group->id);
+            groupItem->setCheckState(0, groupSet.contains(group->id) ? Qt::Checked : Qt::Unchecked);
+            groupItem->setExpanded(true);
+
+            for (const auto &profile: group->ProfilesWithOrder()) {
+                if (profile == nullptr) continue;
+                auto *profileItem = new QTreeWidgetItem(groupItem);
+                profileItem->setText(0, profile->summary_name);
+                profileItem->setFlags(profileItem->flags() | Qt::ItemIsUserCheckable);
+                profileItem->setData(0, TargetKindRole, TargetProfile);
+                profileItem->setData(0, TargetIdRole, profile->id);
+                profileItem->setCheckState(0, profileSet.contains(profile->id) ? Qt::Checked : Qt::Unchecked);
+            }
+        }
+    }
+
+    [[nodiscard]] QList<int> selectedGroups() const {
+        QList<int> out;
+        for (auto *top: topLevelItems()) {
+            if (top->checkState(0) == Qt::Checked) out += top->data(0, TargetIdRole).toInt();
+        }
+        return out;
+    }
+
+    [[nodiscard]] QList<int> selectedProfiles() const {
+        QList<int> out;
+        for (auto *top: topLevelItems()) {
+            for (int i = 0; i < top->childCount(); ++i) {
+                auto *child = top->child(i);
+                if (child->checkState(0) == Qt::Checked) out += child->data(0, TargetIdRole).toInt();
+            }
+        }
+        return out;
+    }
+
+private:
+    QTreeWidget *m_tree = nullptr;
+
+    [[nodiscard]] QList<QTreeWidgetItem *> topLevelItems() const {
+        QList<QTreeWidgetItem *> out;
+        for (int i = 0; i < m_tree->topLevelItemCount(); ++i) out += m_tree->topLevelItem(i);
+        return out;
+    }
+};
+}
 
 DialogManageRoutes::DialogManageRoutes(QWidget *parent) : QDialog(parent), ui(new Ui::DialogManageRoutes) {
     ui->setupUi(this);
@@ -130,6 +235,8 @@ DialogManageRoutes::DialogManageRoutes(QWidget *parent) : QDialog(parent), ui(ne
     ui->hostsMapLayout->addWidget(addHostBtn, 1, 0);
     ui->hostsMapLayout->addWidget(removeHostBtn, 1, 1);
     //
+    buildDirectSitesTab();
+    //
     REFRESH_ACTIVE_ROUTING(ProxorGui::dataStore->active_routing, ProxorGui::dataStore->routing.get())
 
     ADD_ASTERISK(this)
@@ -146,9 +253,12 @@ DialogManageRoutes::DialogManageRoutes(QWidget *parent) : QDialog(parent), ui(ne
     routeNav->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     routeNav->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     routeNav->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
-    routeNav->setStyleSheet(QStringLiteral("QListWidget::item{padding:4px 10px;}"));
+    routeNav->setStyleSheet(SettingsListStyleForTheme(ProxorGui::dataStore->theme));
     routeNav->setFixedWidth(routeNav->sizeHintForColumn(0) + 32);
     connect(routeNav, &QListWidget::currentRowChanged, ui->tabWidget, &QTabWidget::setCurrentIndex);
+    connect(themeManager, &ThemeManager::themeChanged, routeNav, [routeNav](const QString &themeName) {
+        routeNav->setStyleSheet(SettingsListStyleForTheme(themeName));
+    });
     connect(ui->tabWidget, &QTabWidget::currentChanged, this, [this](int) {
         updateGeometry();
         emit activePageGeometryChanged();
@@ -231,6 +341,12 @@ void DialogManageRoutes::accept() {
 bool DialogManageRoutes::save(QStringList &flags) {
     D_C_SAVE_STRING(custom_route_global)
     bool routeChanged = false;
+    commitDirectSitesEditor();
+    const auto directRulesJson = serializedDirectSiteRules();
+    if (ProxorGui::dataStore->direct_site_rules != directRulesJson) {
+        ProxorGui::dataStore->direct_site_rules = directRulesJson;
+        routeChanged = true;
+    }
     if (ProxorGui::dataStore->active_routing != active_routing) routeChanged = true;
     SaveDisplayRouting(ProxorGui::dataStore->routing.get());
     ProxorGui::dataStore->active_routing = active_routing;
@@ -410,4 +526,167 @@ void DialogManageRoutes::on_load_save_clicked() {
     });
     w->exec();
     w->deleteLater();
+}
+
+// Direct site rules
+
+void DialogManageRoutes::loadDirectSiteRules() {
+    directSiteRules.clear();
+    const auto doc = QJsonDocument::fromJson(ProxorGui::dataStore->direct_site_rules.toUtf8());
+    if (!doc.isArray()) return;
+    for (const auto &v: doc.array()) {
+        const auto obj = v.toObject();
+        DirectSiteRule rule;
+        for (const auto &g: obj.value("groups").toArray()) rule.groups += g.toInt();
+        for (const auto &p: obj.value("profiles").toArray()) rule.profiles += p.toInt();
+        for (const auto &s: obj.value("sites").toArray()) {
+            const auto site = s.toString().trimmed();
+            if (!site.isEmpty()) rule.sites += site;
+        }
+        directSiteRules += rule;
+    }
+}
+
+QString DialogManageRoutes::serializedDirectSiteRules() const {
+    QJsonArray arr;
+    for (const auto &rule: directSiteRules) {
+        if (rule.groups.isEmpty() && rule.profiles.isEmpty() && rule.sites.isEmpty()) continue;
+        QJsonArray groups, profiles, sites;
+        for (int id: rule.groups) groups += id;
+        for (int id: rule.profiles) profiles += id;
+        for (const auto &s: rule.sites) sites += s;
+        arr += QJsonObject{{"sites", sites}, {"groups", groups}, {"profiles", profiles}};
+    }
+    return QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
+}
+
+QString DialogManageRoutes::directSiteRuleSummary(const DirectSiteRule &rule) const {
+    QStringList names;
+    for (int gid: rule.groups) {
+        const auto group = ProxorGui::profileManager->GetGroup(gid);
+        names += group != nullptr ? group->name : tr("Group #%1").arg(gid);
+    }
+    for (int pid: rule.profiles) {
+        const auto profile = ProxorGui::profileManager->GetProfile(pid);
+        names += profile != nullptr ? profile->summary_name : tr("Profile #%1").arg(pid);
+    }
+    const QString targets = names.isEmpty() ? tr("(no targets)") : names.join(", ");
+    return tr("%1  —  %n site(s)", nullptr, rule.sites.size()).arg(targets);
+}
+
+void DialogManageRoutes::commitDirectSitesEditor() {
+    if (directSitesCurrent < 0 || directSitesCurrent >= directSiteRules.size()) return;
+    directSiteRules[directSitesCurrent].sites = SplitLinesSkipSharp(directSitesEditor->toPlainText());
+}
+
+void DialogManageRoutes::refreshDirectSitesList() {
+    const QSignalBlocker blocker(directSitesList);
+    directSitesList->clear();
+    for (const auto &rule: directSiteRules) {
+        directSitesList->addItem(directSiteRuleSummary(rule));
+    }
+    if (directSitesCurrent >= 0 && directSitesCurrent < directSiteRules.size()) {
+        directSitesList->setCurrentRow(directSitesCurrent);
+    }
+}
+
+void DialogManageRoutes::refreshDirectSitesDetail() {
+    const bool hasRule = directSitesCurrent >= 0 && directSitesCurrent < directSiteRules.size();
+    directSitesTargetsBtn->setEnabled(hasRule);
+    directSitesEditor->setEnabled(hasRule);
+    if (!hasRule) {
+        directSitesTargetsBtn->setText(tr("Targets…"));
+        const QSignalBlocker blocker(directSitesEditor);
+        directSitesEditor->clear();
+        return;
+    }
+    const auto &rule = directSiteRules[directSitesCurrent];
+    directSitesTargetsBtn->setText(directSiteRuleSummary(rule));
+    const QSignalBlocker blocker(directSitesEditor);
+    directSitesEditor->setPlainText(rule.sites.join("\n"));
+}
+
+void DialogManageRoutes::buildDirectSitesTab() {
+    loadDirectSiteRules();
+
+    auto *layout = ui->directSitesLayout;
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(8);
+
+    auto *hint = new QLabel(tr("Apply these sites as direct/bypass for the selected subscriptions or profiles. One site per line (same syntax as routing: example.com, domain:..., full:..., keyword:..., regexp:..., geosite:...)."), this);
+    hint->setWordWrap(true);
+    layout->addWidget(hint);
+
+    auto *row = new QHBoxLayout();
+    row->setSpacing(8);
+    layout->addLayout(row, 1);
+
+    auto *leftCol = new QVBoxLayout();
+    leftCol->setSpacing(4);
+    directSitesList = new QListWidget(this);
+    directSitesList->setMinimumWidth(180);
+    leftCol->addWidget(directSitesList, 1);
+    auto *listBtns = new QHBoxLayout();
+    auto *addRuleBtn = new QPushButton(tr("Add"), this);
+    auto *removeRuleBtn = new QPushButton(tr("Remove"), this);
+    listBtns->addWidget(addRuleBtn);
+    listBtns->addWidget(removeRuleBtn);
+    leftCol->addLayout(listBtns);
+    row->addLayout(leftCol);
+
+    auto *rightCol = new QVBoxLayout();
+    rightCol->setSpacing(4);
+    directSitesTargetsBtn = new QPushButton(tr("Targets…"), this);
+    rightCol->addWidget(directSitesTargetsBtn);
+    directSitesEditor = new QPlainTextEdit(this);
+    directSitesEditor->setMinimumHeight(120);
+    directSitesEditor->setPlaceholderText(tr("One direct site per line"));
+    directSitesEditor->setLineWrapMode(QPlainTextEdit::NoWrap);
+    rightCol->addWidget(directSitesEditor, 1);
+    row->addLayout(rightCol, 1);
+
+    connect(directSitesList, &QListWidget::currentRowChanged, this, [this](int currentRow) {
+        commitDirectSitesEditor();
+        directSitesCurrent = currentRow;
+        refreshDirectSitesDetail();
+    });
+    connect(addRuleBtn, &QPushButton::clicked, this, [this] {
+        commitDirectSitesEditor();
+        directSiteRules += DirectSiteRule{};
+        directSitesCurrent = directSiteRules.size() - 1;
+        refreshDirectSitesList();
+        refreshDirectSitesDetail();
+    });
+    connect(removeRuleBtn, &QPushButton::clicked, this, [this] {
+        if (directSitesCurrent < 0 || directSitesCurrent >= directSiteRules.size()) return;
+        directSiteRules.removeAt(directSitesCurrent);
+        if (directSitesCurrent >= directSiteRules.size()) directSitesCurrent = directSiteRules.size() - 1;
+        refreshDirectSitesList();
+        refreshDirectSitesDetail();
+    });
+    connect(directSitesEditor, &QPlainTextEdit::textChanged, this, [this] {
+        if (directSitesCurrent < 0 || directSitesCurrent >= directSiteRules.size()) return;
+        directSiteRules[directSitesCurrent].sites = SplitLinesSkipSharp(directSitesEditor->toPlainText());
+        const QSignalBlocker blocker(directSitesList);
+        if (auto *item = directSitesList->item(directSitesCurrent)) {
+            item->setText(directSiteRuleSummary(directSiteRules[directSitesCurrent]));
+        }
+    });
+    connect(directSitesTargetsBtn, &QPushButton::clicked, this, [this] {
+        if (directSitesCurrent < 0 || directSitesCurrent >= directSiteRules.size()) return;
+        auto &rule = directSiteRules[directSitesCurrent];
+        TargetPickerDialog dialog(rule.groups, rule.profiles, this);
+        if (dialog.exec() != QDialog::Accepted) return;
+        rule.groups = dialog.selectedGroups();
+        rule.profiles = dialog.selectedProfiles();
+        refreshDirectSitesDetail();
+        const QSignalBlocker blocker(directSitesList);
+        if (auto *item = directSitesList->item(directSitesCurrent)) {
+            item->setText(directSiteRuleSummary(rule));
+        }
+    });
+
+    directSitesCurrent = directSiteRules.isEmpty() ? -1 : 0;
+    refreshDirectSitesList();
+    refreshDirectSitesDetail();
 }

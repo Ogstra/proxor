@@ -50,7 +50,6 @@
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QStyledItemDelegate>
-#include <QStyleFactory>
 #include <QTabBar>
 #include <QTableWidgetItem>
 #include <QTextBlock>
@@ -63,6 +62,9 @@
 #include <QMessageBox>
 #include <QDir>
 #include <QFile>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QJsonDocument>
 #include <QFileInfo>
 #include <QPainter>
 #include <QMouseEvent>
@@ -199,24 +201,22 @@ bool writeTextFile(const QString &path, const QString &text) {
 }
 #endif
 
-// Draw the checkbox indicator with Fusion so it follows the QPalette; native
-// Windows styles render it from UxTheme data that ignores the supplied palette.
-QStyle *checkboxIndicatorStyle() {
-    static QStyle *style = [] {
-        QStyle *s = QStyleFactory::create(QStringLiteral("Fusion"));
-        return s ? s : QApplication::style();
-    }();
-    return style;
-}
-
 QRect centeredCheckboxIndicatorRect(const QStyleOptionViewItem &option, const QWidget *widget) {
-    auto *style = checkboxIndicatorStyle();
+    auto *style = widget != nullptr ? widget->style() : QApplication::style();
     QStyleOptionButton checkbox;
     const QSize indicatorSize(
         style->pixelMetric(QStyle::PM_IndicatorWidth, &checkbox, widget),
         style->pixelMetric(QStyle::PM_IndicatorHeight, &checkbox, widget)
     );
     return QStyle::alignedRect(option.direction, Qt::AlignCenter, indicatorSize, option.rect);
+}
+
+QColor proxyListSelectedRowColor(const QStyleOptionViewItem &option) {
+    const QColor base = option.palette.color(QPalette::Base);
+    const bool dark = base.lightness() < 128;
+    const int delta = dark ? 34 : -24;
+    const int lightness = qBound(0, base.lightness() + delta, 255);
+    return QColor::fromHsl(0, 0, lightness);
 }
 
 class ProxyListDelegate final : public QStyledItemDelegate {
@@ -228,32 +228,14 @@ public:
 
         const auto profileId = index.data(ProxyListModel::ProfileIdRole).toInt();
         const auto *proxyModel = qobject_cast<const ProxyListModel *>(index.model());
-        const bool selected = proxyModel != nullptr && proxyModel->isProfileSelected(profileId);
-
-        if (selected) {
-            auto *style = option.widget ? option.widget->style() : QApplication::style();
-            QStyleOptionViewItem selectedOption(option);
-            selectedOption.state &= ~(QStyle::State_MouseOver | QStyle::State_HasFocus | QStyle::State_Sunken);
-            selectedOption.state |= QStyle::State_Selected | QStyle::State_Active;
-            selectedOption.text.clear();
-            selectedOption.icon = QIcon();
-            style->drawPrimitive(QStyle::PE_PanelItemViewItem, &selectedOption, painter, option.widget);
-        } else {
-            const auto background = index.data(Qt::BackgroundRole);
-            if (background.canConvert<QColor>()) {
-                painter->fillRect(option.rect, qvariant_cast<QColor>(background));
-            } else if (background.canConvert<QBrush>()) {
-                painter->fillRect(option.rect, qvariant_cast<QBrush>(background));
-            } else {
-                const auto role = (index.row() % 2 == 0) ? QPalette::Base : QPalette::AlternateBase;
-                painter->fillRect(option.rect, option.palette.color(role));
-            }
+        if (proxyModel != nullptr && proxyModel->isProfileSelected(profileId)) {
+            painter->fillRect(option.rect, proxyListSelectedRowColor(option));
         }
 
         if (index.column() == ProxyListModel::ToggleColumn) {
             const auto checkStateData = index.data(Qt::CheckStateRole);
             if (checkStateData.isValid()) {
-                auto *style = checkboxIndicatorStyle();
+                auto *style = option.widget != nullptr ? option.widget->style() : QApplication::style();
                 QStyleOptionButton checkbox;
                 checkbox.rect = centeredCheckboxIndicatorRect(option, option.widget);
                 checkbox.palette = option.palette;
@@ -267,7 +249,7 @@ public:
                 } else {
                     checkbox.state |= QStyle::State_Off;
                 }
-                style->drawPrimitive(QStyle::PE_IndicatorCheckBox, &checkbox, painter, nullptr);
+                style->drawPrimitive(QStyle::PE_IndicatorCheckBox, &checkbox, painter, option.widget);
             }
             painter->restore();
             return;
@@ -283,9 +265,7 @@ public:
         }
 
         const auto foreground = index.data(Qt::ForegroundRole);
-        if (selected) {
-            painter->setPen(option.palette.color(QPalette::HighlightedText));
-        } else if (foreground.canConvert<QColor>()) {
+        if (foreground.canConvert<QColor>()) {
             painter->setPen(qvariant_cast<QColor>(foreground));
         } else if (foreground.canConvert<QBrush>()) {
             painter->setPen(qvariant_cast<QBrush>(foreground).color());
@@ -387,6 +367,27 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     // Load Manager
     ProxorGui::profileManager->LoadManager();
+
+    // One-time migration: move per-subscription direct sites into the global direct site rules.
+    if (!ProxorGui::dataStore->direct_sites_migrated) {
+        QJsonArray rules;
+        for (const auto gid: ProxorGui::profileManager->groupsIdOrder) {
+            const auto group = ProxorGui::profileManager->GetGroup(gid);
+            if (group == nullptr || group->subscription_direct_sites.isEmpty()) continue;
+            rules += QJsonObject{
+                {"sites", QJsonArray::fromStringList(group->subscription_direct_sites)},
+                {"groups", QJsonArray{group->id}},
+                {"profiles", QJsonArray{}},
+            };
+            group->subscription_direct_sites.clear();
+            ProxorGui::profileManager->SaveGroup(group);
+        }
+        if (!rules.isEmpty()) {
+            ProxorGui::dataStore->direct_site_rules = QString::fromUtf8(QJsonDocument(rules).toJson(QJsonDocument::Compact));
+        }
+        ProxorGui::dataStore->direct_sites_migrated = true;
+        ProxorGui::dataStore->Save();
+    }
 
     // Setup misc UI
     const auto normalizedTheme = themeManager->NormalizeTheme(ProxorGui::dataStore->theme);
@@ -1001,6 +1002,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
                 }, Qt::SingleShotConnection);
         }
     }
+    setTimeout([this] { run_subscription_ping_on_open(); }, this, 2500);
 
     if (ProxorGui::dataStore->check_update_on_start) {
         auto doCheck = [this]() {
@@ -1031,6 +1033,34 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             }
         }, this, 0);
     }
+}
+
+void MainWindow::run_subscription_ping_on_open(int attempts) {
+    constexpr int maxAttempts = 90;
+    if (attempts > maxAttempts) return;
+
+    if (UI_subscription_updates_running() || !ProxorGui::dataStore->core_running) {
+        setTimeout([this, attempts] { run_subscription_ping_on_open(attempts + 1); }, this, 1000);
+        return;
+    }
+
+    QList<std::shared_ptr<ProxorGui::ProxyEntity>> profiles;
+    QSet<int> profileIds;
+    for (const auto gid: ProxorGui::profileManager->groupsTabOrder) {
+        const auto group = ProxorGui::profileManager->GetGroup(gid);
+        if (group == nullptr || group->archive || group->skip_auto_update || group->url.isEmpty()) continue;
+        if (!group->subscription_ping_onopen_enabled) continue;
+
+        for (const auto &profile: group->ProfilesWithOrder()) {
+            if (profile == nullptr || profileIds.contains(profile->id)) continue;
+            profileIds += profile->id;
+            profiles += profile;
+        }
+    }
+
+    if (profiles.isEmpty()) return;
+
+    speedtest_profiles(profiles, 1, true, true);
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {

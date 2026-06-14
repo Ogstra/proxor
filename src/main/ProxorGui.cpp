@@ -268,6 +268,8 @@ namespace ProxorGui {
         _add(new configItem("theme", &theme, itemType::string));
         _add(new configItem("custom_inbound", &custom_inbound, itemType::string));
         _add(new configItem("custom_route", &custom_route_global, itemType::string));
+        _add(new configItem("direct_site_rules", &direct_site_rules, itemType::string));
+        _add(new configItem("direct_sites_migrated", &direct_sites_migrated, itemType::boolean));
         _add(new configItem("sub_use_proxy", &sub_use_proxy, itemType::boolean));
         _add(new configItem("remember_id", &remember_id, itemType::integer));
         _add(new configItem("remember_enable", &remember_enable, itemType::boolean));

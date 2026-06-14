@@ -92,6 +92,18 @@ void RefreshThemeModeOptions(QComboBox *themeCombo, QComboBox *modeCombo) {
         modeCombo->setCurrentIndex(forcedIndex);
     }
 }
+
+QString SettingsListStyleForTheme(const QString &themeName) {
+    QString style = QStringLiteral("QListWidget::item{padding:4px 10px;}");
+    if (themeManager->NormalizeTheme(themeName) != QStringLiteral("System")) {
+        style += QStringLiteral(
+            "QListWidget::item:selected{background:#455364;color:#DFE1E2;}"
+            "QListWidget::item:selected:active{background:#455364;color:#DFE1E2;}"
+            "QListWidget::item:selected:!active{background:#455364;color:#DFE1E2;}"
+        );
+    }
+    return style;
+}
 }
 
 class ExtraCoreWidget : public QWidget {
@@ -202,8 +214,9 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     m_settingsNav->setCurrentRow(ui->tabWidget->currentIndex());
     m_settingsNav->setFrameShape(QFrame::NoFrame);
     m_settingsNav->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_settingsNav->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_settingsNav->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
-    m_settingsNav->setStyleSheet(QStringLiteral("QListWidget::item{padding:4px 10px;}"));
+    m_settingsNav->setStyleSheet(SettingsListStyleForTheme(ProxorGui::dataStore->theme));
     m_settingsNav->setFixedWidth(m_settingsNav->sizeHintForColumn(0) + 32);
     connect(m_settingsNav, &QListWidget::currentRowChanged, ui->tabWidget, &QTabWidget::setCurrentIndex);
     m_settingsScroll = new QScrollArea(this);
@@ -217,6 +230,9 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     });
     connect(themeManager, &ThemeManager::themeChanged, this, [this](const QString &) {
         QTimer::singleShot(0, this, [this] { relayoutSettingsScroll(); });
+    });
+    connect(themeManager, &ThemeManager::themeChanged, this, [this](const QString &themeName) {
+        m_settingsNav->setStyleSheet(SettingsListStyleForTheme(themeName));
     });
     if (auto *grid = qobject_cast<QGridLayout *>(this->layout())) {
         auto *navRow = new QHBoxLayout();

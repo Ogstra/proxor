@@ -11,6 +11,7 @@ namespace ProxorGui_network {
         QString error;
         QByteArray data;
         QList<QPair<QByteArray, QByteArray>> header;
+        int statusCode = 0;
     };
 
     class NetworkRequestHelper : QObject {

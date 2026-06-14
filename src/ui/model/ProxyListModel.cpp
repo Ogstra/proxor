@@ -12,6 +12,16 @@
 #include "main/GuiUtils.hpp"
 #include "ui/Icon.hpp"
 
+namespace {
+QColor activeProfileTextColor() {
+    const auto text = QApplication::palette().color(QPalette::Text);
+    const bool dark = text.lightness() > 128;
+    const int delta = dark ? -26 : 34;
+    const int lightness = qBound(0, text.lightness() + delta, 255);
+    return QColor::fromHsl(0, 0, lightness);
+}
+}
+
 QString ProxyListModel::quotaText(const std::shared_ptr<ProxorGui::Group> &group) {
     if (group == nullptr || group->url.isEmpty()) return {};
 
@@ -96,7 +106,7 @@ QVariant ProxyListModel::data(const QModelIndex &index, int role) const {
             if (color.isValid()) return color;
         }
         if (isRunning && index.column() >= NameColumn && index.column() <= AddressColumn) {
-            return QApplication::palette().link();
+            return activeProfileTextColor();
         }
     }
 
