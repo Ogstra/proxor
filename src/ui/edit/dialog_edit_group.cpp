@@ -193,7 +193,11 @@ DialogEditGroup::DialogEditGroup(const std::shared_ptr<ProxorGui::Group> &ent, Q
     ui->sub_update_interval->setValidator(new QRegularExpressionValidator(QRegularExpression("^[0-9]+([\\.,][0-9]+)?$"), this));
     ui->sub_update_always->setChecked(ent->sub_update_always);
     ui->sub_update_always->setToolTip(tr("When enabled, this subscription updates on startup even if the global startup toggle is disabled."));
+    ui->subscription_ping_onopen_enabled->setChecked(ent->subscription_ping_onopen_enabled);
+    ui->subscription_ping_onopen_enabled->setToolTip(tr("When enabled, the server list is tested automatically when the app opens."));
     ui->url->setText(ent->url);
+    ui->fallback_url->setText(ent->fallback_url);
+    ui->fallback_url->setToolTip(tr("Used when the main subscription URL fails, returns HTTP 300-599, or times out."));
     ui->type->setCurrentIndex(ent->url.isEmpty() ? 0 : 1);
     ui->type->currentIndexChanged(ui->type->currentIndex());
     ui->cat_update->setEnabled(!ent->skip_auto_update);
@@ -270,6 +274,8 @@ void DialogEditGroup::accept() {
         ent->sub_update_interval = ParseIntervalHoursToMinutes(updateIntervalText);
     }
     ent->sub_update_always = ui->sub_update_always->isChecked();
+    ent->subscription_ping_onopen_enabled = ui->subscription_ping_onopen_enabled->isChecked();
+    ent->fallback_url = ui->fallback_url->text().trimmed();
     ent->manually_column_width = ui->manually_column_width->isChecked();
     ent->front_proxy_id = CACHE.front_proxy;
     QDialog::accept();

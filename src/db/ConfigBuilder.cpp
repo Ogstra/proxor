@@ -565,6 +565,35 @@ namespace ProxorGui {
         if (!status->forTest) {
             DOMAIN_USER_RULE
             IP_USER_RULE
+            // Subscription-delivered direct sites (via the `routing` subscription parameter).
+            const auto group = profileManager->GetGroup(status->ent->gid);
+            if (group != nullptr) {
+                for (const auto &site: group->subscription_direct_sites) {
+                    status->domainListDNSDirect += site;
+                    status->domainListDirect += site;
+                }
+            }
+            // User-defined direct site rules, targeted by subscription group and/or profile.
+            const auto directRules = QJsonDocument::fromJson(dataStore->direct_site_rules.toUtf8()).array();
+            for (const auto &rv: directRules) {
+                const auto rule = rv.toObject();
+                bool applies = false;
+                for (const auto &g: rule.value("groups").toArray()) {
+                    if (g.toInt() == status->ent->gid) { applies = true; break; }
+                }
+                if (!applies) {
+                    for (const auto &p: rule.value("profiles").toArray()) {
+                        if (p.toInt() == status->ent->id) { applies = true; break; }
+                    }
+                }
+                if (!applies) continue;
+                for (const auto &s: rule.value("sites").toArray()) {
+                    const auto site = s.toString().trimmed();
+                    if (site.isEmpty()) continue;
+                    status->domainListDNSDirect += site;
+                    status->domainListDirect += site;
+                }
+            }
         }
 
         // sing-box common rule object

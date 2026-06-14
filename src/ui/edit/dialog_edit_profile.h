@@ -60,6 +60,8 @@ private:
 
     void editor_cache_updated_impl();
 
+    void applySectionLayout();
+
     void do_apply_to_group(const std::shared_ptr<ProxorGui::Group> &group, QWidget *key);
 };
 

@@ -253,7 +253,11 @@ private:
 
     void speedtest_current_group(int mode, bool test_group);
 
+    void speedtest_profiles(const QList<std::shared_ptr<ProxorGui::ProxyEntity>> &profiles, int mode, bool groupedLogs, bool logFailuresOnly = false);
+
     void speedtest_current();
+
+    void run_subscription_ping_on_open(int attempts = 0);
 
     static void stop_core_daemon();
 

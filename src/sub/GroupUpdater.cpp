@@ -11,6 +11,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
+#include <QSet>
 #include <QUrlQuery>
 
 #ifndef NKR_NO_YAML
@@ -103,6 +104,129 @@ namespace ProxorGui_sub {
         bool ParseUpdateAlwaysHeader(const QString &header) {
             const auto value = header.trimmed().toLower();
             return value == "true" || value == "1" || value == "yes";
+        }
+
+        bool ParseSubscriptionPingOnOpenValue(const QString &value, bool *ok = nullptr) {
+            const auto normalized = value.trimmed().toLower();
+            const bool valid = normalized == "true" || normalized == "1" || normalized == "yes" ||
+                               normalized == "false" || normalized == "0" || normalized == "no";
+            if (ok != nullptr) *ok = valid;
+            return normalized == "true" || normalized == "1" || normalized == "yes";
+        }
+
+        bool ParseSubscriptionPingOnOpenBody(const QString &content, bool *found = nullptr) {
+            auto text = content;
+            if (const auto decoded = DecodeB64IfValid(text); !decoded.isEmpty()) {
+                text = QString::fromUtf8(decoded);
+            }
+
+            const QRegularExpression pattern(
+                R"(^\s*#\s*subscription-ping-onopen-enabled\s*:\s*([^\r\n#]+))",
+                QRegularExpression::CaseInsensitiveOption | QRegularExpression::MultilineOption);
+            const auto match = pattern.match(text);
+            if (!match.hasMatch()) {
+                if (found != nullptr) *found = false;
+                return false;
+            }
+
+            bool ok = false;
+            const auto enabled = ParseSubscriptionPingOnOpenValue(match.captured(1), &ok);
+            if (found != nullptr) *found = ok;
+            return ok && enabled;
+        }
+
+        QString DecodedSubscriptionText(QString content) {
+            if (const auto decoded = DecodeB64IfValid(content); !decoded.isEmpty()) {
+                content = QString::fromUtf8(decoded);
+            }
+            return content;
+        }
+
+        QString ParseFallbackUrlBody(const QString &content) {
+            const auto text = DecodedSubscriptionText(content);
+            const QRegularExpression pattern(
+                R"(^\s*#\s*fallback-url\s*:\s*(\S+))",
+                QRegularExpression::CaseInsensitiveOption | QRegularExpression::MultilineOption);
+            const auto match = pattern.match(text);
+            if (!match.hasMatch()) return {};
+            return match.captured(1).trimmed();
+        }
+
+        QString NormalizeFallbackUrl(QString value) {
+            value = value.trimmed();
+            const QUrl url(value);
+            if (!url.isValid() || url.scheme().isEmpty() || url.host().isEmpty()) return {};
+            if (url.scheme() != "http" && url.scheme() != "https") return {};
+            return value;
+        }
+
+        bool IsSubscriptionResponseFailed(const ProxorHttpResponse &resp) {
+            return !resp.error.isEmpty() || (resp.statusCode >= 300 && resp.statusCode <= 599);
+        }
+
+        QString SubscriptionRequestErrorText(const ProxorHttpResponse &resp) {
+            if (!resp.error.isEmpty()) return resp.error;
+            if (resp.statusCode >= 300 && resp.statusCode <= 599) {
+                return QObject::tr("HTTP status %1").arg(resp.statusCode);
+            }
+            return {};
+        }
+
+        QString DecodeRoutingProfileParam(QString value, bool *off = nullptr) {
+            value = value.trimmed();
+            if (off != nullptr) *off = false;
+            if (value.isEmpty()) return {};
+
+            if (value.compare(QStringLiteral("off"), Qt::CaseInsensitive) == 0 || value == "0" ||
+                value.compare(QStringLiteral("false"), Qt::CaseInsensitive) == 0) {
+                if (off != nullptr) *off = true;
+                return {};
+            }
+
+            if (value.startsWith('{')) return value;
+            auto decoded = DecodeB64IfValid(value, QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
+            if (decoded.isEmpty()) decoded = DecodeB64IfValid(value);
+            const auto decodedText = QString::fromUtf8(decoded).trimmed();
+            if (decodedText.startsWith('{')) return decodedText;
+            return {};
+        }
+
+        QString ParseRoutingProfileBody(const QString &content, bool *off = nullptr) {
+            const auto text = DecodedSubscriptionText(content);
+            const QRegularExpression pattern(
+                R"(^\s*#\s*routing\s*:\s*(.+?)\s*$)",
+                QRegularExpression::CaseInsensitiveOption | QRegularExpression::MultilineOption);
+            const auto match = pattern.match(text);
+            if (!match.hasMatch()) return {};
+            return DecodeRoutingProfileParam(match.captured(1), off);
+        }
+
+        QStringList ParseDirectSites(const QString &routingProfileJson) {
+            QJsonParseError error{};
+            const auto doc = QJsonDocument::fromJson(routingProfileJson.toUtf8(), &error);
+            if (error.error != QJsonParseError::NoError || !doc.isObject()) return {};
+
+            const auto directSitesValue = doc.object().value(QStringLiteral("DirectSites"));
+            QStringList rawSites;
+            if (directSitesValue.isArray()) {
+                for (const auto &item: directSitesValue.toArray()) {
+                    if (item.isString()) rawSites << item.toString();
+                }
+            } else if (directSitesValue.isString()) {
+                rawSites << directSitesValue.toString();
+            }
+
+            QStringList sites;
+            QSet<QString> seen;
+            for (const auto &raw: rawSites) {
+                for (const auto &site: raw.split(QRegularExpression(QStringLiteral("[\\r\\n,]")), Qt::SkipEmptyParts)) {
+                    const auto trimmed = site.trimmed();
+                    if (trimmed.isEmpty() || seen.contains(trimmed)) continue;
+                    seen += trimmed;
+                    sites << trimmed;
+                }
+            }
+            return sites;
         }
 
         bool CanAutoUpdateGroup(const std::shared_ptr<ProxorGui::Group> &group) {
@@ -727,9 +851,21 @@ namespace ProxorGui_sub {
             MW_show_log(">>>>>>>> " + QObject::tr("Requesting subscription: %1").arg(groupName));
 
             auto resp = NetworkRequestHelper::HttpGet(content);
-            if (!resp.error.isEmpty()) {
-                MW_show_log("<<<<<<<< " + QObject::tr("Requesting subscription %1 error: %2").arg(groupName, resp.error + "\n" + resp.data));
-                return;
+            if (detail::IsSubscriptionResponseFailed(resp)) {
+                const auto primaryError = detail::SubscriptionRequestErrorText(resp);
+                const auto fallbackUrl = group == nullptr ? QString{} : detail::NormalizeFallbackUrl(group->fallback_url);
+                if (!fallbackUrl.isEmpty() && fallbackUrl != content) {
+                    MW_show_log(QObject::tr("Subscription %1 failed from main URL (%2), trying fallback URL.").arg(groupName, primaryError));
+                    resp = NetworkRequestHelper::HttpGet(fallbackUrl);
+                    if (detail::IsSubscriptionResponseFailed(resp)) {
+                        const auto fallbackError = detail::SubscriptionRequestErrorText(resp);
+                        MW_show_log("<<<<<<<< " + QObject::tr("Requesting subscription %1 fallback error: %2").arg(groupName, fallbackError + "\n" + resp.data));
+                        return;
+                    }
+                } else {
+                    MW_show_log("<<<<<<<< " + QObject::tr("Requesting subscription %1 error: %2").arg(groupName, primaryError + "\n" + resp.data));
+                    return;
+                }
             }
 
             content = resp.data;
@@ -737,23 +873,55 @@ namespace ProxorGui_sub {
 
             auto profileUpdateInterval = NetworkRequestHelper::GetHeader(resp.header, "profile-update-interval");
             auto updateAlways = NetworkRequestHelper::GetHeader(resp.header, "update-always");
+            auto pingOnOpen = NetworkRequestHelper::GetHeader(resp.header, "subscription-ping-onopen-enabled");
+            auto routingParam = NetworkRequestHelper::GetHeader(resp.header, "routing");
+            auto fallbackUrl = detail::NormalizeFallbackUrl(NetworkRequestHelper::GetHeader(resp.header, "fallback-url"));
+            if (fallbackUrl.isEmpty()) fallbackUrl = detail::NormalizeFallbackUrl(detail::ParseFallbackUrlBody(content));
 
             const auto intervalMinutes = detail::ParseAutoUpdateIntervalHeader(profileUpdateInterval);
             const auto alwaysUpdate = detail::ParseUpdateAlwaysHeader(updateAlways);
+            bool pingOnOpenHeaderValid = false;
+            auto pingOnOpenEnabled = detail::ParseSubscriptionPingOnOpenValue(pingOnOpen, &pingOnOpenHeaderValid);
+            bool pingOnOpenBodyFound = false;
+            if (!pingOnOpenHeaderValid) {
+                pingOnOpenEnabled = detail::ParseSubscriptionPingOnOpenBody(content, &pingOnOpenBodyFound);
+            }
+            bool routingOff = false;
+            auto routingProfile = detail::DecodeRoutingProfileParam(routingParam, &routingOff);
+            if (routingProfile.isEmpty() && !routingOff) {
+                routingProfile = detail::ParseRoutingProfileBody(content, &routingOff);
+            }
+            const auto directSites = routingOff ? QStringList{} : detail::ParseDirectSites(routingProfile);
             if (intervalMinutes > 0) {
                 MW_show_log(QObject::tr("Server recommends update interval: %1 minutes").arg(intervalMinutes));
             }
             if (alwaysUpdate) {
                 MW_show_log(QObject::tr("Server indicates always-update mode"));
             }
+            if (routingOff) {
+                MW_show_log(QObject::tr("Server disables subscription routing profile"));
+            } else if (!directSites.isEmpty()) {
+                MW_show_log(QObject::tr("Server provides %1 direct site rule(s)").arg(directSites.size()));
+            }
+            if (!fallbackUrl.isEmpty()) {
+                MW_show_log(QObject::tr("Server provides subscription fallback URL"));
+            }
             if (group != nullptr) {
                 if (group->skip_auto_update) {
-                    if (intervalMinutes > 0 || alwaysUpdate) {
+                    if (intervalMinutes > 0 || alwaysUpdate || pingOnOpenHeaderValid || pingOnOpenBodyFound ||
+                        routingOff || !directSites.isEmpty() || !fallbackUrl.isEmpty()) {
                         MW_show_log(QObject::tr("Ignoring subscription update headers because automatic update is disabled for this subscription."));
                     }
                 } else {
                     group->sub_update_interval = intervalMinutes;
                     group->sub_update_always = alwaysUpdate;
+                    group->subscription_ping_onopen_enabled = (pingOnOpenHeaderValid || pingOnOpenBodyFound) && pingOnOpenEnabled;
+                    if (routingOff || !routingParam.isEmpty() || !routingProfile.isEmpty()) {
+                        group->subscription_direct_sites = directSites;
+                    }
+                    if (!fallbackUrl.isEmpty()) {
+                        group->fallback_url = fallbackUrl;
+                    }
                 }
             }
 
@@ -823,7 +991,7 @@ namespace ProxorGui_sub {
                 for (const auto &ent: rawUpdater->updated_order) {
                     auto deleted_index = update_del.indexOf(ent);
                     if (deleted_index >= 0) {
-                        if (deleted_index >= update_keep.count()) continue; // should not happen
+                        if (deleted_index >= update_keep.count()) continue; // should not occur
                         auto ent2 = update_keep[deleted_index];
                         group->order.append(ent2->id);
                     } else {
@@ -903,4 +1071,8 @@ bool UI_has_scheduled_subscription_updates() {
         if (ProxorGui_sub::detail::GroupAutoUpdateIntervalMinutes(group) > 0) return true;
     }
     return false;
+}
+
+bool UI_subscription_updates_running() {
+    return UI_update_all_groups_Updating;
 }

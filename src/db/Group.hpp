@@ -11,6 +11,9 @@ namespace ProxorGui {
         bool skip_auto_update = false;
         int sub_update_interval = 0;
         bool sub_update_always = false;
+        bool subscription_ping_onopen_enabled = false;
+        QStringList subscription_direct_sites = {};
+        QString fallback_url = "";
         QString name = "";
         QString url = "";
         QString info = "";

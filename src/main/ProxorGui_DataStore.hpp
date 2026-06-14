@@ -157,6 +157,10 @@ namespace ProxorGui {
         // Routing
         QString custom_route_global = "{\"rules\": []}";
         QString active_routing = "Default";
+        // Direct site rules: JSON array of {"sites":[],"groups":[],"profiles":[]}.
+        // Each rule's sites are applied as direct/bypass for the targeted subscription groups and/or profiles.
+        QString direct_site_rules = "[]";
+        bool direct_sites_migrated = false; // one-time migration: moves Group::subscription_direct_sites into direct_site_rules
 
         // VPN
         bool fake_dns = true;

@@ -3,6 +3,9 @@
 #include <QDialog>
 #include <QMenu>
 #include <QTableWidget>
+#include <QListWidget>
+#include <QPlainTextEdit>
+#include <QPushButton>
 
 #include "3rdparty/qv2ray/v2/ui/QvAutoCompleteTextEdit.hpp"
 #include "main/ProxorGui.hpp"
@@ -45,6 +48,17 @@ private:
     //
     QTableWidget *hostsMapTable = nullptr;
     //
+    struct DirectSiteRule {
+        QList<int> groups;
+        QList<int> profiles;
+        QStringList sites;
+    };
+    QList<DirectSiteRule> directSiteRules;
+    int directSitesCurrent = -1;
+    QListWidget *directSitesList = nullptr;
+    QPlainTextEdit *directSitesEditor = nullptr;
+    QPushButton *directSitesTargetsBtn = nullptr;
+    //
     ProxorGui::Routing routing_cn_lan = ProxorGui::Routing(1);
     ProxorGui::Routing routing_global = ProxorGui::Routing(0);
     //
@@ -52,6 +66,14 @@ private:
     QString active_routing;
 
     void wrapTabPagesInScrollAreas();
+
+    void buildDirectSitesTab();
+    void loadDirectSiteRules();
+    [[nodiscard]] QString serializedDirectSiteRules() const;
+    void commitDirectSitesEditor();
+    void refreshDirectSitesList();
+    void refreshDirectSitesDetail();
+    [[nodiscard]] QString directSiteRuleSummary(const DirectSiteRule &rule) const;
 
 public slots:
 

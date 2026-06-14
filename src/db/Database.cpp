@@ -745,6 +745,9 @@ namespace ProxorGui {
         _add(new configItem("skip_auto_update", &skip_auto_update, itemType::boolean));
         _add(new configItem("sub_update_interval", &sub_update_interval, itemType::integer));
         _add(new configItem("sub_update_always", &sub_update_always, itemType::boolean));
+        _add(new configItem("subscription_ping_onopen_enabled", &subscription_ping_onopen_enabled, itemType::boolean));
+        _add(new configItem("subscription_direct_sites", &subscription_direct_sites, itemType::stringList));
+        _add(new configItem("fallback_url", &fallback_url, itemType::string));
         _add(new configItem("name", &name, itemType::string));
         _add(new configItem("order", &order, itemType::integerList));
         _add(new configItem("url", &url, itemType::string));

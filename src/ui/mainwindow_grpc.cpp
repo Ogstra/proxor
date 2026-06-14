@@ -74,13 +74,23 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
         return;
     }
 
-    auto profiles = get_selected_or_group();
-    if (test_group) profiles = ProxorGui::profileManager->CurrentGroup()->ProfilesWithOrder();
-    if (profiles.isEmpty()) return;
     auto group = ProxorGui::profileManager->CurrentGroup();
-    if (group->archive) return;
+    if (group == nullptr || group->archive) return;
+    auto profiles = test_group ? group->ProfilesWithOrder() : get_selected_or_group();
+    if (profiles.isEmpty()) return;
+
+    speedtest_profiles(profiles, mode, test_group);
+}
+
+void MainWindow::speedtest_profiles(const QList<std::shared_ptr<ProxorGui::ProxyEntity>> &profiles, int mode, bool groupedLogs, bool logFailuresOnly) {
+    if (profiles.isEmpty()) return;
 
 #ifndef NKR_NO_GRPC
+    if (speedtesting) {
+        if (!logFailuresOnly) MW_show_log(QObject::tr("A speed test is already running; ignoring the new request."));
+        return;
+    }
+
     QStringList full_test_flags;
     if (mode == libcore::FullTest) {
         auto w = new QDialog(this);
@@ -118,7 +128,7 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
     }
     speedtesting = true;
 
-    runOnNewThread([this, profiles, mode, full_test_flags, test_group]() {
+    runOnNewThread([this, profiles, mode, full_test_flags, groupedLogs, logFailuresOnly]() {
         QMutex lock_write;
         QMutex lock_return;
         QMutex lock_results;
@@ -178,7 +188,7 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
                         if (!c->error.isEmpty()) {
                             profile->full_test_report = c->error;
                             ProxorGui::profileManager->SaveProfile(profile);
-                            if (test_group) {
+                            if (groupedLogs) {
                                 lock_results.lock();
                                 final_logs[profile_log_index.value(profile->id)] = tr("[%1] test error: %2").arg(profile->bean->DisplayTypeAndName(), c->error);
                                 lock_results.unlock();
@@ -238,7 +248,7 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
                     }
                     //
                     if (!rpcOK) {
-                        if (test_group) {
+                        if (groupedLogs) {
                             lock_results.lock();
                             final_logs[profile_log_index.value(profile->id)] = tr("[%1] test error: RPC failed").arg(profile->bean->DisplayTypeAndName());
                             lock_results.unlock();
@@ -261,7 +271,7 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
                     } else if (!result.full_report().empty()) {
                         result_log = tr("[%1] %2").arg(profile->bean->DisplayTypeAndName(), result.full_report().c_str());
                     }
-                    if (test_group) {
+                    if (groupedLogs && (!logFailuresOnly || !result.error().empty())) {
                         lock_results.lock();
                         final_logs[profile_log_index.value(profile->id)] = result_log;
                         lock_results.unlock();
@@ -281,7 +291,7 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
         lock_return.lock();
         lock_return.unlock();
         speedtesting = false;
-        if (test_group) {
+        if (groupedLogs) {
             lock_results.lock();
             auto logs = final_logs;
             lock_results.unlock();
@@ -290,7 +300,7 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
                 MW_show_log(logs.join("\n"));
             }
         }
-        MW_show_log(QObject::tr("Speedtest finished."));
+        if (!logFailuresOnly) MW_show_log(QObject::tr("Speedtest finished."));
     });
 #endif
 }

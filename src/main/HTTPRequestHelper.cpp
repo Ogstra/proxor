@@ -68,7 +68,7 @@ namespace ProxorGui_network {
         // Wait for response
         QTimer abortTimer;
         abortTimer.setSingleShot(true);
-        abortTimer.setInterval(10000);
+        abortTimer.setInterval(9000);
         QObject::connect(&abortTimer, &QTimer::timeout, _reply, &QNetworkReply::abort);
         abortTimer.start();
         {
@@ -78,8 +78,9 @@ namespace ProxorGui_network {
         }
         abortTimer.stop();
         //
+        const auto statusCode = _reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         auto result = ProxorHttpResponse{_reply->error() == QNetworkReply::NetworkError::NoError ? "" : _reply->errorString(),
-                                       _reply->readAll(), _reply->rawHeaderPairs()};
+                                       _reply->readAll(), _reply->rawHeaderPairs(), statusCode};
         _reply->deleteLater();
         return result;
     }

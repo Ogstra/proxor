@@ -598,6 +598,12 @@ For more information, see the document &quot;Configuration/DNS&quot;.</string>
        </item>
       </layout>
      </widget>
+     <widget class="QWidget" name="tab_direct_sites">
+      <attribute name="title">
+       <string>Direct Sites</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="directSitesLayout"/>
+     </widget>
     </widget>
    </item>
    <item>
