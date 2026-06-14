@@ -6,8 +6,10 @@
 #include "main/GuiUtils.hpp"
 #include "fmt/Preset.hpp"
 #include "ui/ThemeManager.hpp"
+#include "db/Database.hpp"
 
 #include <QFile>
+#include <QSet>
 #include <QMessageBox>
 #include <QListWidget>
 #include <QLineEdit>
