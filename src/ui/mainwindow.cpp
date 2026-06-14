@@ -371,8 +371,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     // One-time migration: move per-subscription direct sites into the global direct site rules.
     if (!ProxorGui::dataStore->direct_sites_migrated) {
         QJsonArray rules;
-        for (const auto gid: ProxorGui::profileManager->groupsIdOrder) {
-            const auto group = ProxorGui::profileManager->GetGroup(gid);
+        for (const auto &[gid, group]: ProxorGui::profileManager->groups) {
             if (group == nullptr || group->subscription_direct_sites.isEmpty()) continue;
             rules += QJsonObject{
                 {"sites", QJsonArray::fromStringList(group->subscription_direct_sites)},
