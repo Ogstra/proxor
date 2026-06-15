@@ -69,10 +69,7 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
         return;
     }
 
-    if (speedtesting) {
-        MW_show_log(QObject::tr("A speed test is already running; ignoring the new request."));
-        return;
-    }
+    if (speedtesting) return;
 
     auto group = ProxorGui::profileManager->CurrentGroup();
     if (group == nullptr || group->archive) return;
@@ -82,14 +79,11 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
     speedtest_profiles(profiles, mode, test_group);
 }
 
-void MainWindow::speedtest_profiles(const QList<std::shared_ptr<ProxorGui::ProxyEntity>> &profiles, int mode, bool groupedLogs, bool logFailuresOnly) {
+void MainWindow::speedtest_profiles(const QList<std::shared_ptr<ProxorGui::ProxyEntity>> &profiles, int mode, bool groupedLogs, bool logFailuresOnly, bool silent) {
     if (profiles.isEmpty()) return;
 
 #ifndef NKR_NO_GRPC
-    if (speedtesting) {
-        if (!logFailuresOnly) MW_show_log(QObject::tr("A speed test is already running; ignoring the new request."));
-        return;
-    }
+    if (speedtesting) return;
 
     QStringList full_test_flags;
     if (mode == libcore::FullTest) {
@@ -128,7 +122,7 @@ void MainWindow::speedtest_profiles(const QList<std::shared_ptr<ProxorGui::Proxy
     }
     speedtesting = true;
 
-    runOnNewThread([this, profiles, mode, full_test_flags, groupedLogs, logFailuresOnly]() {
+    runOnNewThread([this, profiles, mode, full_test_flags, groupedLogs, logFailuresOnly, silent]() {
         QMutex lock_write;
         QMutex lock_return;
         QMutex lock_results;
@@ -178,7 +172,7 @@ void MainWindow::speedtest_profiles(const QList<std::shared_ptr<ProxorGui::Proxy
                     std::list<std::shared_ptr<ProxorGui_sys::ExternalProcess>> extCs;
                     QSemaphore extSem;
 
-                    if (mode == libcore::TestMode::UrlTest || mode == libcore::FullTest) {
+                    if (mode == libcore::TestMode::UrlTest || mode == libcore::FullTest || mode == libcore::HeadPing) {
                         if (!profile->EnsureHydrated()) {
                             profile->full_test_report = tr("Profile is not hydrated");
                             ProxorGui::profileManager->SaveProfile(profile);
@@ -188,7 +182,7 @@ void MainWindow::speedtest_profiles(const QList<std::shared_ptr<ProxorGui::Proxy
                         if (!c->error.isEmpty()) {
                             profile->full_test_report = c->error;
                             ProxorGui::profileManager->SaveProfile(profile);
-                            if (groupedLogs) {
+                            if (groupedLogs && !silent) {
                                 lock_results.lock();
                                 final_logs[profile_log_index.value(profile->id)] = tr("[%1] test error: %2").arg(profile->bean->DisplayTypeAndName(), c->error);
                                 lock_results.unlock();
@@ -230,6 +224,13 @@ void MainWindow::speedtest_profiles(const QList<std::shared_ptr<ProxorGui::Proxy
                             continue;
                         }
                         req.set_address(profile->bean->DisplayAddress().toStdString());
+                    } else if (mode == libcore::IcmpPing) {
+                        if (!profile->EnsureHydrated()) {
+                            profile->full_test_report = tr("Profile is not hydrated");
+                            ProxorGui::profileManager->SaveProfile(profile);
+                            continue;
+                        }
+                        req.set_address(profile->bean->serverAddress.toStdString());
                     }
 
                     bool rpcOK;
@@ -248,7 +249,7 @@ void MainWindow::speedtest_profiles(const QList<std::shared_ptr<ProxorGui::Proxy
                     }
                     //
                     if (!rpcOK) {
-                        if (groupedLogs) {
+                        if (groupedLogs && !silent) {
                             lock_results.lock();
                             final_logs[profile_log_index.value(profile->id)] = tr("[%1] test error: RPC failed").arg(profile->bean->DisplayTypeAndName());
                             lock_results.unlock();
@@ -271,11 +272,11 @@ void MainWindow::speedtest_profiles(const QList<std::shared_ptr<ProxorGui::Proxy
                     } else if (!result.full_report().empty()) {
                         result_log = tr("[%1] %2").arg(profile->bean->DisplayTypeAndName(), result.full_report().c_str());
                     }
-                    if (groupedLogs && (!logFailuresOnly || !result.error().empty())) {
+                    if (groupedLogs && !silent && (!logFailuresOnly || !result.error().empty())) {
                         lock_results.lock();
                         final_logs[profile_log_index.value(profile->id)] = result_log;
                         lock_results.unlock();
-                    } else if (!result_log.isEmpty()) {
+                    } else if (!silent && !groupedLogs && !result_log.isEmpty()) {
                         MW_show_log(result_log);
                     }
 
@@ -291,7 +292,7 @@ void MainWindow::speedtest_profiles(const QList<std::shared_ptr<ProxorGui::Proxy
         lock_return.lock();
         lock_return.unlock();
         speedtesting = false;
-        if (groupedLogs) {
+        if (groupedLogs && !silent) {
             lock_results.lock();
             auto logs = final_logs;
             lock_results.unlock();
@@ -300,7 +301,7 @@ void MainWindow::speedtest_profiles(const QList<std::shared_ptr<ProxorGui::Proxy
                 MW_show_log(logs.join("\n"));
             }
         }
-        if (!logFailuresOnly) MW_show_log(QObject::tr("Speedtest finished."));
+        if (!logFailuresOnly && !silent) MW_show_log(QObject::tr("Speedtest finished."));
     });
 #endif
 }

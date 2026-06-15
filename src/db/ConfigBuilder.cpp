@@ -538,6 +538,18 @@ namespace ProxorGui {
             inboundObj["stack"] = Preset::SingBox::VpnImplementation.value(dataStore->vpn_implementation);
             inboundObj["strict_route"] = dataStore->vpn_strict_route;
             inboundObj["address"] = BuildTunAddressArray(dataStore->vpn_ipv6);
+#ifdef Q_OS_WIN
+            // Exclude Windows NCSI/NLA probe destinations from the TUN default route so they
+            // travel over the real underlying adapter. Without this, Windows Network Location
+            // Awareness marks the TUN network "No internet" (globe icon) because its HTTP/DNS
+            // connectivity probes fail through the tunnel, and then shows an Ethernet icon
+            // (wintun registers as Ethernet media type) instead of the real WiFi icon.
+            inboundObj["route_exclude_address"] = QJsonArray{
+                "13.107.4.52/32",    // www.msftconnecttest.com — primary NCSI HTTP probe
+                "23.103.160.10/32",  // legacy NCSI probe target
+                "131.107.255.255/32" // dns.msftncsi.com — expected NCSI DNS answer IP
+            };
+#endif
             status->inbounds += inboundObj;
         }
 

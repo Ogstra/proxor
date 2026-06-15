@@ -33,6 +33,8 @@ enum TestMode {
   TcpPing = 0;
   UrlTest = 1;
   FullTest = 2;
+  IcmpPing = 3;
+  HeadPing = 4;
 }
 
 message TestReq {

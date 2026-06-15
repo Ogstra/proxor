@@ -368,6 +368,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     // Load Manager
     ProxorGui::profileManager->LoadManager();
 
+    // Test results are per-session: clear persisted latency/report on startup so the table
+    // never shows stale ping values from a previous run (possibly a different network).
+    for (const auto &[id, profile]: ProxorGui::profileManager->profiles) {
+        if (profile == nullptr) continue;
+        profile->latency = 0;
+        profile->full_test_report.clear();
+    }
+
     // One-time migration: move per-subscription direct sites into the global direct site rules.
     if (!ProxorGui::dataStore->direct_sites_migrated) {
         QJsonArray rules;
@@ -590,7 +598,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         ui->checkBox_SystemProxy->setMinimumHeight(bottomCheckboxHeight);
         ui->checkBox_SystemProxy->setMaximumHeight(bottomCheckboxHeight);
     }, this, 0);
-    connect(ui->toolButton_url_test, &QToolButton::clicked, this, [=] { speedtest_current_group(1, true); });
+    connect(ui->toolButton_url_test, &QToolButton::clicked, this, [=] {
+        const int m = ProxorGui::dataStore->ping_type == 1 ? 3 : (ProxorGui::dataStore->ping_type == 2 ? 4 : 0);
+        speedtest_current_group(m, true);
+    });
     connect(ui->toolButton_update_subscription, &QToolButton::clicked, this, [=] { on_menu_update_subscription_triggered(); });
 
     // Setup log UI
@@ -1059,7 +1070,7 @@ void MainWindow::run_subscription_ping_on_open(int attempts) {
 
     if (profiles.isEmpty()) return;
 
-    speedtest_profiles(profiles, 1, true, true);
+    speedtest_profiles(profiles, 3, true, true, true); // ICMP, silent
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {

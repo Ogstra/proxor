@@ -27,6 +27,8 @@ const (
 	TestMode_TcpPing  TestMode = 0
 	TestMode_UrlTest  TestMode = 1
 	TestMode_FullTest TestMode = 2
+	TestMode_IcmpPing TestMode = 3
+	TestMode_HeadPing TestMode = 4
 )
 
 // Enum value maps for TestMode.
@@ -35,11 +37,15 @@ var (
 		0: "TcpPing",
 		1: "UrlTest",
 		2: "FullTest",
+		3: "IcmpPing",
+		4: "HeadPing",
 	}
 	TestMode_value = map[string]int32{
 		"TcpPing":  0,
 		"UrlTest":  1,
 		"FullTest": 2,
+		"IcmpPing": 3,
+		"HeadPing": 4,
 	}
 )
 

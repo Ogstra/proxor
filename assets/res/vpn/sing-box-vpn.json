@@ -56,7 +56,12 @@
             "strict_route": %STRICT_ROUTE%,
             "stack": "%STACK%",
             "endpoint_independent_nat": true,
-            "sniff": false
+            "sniff": false,
+            "route_exclude_address": [
+                "13.107.4.52/32",
+                "23.103.160.10/32",
+                "131.107.255.255/32"
+            ]
         }
     ],
     "outbounds": [
