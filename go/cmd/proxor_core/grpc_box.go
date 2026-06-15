@@ -5,8 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
+	"time"
 
 	"grpc_server"
 	"grpc_server/gen"
@@ -27,6 +31,73 @@ import (
 
 type server struct {
 	grpc_server.BaseServer
+}
+
+func isTunAddressConflict(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "already exists") && strings.Contains(msg, "address")
+}
+
+func tunAddressesFromConfig(coreConfig string) []string {
+	var cfg struct {
+		Inbounds []struct {
+			Type    string   `json:"type"`
+			Address []string `json:"address"`
+		} `json:"inbounds"`
+	}
+	if err := json.Unmarshal([]byte(coreConfig), &cfg); err != nil {
+		return nil
+	}
+	var out []string
+	for _, ib := range cfg.Inbounds {
+		if ib.Type != "tun" {
+			continue
+		}
+		for _, a := range ib.Address {
+			ip, _, err := net.ParseCIDR(a)
+			if err != nil {
+				ip = net.ParseIP(a)
+			}
+			if ip != nil && ip.To4() != nil {
+				out = append(out, ip.String())
+			}
+		}
+	}
+	return out
+}
+
+func cleanupLeftoverTunAddress(coreConfig string) {
+	if runtime.GOOS != "windows" {
+		return
+	}
+	addrs := tunAddressesFromConfig(coreConfig)
+	if len(addrs) == 0 {
+		return
+	}
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return
+	}
+	for _, ifi := range ifaces {
+		ifAddrs, err := ifi.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, a := range ifAddrs {
+			ip, _, err := net.ParseCIDR(a.String())
+			if err != nil {
+				continue
+			}
+			for _, target := range addrs {
+				if ip.String() == target {
+					_ = exec.Command("netsh", "interface", "ipv4", "delete", "address", "name="+ifi.Name, "address="+target).Run()
+				}
+			}
+		}
+	}
 }
 
 func (s *server) Validate(ctx context.Context, in *gen.LoadConfigReq) (out *gen.ErrorResp, _ error) {
@@ -64,6 +135,19 @@ func (s *server) Start(ctx context.Context, in *gen.LoadConfigReq) (out *gen.Err
 	}
 
 	instance, instance_cancel, err = boxmain.Create([]byte(in.CoreConfig))
+
+	// A previous unclean exit can leave the wintun adapter holding the TUN address,
+	// making startup fail with "set ipv4 address: the object already exists".
+	// Remove the leftover address and retry.
+	for attempt := 0; attempt < 3 && err != nil && isTunAddressConflict(err); attempt++ {
+		if instance != nil {
+			instance.Close()
+			instance = nil
+		}
+		cleanupLeftoverTunAddress(in.CoreConfig)
+		time.Sleep(300 * time.Millisecond)
+		instance, instance_cancel, err = boxmain.Create([]byte(in.CoreConfig))
+	}
 
 	if instance != nil {
 		// V2ray Service
@@ -114,7 +198,7 @@ func (s *server) Test(ctx context.Context, in *gen.TestReq) (out *gen.TestResp, 
 		}
 	}()
 
-	if in.Mode == gen.TestMode_UrlTest {
+	if in.Mode == gen.TestMode_UrlTest || in.Mode == gen.TestMode_HeadPing {
 		var i *box.Box
 		var cancel context.CancelFunc
 		if in.Config != nil {
@@ -134,10 +218,15 @@ func (s *server) Test(ctx context.Context, in *gen.TestReq) (out *gen.TestResp, 
 				return
 			}
 		}
-		// Latency
-		out.Ms, err = speedtest.UrlTest(boxapi.CreateProxyHttpClient(i), in.Url, in.Timeout, speedtest.UrlTestStandard_RTT)
+		method := "GET"
+		if in.Mode == gen.TestMode_HeadPing {
+			method = "HEAD"
+		}
+		out.Ms, err = speedtest.UrlTest(boxapi.CreateProxyHttpClient(i), in.Url, in.Timeout, speedtest.UrlTestStandard_RTT, method)
 	} else if in.Mode == gen.TestMode_TcpPing {
 		out.Ms, err = speedtest.TcpPing(in.Address, in.Timeout)
+	} else if in.Mode == gen.TestMode_IcmpPing {
+		out.Ms, err = speedtest.IcmpPing(in.Address, in.Timeout)
 	} else if in.Mode == gen.TestMode_FullTest {
 		i, cancel, err := boxmain.Create([]byte(in.Config.CoreConfig))
 		if i != nil {

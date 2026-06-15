@@ -128,26 +128,60 @@
          <property name="title">
           <string>Latency Test</string>
          </property>
-         <layout class="QHBoxLayout" name="horizontalLayout_9" stretch="0,8,1,1">
+         <layout class="QVBoxLayout" name="verticalLayout_latency">
           <item>
-             <widget class="QLabel" name="label_13">
+           <layout class="QHBoxLayout" name="horizontalLayout_latency_top" stretch="0,1,0,1">
+            <item>
+             <widget class="QLabel" name="label_ping_type">
               <property name="text">
-               <string>HTTP Latency Test URL</string>
+               <string>Ping Type</string>
               </property>
              </widget>
+            </item>
+            <item>
+             <widget class="QComboBox" name="ping_type">
+              <item>
+               <property name="text">
+                <string notr="true">TCP</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string notr="true">ICMP</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string notr="true">HEAD</string>
+               </property>
+              </item>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="label_14">
+              <property name="text">
+               <string>Concurrent</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLineEdit" name="test_concurrent"/>
+            </item>
+           </layout>
           </item>
           <item>
-           <widget class="QLineEdit" name="test_latency_url"/>
-          </item>
-          <item>
-           <widget class="QLabel" name="label_14">
-            <property name="text">
-             <string>Concurrent</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QLineEdit" name="test_concurrent"/>
+           <layout class="QHBoxLayout" name="horizontalLayout_9" stretch="0,8">
+            <item>
+             <widget class="QLabel" name="label_13">
+              <property name="text">
+               <string>HTTP Test URL</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLineEdit" name="test_latency_url"/>
+            </item>
+           </layout>
           </item>
          </layout>
         </widget>
@@ -188,39 +222,11 @@
          </property>
          <layout class="QVBoxLayout" name="verticalLayout_updates_group">
           <item>
-           <layout class="QHBoxLayout" name="horizontalLayout_18">
-            <item>
-             <widget class="QCheckBox" name="check_update_on_start">
-              <property name="text">
-               <string>Check program updates on start</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="Line" name="sys_proxy_format_vline">
-              <property name="orientation">
-               <enum>Qt::Vertical</enum>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QCheckBox" name="old_share_link_format">
-              <property name="toolTip">
-               <string>Share VMess Link with v2rayN Format</string>
-              </property>
-              <property name="text">
-               <string>Old Share Link Format</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QPushButton" name="sys_proxy_format">
-              <property name="text">
-               <string>System proxy format</string>
-              </property>
-             </widget>
-            </item>
-           </layout>
+           <widget class="QCheckBox" name="check_update_on_start">
+            <property name="text">
+             <string>Check program updates on start</string>
+            </property>
+           </widget>
           </item>
           <item>
            <widget class="QCheckBox" name="check_include_pre">
@@ -231,8 +237,8 @@
              <string>Include prerelease updates</string>
             </property>
            </widget>
-         </item>
-        </layout>
+          </item>
+         </layout>
        </widget>
       </item>
        <item>
@@ -261,6 +267,40 @@
              <string>Allow other devices to connect</string>
             </property>
            </widget>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_app_misc">
+            <item>
+             <widget class="QCheckBox" name="old_share_link_format">
+              <property name="toolTip">
+               <string>Share VMess Link with v2rayN Format</string>
+              </property>
+              <property name="text">
+               <string>Old Share Link Format</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="sys_proxy_format">
+              <property name="text">
+               <string>System proxy format</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer_app_misc">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
           </item>
          </layout>
         </widget>

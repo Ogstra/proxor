@@ -265,6 +265,7 @@ namespace ProxorGui {
         _add(new configItem("mux_default_on", &mux_default_on, itemType::boolean));
         _add(new configItem("traffic_loop_interval", &traffic_loop_interval, itemType::integer));
         _add(new configItem("test_concurrent", &test_concurrent, itemType::integer));
+        _add(new configItem("ping_type", &ping_type, itemType::integer));
         _add(new configItem("theme", &theme, itemType::string));
         _add(new configItem("custom_inbound", &custom_inbound, itemType::string));
         _add(new configItem("custom_route", &custom_route_global, itemType::string));

@@ -259,6 +259,7 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     D_LOAD_INT(test_download_timeout)
     D_LOAD_STRING(test_latency_url)
     D_LOAD_STRING(test_download_url)
+    ui->ping_type->setCurrentIndex(ProxorGui::dataStore->ping_type);
     D_LOAD_BOOL(old_share_link_format)
     ui->start_with_system->setChecked(AutoRun_IsEnabled());
     ui->remember_enable->setChecked(ProxorGui::dataStore->remember_enable);
@@ -437,6 +438,7 @@ void DialogBasicSettings::accept() {
     D_SAVE_INT(test_download_timeout)
     D_SAVE_STRING(test_latency_url)
     D_SAVE_STRING(test_download_url)
+    ProxorGui::dataStore->ping_type = ui->ping_type->currentIndex();
     D_SAVE_BOOL(old_share_link_format)
     AutoRun_SetEnabled(ui->start_with_system->isChecked());
     ProxorGui::dataStore->remember_enable = ui->remember_enable->isChecked();

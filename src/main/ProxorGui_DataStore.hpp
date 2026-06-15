@@ -99,6 +99,7 @@ namespace ProxorGui {
         QString test_download_url = "https://sao-br-ping.vultr.com/vultr.com.100MB.bin";
         int test_download_timeout = 30;
         int test_concurrent = 5;
+        int ping_type = 0; // 0=TCP, 1=ICMP, 2=HEAD
         bool old_share_link_format = true;
         int traffic_loop_interval = 1000;
         bool connection_statistics = true;
