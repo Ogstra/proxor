@@ -309,6 +309,11 @@ namespace ProxorGui_rpc {
     }
 
     libcore::UpdateResp Client::QueryUpdateProgress(bool *ok) {
+        if (ProxorGui_rpc::defaultClient == nullptr) {
+            *ok = false;
+            libcore::UpdateResp empty;
+            return empty;
+        }
         libcore::UpdateReq req;
         req.set_action(libcore::UpdateAction::QueryProgress);
         return ProxorGui_rpc::defaultClient->Update(ok, req);

@@ -16,6 +16,10 @@ namespace ProxorGui_traffic {
 
     TrafficData *TrafficLooper::update_stats(TrafficData *item) {
 #ifndef NKR_NO_GRPC
+        // The core may not have finished starting up yet. Leave last_update
+        // untouched so the next successful poll measures a real interval.
+        if (ProxorGui_rpc::defaultClient == nullptr) return nullptr;
+
         // last update
         auto now = elapsedTimer.elapsed();
         auto interval = now - item->last_update;
@@ -45,6 +49,7 @@ namespace ProxorGui_traffic {
 
     QJsonArray TrafficLooper::get_connection_list() {
 #ifndef NKR_NO_GRPC
+        if (ProxorGui_rpc::defaultClient == nullptr) return QJsonArray{};
         auto str = ProxorGui_rpc::defaultClient->ListConnections();
         QJsonDocument jsonDocument = QJsonDocument::fromJson(str.c_str());
         return jsonDocument.array();

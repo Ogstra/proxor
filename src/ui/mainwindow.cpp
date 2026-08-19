@@ -947,6 +947,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     if (!ProxorGui::dataStore->core_enable_color) args.push_back("-disable-color");
     if (ProxorGui::dataStore->flag_debug) args.push_back("-debug");
 
+    // Set up the gRPC client synchronously, before anything can use it.
+    // This only needs core_port/core_token (assigned above) — the Client
+    // constructor opens no connection, the channel is built per Call().
+    // Doing it inside the DS_cores lambda below raced against the startup
+    // update check, which runs off its own UI-thread timer and dereferenced
+    // a still-null defaultClient.
+    setup_grpc();
+
     // Start core
     runOnUiThread(
         [=] {
@@ -957,7 +965,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             }
             // Setup
             core_process->Start();
-            setup_grpc();
         },
         DS_cores);
 
