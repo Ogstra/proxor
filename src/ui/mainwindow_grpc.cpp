@@ -617,6 +617,17 @@ void MainWindow::CheckUpdate(bool silent) {
     // on new thread...
 #ifndef NKR_NO_GRPC
 
+    // The core may not have finished starting up yet.
+    if (ProxorGui_rpc::defaultClient == nullptr) {
+        if (!silent) {
+            runOnUiThread([=] {
+                MessageBoxWarning(QObject::tr("Update"),
+                                  QObject::tr("The core is still starting. Please try again in a moment."));
+            });
+        }
+        return;
+    }
+
     bool ok;
     libcore::UpdateReq request;
     request.set_action(libcore::UpdateAction::Check);
@@ -665,6 +676,7 @@ void MainWindow::CheckUpdate(bool silent) {
                 updateProgressDialog->show();
 
                 runOnNewThread([=] {
+                    if (ProxorGui_rpc::defaultClient == nullptr) return;
                     bool ok2;
                     libcore::UpdateReq request2;
                     request2.set_action(libcore::UpdateAction::Download);
