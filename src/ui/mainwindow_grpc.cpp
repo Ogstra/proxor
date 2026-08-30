@@ -617,8 +617,10 @@ void MainWindow::CheckUpdate(bool silent) {
     // on new thread...
 #ifndef NKR_NO_GRPC
 
-    // The core may not have finished starting up yet.
-    if (ProxorGui_rpc::defaultClient == nullptr) {
+    // The core may not have finished starting up yet. The client may not exist,
+    // and even once it does, Call() short-circuits with -1919 until the core
+    // reports "grpc server listening" -- which NOT_OK would surface as an [Error].
+    if (ProxorGui_rpc::defaultClient == nullptr || !ProxorGui::dataStore->core_running) {
         if (!silent) {
             runOnUiThread([=] {
                 MessageBoxWarning(QObject::tr("Update"),
