@@ -6,22 +6,51 @@
 #include <QPalette>
 #include <QRegularExpression>
 
+// Code spans are pulled out before emphasis runs, so markers inside backticks are left
+// alone. U+E000 is a private-use codepoint and cannot appear in HTML-escaped input.
+static const QChar kCodeSentinel(0xE000);
+
 static QString inlineFormat(const QString &raw) {
     QString s = raw.toHtmlEscaped();
-    s.replace(QRegularExpression("\\*\\*(.+?)\\*\\*"), "<strong>\\1</strong>");
-    s.replace(QRegularExpression("\\*(.+?)\\*"),       "<em>\\1</em>");
-    s.replace(QRegularExpression("`([^`]+)`"),          "<code>\\1</code>");
-    s.replace(QRegularExpression("\\[([^\\]]+)\\]\\(([^)]+)\\)"), "<a href=\"\\2\">\\1</a>");
+
+    QStringList codeSpans;
+    static QRegularExpression codeRe("`([^`]+)`");
+    forever {
+        auto m = codeRe.match(s);
+        if (!m.hasMatch()) break;
+        s.replace(m.capturedStart(), m.capturedLength(),
+                  QString(kCodeSentinel) + QString::number(codeSpans.size()) + QString(kCodeSentinel));
+        codeSpans << m.captured(1);
+    }
+
+    // Bold before italic, so ** is not consumed by the single-marker rules. Requiring a
+    // non-space at both edges keeps a lone marker (e.g. "*.zip and *.msi") inert.
+    s.replace(QRegularExpression("\*\*(?=\S)(.+?)(?<=\S)\*\*"), "<strong>\1</strong>");
+    s.replace(QRegularExpression("(?<![\w])__(?=\S)(.+?)(?<=\S)__(?![\w])"), "<strong>\1</strong>");
+    s.replace(QRegularExpression("\*(?=\S)([^*]+?)(?<=\S)\*"), "<em>\1</em>");
+    s.replace(QRegularExpression("(?<![\w_])_(?=\S)([^_]+?)(?<=\S)_(?![\w_])"), "<em>\1</em>");
+
+    s.replace(QRegularExpression("\[([^\]]+)\]\(([^)]+)\)"), "<a href=\"\2\">\1</a>");
+
+    for (int i = 0; i < codeSpans.size(); ++i) {
+        s.replace(QString(kCodeSentinel) + QString::number(i) + QString(kCodeSentinel),
+                  "<code>" + codeSpans.at(i) + "</code>");
+    }
     return s;
 }
 
 static QString mdToHtml(const QString &md, const QString &codeBg, const QString &border, const QString &fg) {
     QStringList lines = md.split('\n');
     QString body;
-    bool inList = false;
-    bool inOl   = false;
-    bool inPre  = false;
+    bool inPre = false;
+    bool inQuote = false;
     QString preLines;
+
+    // Open list levels, outermost first. Each entry is "ul" or "ol"; its index is the
+    // nesting depth, and indents map onto it so a bullet indented under another nests
+    // instead of falling through to the paragraph branch.
+    QStringList listStack;
+    QList<int> listIndents;
 
     // Use <p> instead of <h1>/<h2> — Qt forces block margins on heading tags ignoring inline styles
     auto hStyle = [&](int px, bool bottomBorder = true) {
@@ -34,14 +63,40 @@ static QString mdToHtml(const QString &md, const QString &codeBg, const QString 
     QString liStyle = "style=\"margin-top:1px; margin-bottom:1px; line-height:1.35;\"";
 
     auto closeList = [&] {
-        if (inList) { body += "</ul>\n"; inList = false; }
-        if (inOl)   { body += "</ol>\n"; inOl   = false; }
+        while (!listStack.isEmpty()) {
+            body += "</" + listStack.takeLast() + ">\n";
+            listIndents.removeLast();
+        }
+    };
+    auto closeQuote = [&] {
+        if (inQuote) { body += "</blockquote>\n"; inQuote = false; }
+    };
+    auto closeBlocks = [&] { closeList(); closeQuote(); };
+
+    // Open/close nesting levels until the innermost open list matches this indent.
+    auto syncList = [&](const QString &kind, int indent) {
+        while (!listStack.isEmpty() && listIndents.last() > indent) {
+            body += "</" + listStack.takeLast() + ">\n";
+            listIndents.removeLast();
+        }
+        if (!listStack.isEmpty() && listIndents.last() == indent && listStack.last() != kind) {
+            body += "</" + listStack.takeLast() + ">\n";
+            listIndents.removeLast();
+        }
+        if (listStack.isEmpty() || listIndents.last() < indent) {
+            body += "<" + kind + " style=\"margin:0 0 4px 0; padding-left:1.6em;\">\n";
+            listStack << kind;
+            listIndents << indent;
+        }
     };
 
-    for (const QString &raw : lines) {
-        if (raw.startsWith("```")) {
+    for (QString raw : lines) {
+        // Release bodies arrive over the GitHub API with CRLF; split('\n') leaves the \r.
+        if (raw.endsWith('\r')) raw.chop(1);
+
+        if (raw.trimmed().startsWith("```")) {
             if (!inPre) {
-                closeList();
+                closeBlocks();
                 inPre = true;
                 preLines.clear();
             } else {
@@ -60,41 +115,53 @@ static QString mdToHtml(const QString &md, const QString &codeBg, const QString 
         }
         if (inPre) { preLines += raw.toHtmlEscaped() + "\n"; continue; }
 
-        if (raw.startsWith("#### ")) { closeList(); body += "<p style=\"font-size:13px; font-weight:600; margin-top:4px; margin-bottom:1px; line-height:1.2;\">" + inlineFormat(raw.mid(5)) + "</p>\n"; continue; }
-        if (raw.startsWith("### "))  { closeList(); body += "<p " + hStyle(15, false) + ">" + inlineFormat(raw.mid(4)) + "</p>\n"; continue; }
-        if (raw.startsWith("## "))   { closeList(); body += "<p " + hStyle(17) + ">" + inlineFormat(raw.mid(3)) + "</p>\n"; continue; }
-        if (raw.startsWith("# "))    { closeList(); body += "<p " + hStyle(22) + ">" + inlineFormat(raw.mid(2)) + "</p>\n"; continue; }
+        const QString trimmed = raw.trimmed();
+
+        if (trimmed.startsWith("#### ")) { closeBlocks(); body += "<p style=\"font-size:13px; font-weight:600; margin-top:4px; margin-bottom:1px; line-height:1.2;\">" + inlineFormat(trimmed.mid(5)) + "</p>\n"; continue; }
+        if (trimmed.startsWith("### "))  { closeBlocks(); body += "<p " + hStyle(15, false) + ">" + inlineFormat(trimmed.mid(4)) + "</p>\n"; continue; }
+        if (trimmed.startsWith("## "))   { closeBlocks(); body += "<p " + hStyle(17) + ">" + inlineFormat(trimmed.mid(3)) + "</p>\n"; continue; }
+        if (trimmed.startsWith("# "))    { closeBlocks(); body += "<p " + hStyle(22) + ">" + inlineFormat(trimmed.mid(2)) + "</p>\n"; continue; }
 
         static QRegularExpression hrRe("^[-*_]{3,}$");
-        if (hrRe.match(raw.trimmed()).hasMatch()) {
-            closeList();
+        if (hrRe.match(trimmed).hasMatch()) {
+            closeBlocks();
             body += QString("<hr style=\"border:none; border-top:1px solid %1; margin:6px 0;\">\n").arg(border);
             continue;
         }
 
-        static QRegularExpression listRe("^[\\-\\*] (.*)");
+        // Leading whitespace is allowed and becomes the nesting level.
+        static QRegularExpression listRe("^([ \t]*)[-*+] (.*)$");
         auto lm = listRe.match(raw);
         if (lm.hasMatch()) {
-            if (inOl) { body += "</ol>\n"; inOl = false; }
-            if (!inList) { body += "<ul style=\"margin:0 0 4px 0; padding-left:1.6em;\">\n"; inList = true; }
-            body += "<li " + liStyle + ">" + inlineFormat(lm.captured(1)) + "</li>\n";
+            closeQuote();
+            syncList("ul", lm.captured(1).size());
+            body += "<li " + liStyle + ">" + inlineFormat(lm.captured(2)) + "</li>\n";
             continue;
         }
 
-        static QRegularExpression olRe("^\\d+\\. (.*)");
+        static QRegularExpression olRe("^([ \t]*)\d+\. (.*)$");
         auto om = olRe.match(raw);
         if (om.hasMatch()) {
-            if (inList) { body += "</ul>\n"; inList = false; }
-            if (!inOl) { body += "<ol style=\"margin:0 0 4px 0; padding-left:1.6em;\">\n"; inOl = true; }
-            body += "<li " + liStyle + ">" + inlineFormat(om.captured(1)) + "</li>\n";
+            closeQuote();
+            syncList("ol", om.captured(1).size());
+            body += "<li " + liStyle + ">" + inlineFormat(om.captured(2)) + "</li>\n";
             continue;
         }
 
-        if (raw.trimmed().isEmpty()) { closeList(); continue; }
-        closeList();
-        body += "<p " + pStyle + ">" + inlineFormat(raw) + "</p>\n";
+        static QRegularExpression quoteRe("^[ \t]*> ?(.*)$");
+        auto qm = quoteRe.match(raw);
+        if (qm.hasMatch()) {
+            closeList();
+            if (!inQuote) { body += "<blockquote>\n"; inQuote = true; }
+            body += "<p " + pStyle + ">" + inlineFormat(qm.captured(1)) + "</p>\n";
+            continue;
+        }
+
+        if (trimmed.isEmpty()) { closeBlocks(); continue; }
+        closeBlocks();
+        body += "<p " + pStyle + ">" + inlineFormat(trimmed) + "</p>\n";
     }
-    closeList();
+    closeBlocks();
     return body;
 }
 
