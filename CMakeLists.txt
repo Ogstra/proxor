@@ -142,6 +142,11 @@ else ()
     set(SQLITECPP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     set(SQLITECPP_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(SQLITECPP_RUN_CPPLINT OFF CACHE BOOL "" FORCE)
+    # Also off: SQLiteCpp auto-detects cppcheck and adds a target that lints the
+    # vendored dependency on every build. Useless here, and it hard-fails the build on
+    # machines whose cppcheck cannot locate its own std.cfg -- which is the case on the
+    # GitHub Windows runners (the Strawberry Perl build has a bogus FILESDIR).
+    set(SQLITECPP_RUN_CPPCHECK OFF CACHE BOOL "" FORCE)
     set(BUILD_SHARED_LIBS OFF)
     add_subdirectory(3rdparty/SQLiteCpp)
     list(APPEND NKR_EXTERNAL_TARGETS SQLiteCpp)
