@@ -1770,8 +1770,19 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
                 bool requestPermission = !ProxorGui::IsAdmin();
                 if (requestPermission) {
 #ifdef Q_OS_LINUX
+                    if (QProcessEnvironment::systemEnvironment().contains("APPIMAGE")) {
+                        MessageBoxWarning(
+                            software_name,
+                            tr("Tun mode is unavailable in the AppImage because it cannot grant cap_net_admin to its read-only bundled core. Use a native installation instead.")
+                        );
+                        proxor_set_spmode_FAILED
+                    }
                     if (!Linux_HavePkexec()) {
-                        MessageBoxWarning(software_name, "Please install \"pkexec\" first.");
+                        MessageBoxWarning(software_name, tr("Tun mode needs pkexec. Install PolicyKit and try again."));
+                        proxor_set_spmode_FAILED
+                    }
+                    if (!Linux_HaveSetcap()) {
+                        MessageBoxWarning(software_name, tr("Tun mode needs setcap. Install libcap and try again."));
                         proxor_set_spmode_FAILED
                     }
                     auto ret = Linux_Pkexec_SetCapString(ProxorGui::FindProxorCoreRealPath(), "cap_net_admin=ep");
@@ -1779,10 +1790,10 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
                         this->exit_reason = 3;
                         on_menu_exit_triggered();
                     } else {
-                        MessageBoxWarning(software_name, "Setcap for Tun mode failed.\n\n1. You may canceled the dialog.\n2. You may be using an incompatible environment like AppImage.");
-                        if (QProcessEnvironment::systemEnvironment().contains("APPIMAGE")) {
-                            MW_show_log("If you are using AppImage, it's impossible to start a Tun. Please use other package instead.");
-                        }
+                        MessageBoxWarning(
+                            software_name,
+                            tr("Tun mode could not grant cap_net_admin to proxor_core. You may have cancelled the authorization dialog, or the installation may not allow file capabilities.")
+                        );
                     }
 #endif
 #ifdef Q_OS_WIN

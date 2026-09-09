@@ -47,11 +47,17 @@ cp "$SRC_ROOT/assets/linux/proxor.desktop" "$APPDIR/"
 cp "$SRC_ROOT/assets/res/public/proxor.png" "$APPDIR/"
 
 #### geodata ####
-if [ -d "$DEPLOYMENT/public_res" ]; then
-  for name in geoip.dat geosite.dat geoip.db geosite.db; do
-    [ -f "$DEPLOYMENT/public_res/$name" ] && cp "$DEPLOYMENT/public_res/$name" "$APPDIR/usr/share/proxor/"
-  done
+if [ ! -f "$DEPLOYMENT/public_res/geosite.db" ]; then
+  echo "Downloading geodata..."
+  "$SRC_ROOT/libs/build_public_res.sh"
 fi
+for name in geoip.dat geosite.dat geoip.db geosite.db; do
+  if [ ! -f "$DEPLOYMENT/public_res/$name" ]; then
+    echo "ERROR: Missing geodata asset: $DEPLOYMENT/public_res/$name" >&2
+    exit 1
+  fi
+  cp "$DEPLOYMENT/public_res/$name" "$APPDIR/usr/share/proxor/"
+done
 
 #### AppRun hook ####
 # linuxdeploy-plugin-qt logs "skipping AppRun hook creation on Qt 6" and relies on

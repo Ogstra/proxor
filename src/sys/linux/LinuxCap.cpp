@@ -34,6 +34,11 @@ bool Linux_HavePkexec() {
     return EXIT_CODE(p) == 0;
 }
 
+bool Linux_HaveSetcap() {
+    return !QStandardPaths::findExecutable("setcap").isEmpty() ||
+           !QStandardPaths::findExecutable("setcap", {"/usr/sbin", "/sbin"}).isEmpty();
+}
+
 QString Linux_FindCapProgsExec(const QString &name) {
     QString exec = QStandardPaths::findExecutable(name);
     if (exec.isEmpty())

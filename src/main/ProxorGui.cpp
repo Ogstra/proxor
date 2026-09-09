@@ -525,6 +525,10 @@ namespace ProxorGui {
         QStringList search{};
         search << PackageFilePath("config");
         search << PackageRootPath();
+#ifdef Q_OS_LINUX
+        // AppImage binaries live in usr/bin while their shared assets live in usr/share.
+        search << QDir(PackageRootPath()).filePath("../share/proxor");
+#endif
         search << "/usr/share/sing-geoip";
         search << "/usr/share/sing-geosite";
         search << "/usr/share/sing-box";

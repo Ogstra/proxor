@@ -4,6 +4,7 @@
 #include <QDir>
 #include <QMessageBox>
 #include <QFileInfo>
+#include <QIcon>
 #include <QStandardPaths>
 #include <QLocalSocket>
 #include <QLocalServer>
@@ -44,6 +45,9 @@ int main(int argc, char* argv[]) {
 #endif
     QApplication::setQuitOnLastWindowClosed(false);
     QApplication a(argc, argv);
+    // The tray icon is initialized later; set this now so Linux taskbars identify the
+    // first top-level window even while the proxy is inactive.
+    QApplication::setWindowIcon(QIcon(QStringLiteral(":/proxor/proxor.png")));
 
     // Clean
     const auto packageRoot = ProxorGui::PackageRootPath();
