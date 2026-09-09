@@ -198,6 +198,7 @@ set(PROJECT_SOURCES
         src/sub/GroupUpdater.cpp
 
         src/sys/ExternalProcess.cpp
+        src/sys/LogFile.cpp
         src/sys/AutoRun.cpp
         src/sys/WifiMonitor.cpp
         src/sys/WifiMonitor.hpp
