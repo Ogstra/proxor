@@ -14,7 +14,7 @@ static QString inlineFormat(const QString &raw) {
     QString s = raw.toHtmlEscaped();
 
     QStringList codeSpans;
-    static QRegularExpression codeRe("`([^`]+)`");
+    static QRegularExpression codeRe(R"RX(`([^`]+)`)RX");
     forever {
         auto m = codeRe.match(s);
         if (!m.hasMatch()) break;
@@ -25,12 +25,12 @@ static QString inlineFormat(const QString &raw) {
 
     // Bold before italic, so ** is not consumed by the single-marker rules. Requiring a
     // non-space at both edges keeps a lone marker (e.g. "*.zip and *.msi") inert.
-    s.replace(QRegularExpression("\*\*(?=\S)(.+?)(?<=\S)\*\*"), "<strong>\1</strong>");
-    s.replace(QRegularExpression("(?<![\w])__(?=\S)(.+?)(?<=\S)__(?![\w])"), "<strong>\1</strong>");
-    s.replace(QRegularExpression("\*(?=\S)([^*]+?)(?<=\S)\*"), "<em>\1</em>");
-    s.replace(QRegularExpression("(?<![\w_])_(?=\S)([^_]+?)(?<=\S)_(?![\w_])"), "<em>\1</em>");
+    s.replace(QRegularExpression(R"RX(\*\*(?=\S)(.+?)(?<=\S)\*\*)RX"), R"RX(<strong>\1</strong>)RX");
+    s.replace(QRegularExpression(R"RX((?<!\w)__(?=\S)(.+?)(?<=\S)__(?!\w))RX"), R"RX(<strong>\1</strong>)RX");
+    s.replace(QRegularExpression(R"RX(\*(?=\S)([^*]+?)(?<=\S)\*)RX"), R"RX(<em>\1</em>)RX");
+    s.replace(QRegularExpression(R"RX((?<![\w_])_(?=\S)([^_]+?)(?<=\S)_(?![\w_]))RX"), R"RX(<em>\1</em>)RX");
 
-    s.replace(QRegularExpression("\[([^\]]+)\]\(([^)]+)\)"), "<a href=\"\2\">\1</a>");
+    s.replace(QRegularExpression(R"RX(\[([^\]]+)\]\(([^)]+)\))RX"), R"RX(<a href="\2">\1</a>)RX");
 
     for (int i = 0; i < codeSpans.size(); ++i) {
         s.replace(QString(kCodeSentinel) + QString::number(i) + QString(kCodeSentinel),
@@ -122,7 +122,7 @@ static QString mdToHtml(const QString &md, const QString &codeBg, const QString 
         if (trimmed.startsWith("## "))   { closeBlocks(); body += "<p " + hStyle(17) + ">" + inlineFormat(trimmed.mid(3)) + "</p>\n"; continue; }
         if (trimmed.startsWith("# "))    { closeBlocks(); body += "<p " + hStyle(22) + ">" + inlineFormat(trimmed.mid(2)) + "</p>\n"; continue; }
 
-        static QRegularExpression hrRe("^[-*_]{3,}$");
+        static QRegularExpression hrRe(R"RX(^[-*_]{3,}$)RX");
         if (hrRe.match(trimmed).hasMatch()) {
             closeBlocks();
             body += QString("<hr style=\"border:none; border-top:1px solid %1; margin:6px 0;\">\n").arg(border);
@@ -130,7 +130,7 @@ static QString mdToHtml(const QString &md, const QString &codeBg, const QString 
         }
 
         // Leading whitespace is allowed and becomes the nesting level.
-        static QRegularExpression listRe("^([ \t]*)[-*+] (.*)$");
+        static QRegularExpression listRe(R"RX(^([ \t]*)[-*+] (.*)$)RX");
         auto lm = listRe.match(raw);
         if (lm.hasMatch()) {
             closeQuote();
@@ -139,7 +139,7 @@ static QString mdToHtml(const QString &md, const QString &codeBg, const QString 
             continue;
         }
 
-        static QRegularExpression olRe("^([ \t]*)\d+\. (.*)$");
+        static QRegularExpression olRe(R"RX(^([ \t]*)\d+\. (.*)$)RX");
         auto om = olRe.match(raw);
         if (om.hasMatch()) {
             closeQuote();
@@ -148,7 +148,7 @@ static QString mdToHtml(const QString &md, const QString &codeBg, const QString 
             continue;
         }
 
-        static QRegularExpression quoteRe("^[ \t]*> ?(.*)$");
+        static QRegularExpression quoteRe(R"RX(^[ \t]*> ?(.*)$)RX");
         auto qm = quoteRe.match(raw);
         if (qm.hasMatch()) {
             closeList();
