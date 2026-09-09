@@ -3,6 +3,7 @@
 #include <QApplication>
 #include <QDir>
 #include <QMessageBox>
+#include <QFileInfo>
 #include <QStandardPaths>
 #include <QLocalSocket>
 #include <QLocalServer>
@@ -46,15 +47,22 @@ int main(int argc, char* argv[]) {
 
     // Clean
     const auto packageRoot = ProxorGui::PackageRootPath();
+    // An AppImage runs from a read-only FUSE mount, and a per-machine install can sit under
+    // a read-only prefix. Portable mode keeps its working directory beside the executable,
+    // so these housekeeping writes -- and later the config directory itself -- fail with
+    // "No permissions to write ...". Decide once, here, and degrade instead of dying.
+    const bool packageRootWritable = QFileInfo(packageRoot).isWritable();
     QDir::setCurrent(packageRoot);
-    if (QFile::exists("updater.old")) {
-        QFile::remove("updater.old");
-    }
+    if (packageRootWritable) {
+        if (QFile::exists("updater.old")) {
+            QFile::remove("updater.old");
+        }
 #ifndef Q_OS_WIN
-    if (!QFile::exists("updater")) {
-        QFile::link("launcher", "updater");
-    }
+        if (!QFile::exists("updater")) {
+            QFile::link("launcher", "updater");
+        }
 #endif
+    }
 
     // Flags
     const auto commandLineArguments = QCoreApplication::arguments();
@@ -76,6 +84,10 @@ int main(int argc, char* argv[]) {
 #ifdef NKR_CPP_DEBUG
     ProxorGui::dataStore->flag_debug = true;
 #endif
+
+    // Falling back here rather than at the flag parsing above keeps an explicit -appdata
+    // authoritative: this only forces the fallback when portable mode is impossible.
+    if (!packageRootWritable) ProxorGui::dataStore->flag_use_appdata = true;
 
     // dirs & clean
     auto wd = QDir(packageRoot);
