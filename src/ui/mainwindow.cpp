@@ -81,6 +81,21 @@
 #include <QPushButton>
 
 namespace {
+// Qt::SingleShotConnection retires the connection on the FIRST emission of the signal,
+// whether or not the slot did anything useful. reachabilityChanged fires for every
+// topology change -- notably when the TUN adapter comes up -- so a slot that filters for
+// Online was being disconnected by an unrelated transition and never saw the real one.
+// Disconnect only once the callback has actually run.
+void runOnceWhenOnline(QNetworkInformation *ni, QObject *context, std::function<void()> fn) {
+    auto conn = std::make_shared<QMetaObject::Connection>();
+    *conn = QObject::connect(ni, &QNetworkInformation::reachabilityChanged, context,
+        [conn, fn = std::move(fn)](QNetworkInformation::Reachability r) {
+            if (r != QNetworkInformation::Reachability::Online) return;
+            QObject::disconnect(*conn);
+            fn();
+        });
+}
+
 constexpr int kAddGroupTabId = -114514;
 constexpr auto kProjectOwner = "Ogstra";
 constexpr auto kProjectRepo = "proxor";
@@ -1002,21 +1017,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         if (!ni || isOnline) {
             setTimeout([this] { UI_update_all_groups(true); }, this, 2000);
         } else {
-            connect(ni, &QNetworkInformation::reachabilityChanged, this,
-                [this](QNetworkInformation::Reachability r) {
-                    if (r != QNetworkInformation::Reachability::Online) return;
-                    UI_update_all_groups(true);
-                }, Qt::SingleShotConnection);
+            runOnceWhenOnline(ni, this, [this] { UI_update_all_groups(true); });
         }
     } else {
         if (!ni || isOnline) {
             setTimeout([this] { UI_update_due_groups_on_start(); }, this, 2000);
         } else {
-            connect(ni, &QNetworkInformation::reachabilityChanged, this,
-                [this](QNetworkInformation::Reachability r) {
-                    if (r != QNetworkInformation::Reachability::Online) return;
-                    UI_update_due_groups_on_start();
-                }, Qt::SingleShotConnection);
+            runOnceWhenOnline(ni, this, [this] { UI_update_due_groups_on_start(); });
         }
     }
     setTimeout([this] { run_subscription_ping_on_open(); }, this, 2500);
@@ -1028,11 +1035,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         if (!ni || isOnline) {
             doCheck();
         } else {
-            connect(ni, &QNetworkInformation::reachabilityChanged, this,
-                [this](QNetworkInformation::Reachability r) {
-                    if (r != QNetworkInformation::Reachability::Online) return;
-                    runOnNewThread([this] { CheckUpdate(true); });
-                }, Qt::SingleShotConnection);
+            runOnceWhenOnline(ni, this, [this] { runOnNewThread([this] { CheckUpdate(true); }); });
         }
     }
 
