@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checking out sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           # go.work does `replace github.com/sagernet/sing-box => ./3rdparty/sing-box`,
           # so the submodule IS the source. Without this the build has no sing-box at all.
@@ -71,7 +71,7 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - name: Checking out sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: "recursive"
       - name: Install MSVC compiler
@@ -80,7 +80,7 @@ jobs:
           arch: ${{ matrix.arch }}
       # Official Qt via aqt instead of a self-hosted 7z. The previous approach depended on
       # a qt-runtime-* release that was never published, which is why every run failed.
-      # tools_openssl_x64 supplies the libcrypto/libssl DLLs the bundled SDK used to carry.
+      # tools_opensslv3_x64 supplies the libcrypto/libssl DLLs the bundled SDK used to carry.
       - name: Install Qt ${{ env.QT_VERSION }}
         uses: jurplel/install-qt-action@v4
         with:
@@ -90,7 +90,7 @@ jobs:
           arch: win64_msvc2019_64
           # No `modules:` -- Qt Svg is an essential module in Qt 6 and ships in the base
           # install. Asking aqt for it fails with "packages ['qtsvg'] were not found".
-          tools: tools_openssl_x64
+          tools: tools_opensslv3_x64
           cache: true
       - name: Install ninja-build tool
         uses: seanmiddleditch/gha-setup-ninja@v4
@@ -129,7 +129,7 @@ jobs:
     needs: [build-cpp, build-go]
     steps:
       - name: Checking out sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: "recursive"
       - name: Install Qt ${{ env.QT_VERSION }}
@@ -139,7 +139,7 @@ jobs:
           host: windows
           target: desktop
           arch: win64_msvc2019_64
-          tools: tools_openssl_x64
+          tools: tools_opensslv3_x64
           cache: true
       - name: Install MSVC compiler
         uses: ilammy/msvc-dev-cmd@v1

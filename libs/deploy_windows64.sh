@@ -28,7 +28,7 @@ if [ "$DL_QT_VER" != "5.15" ]; then
     "${PROXOR_OPENSSL_DIR:-}"
     "$SRC_ROOT/qtsdk/Qt/bin"
     "${QT_ROOT_DIR:-}/bin"
-    "${IQTA_TOOLS:-}/OpenSSL/Win_x64/bin"
+    "${IQTA_TOOLS:-}/OpenSSLv3/Win_x64/bin"
   )
   openssl_found=""
   for d in "${OPENSSL_SEARCH_DIRS[@]}"; do
@@ -39,6 +39,19 @@ if [ "$DL_QT_VER" != "5.15" ]; then
       break
     fi
   done
+  # Last resort: aqt's tool layout has changed before, so search rather than give up.
+  if [ -z "$openssl_found" ]; then
+    for root in "${IQTA_TOOLS:-}" "${QT_ROOT_DIR:-}"; do
+      [ -n "$root" ] && [ -d "$root" ] || continue
+      cand=$(find "$root" -name libcrypto-3-x64.dll -print -quit 2>/dev/null || true)
+      if [ -n "$cand" ] && [ -f "$(dirname "$cand")/libssl-3-x64.dll" ]; then
+        cp "$cand" "$(dirname "$cand")/libssl-3-x64.dll" .
+        openssl_found=$(dirname "$cand")
+        break
+      fi
+    done
+  fi
+
   if [ -z "$openssl_found" ]; then
     echo "ERROR: libcrypto-3-x64.dll / libssl-3-x64.dll not found." >&2
     echo "Searched: ${OPENSSL_SEARCH_DIRS[*]}" >&2
