@@ -53,5 +53,20 @@ if [ -d "$DEPLOYMENT/public_res" ]; then
   done
 fi
 
+#### AppRun hook ####
+# linuxdeploy-plugin-qt logs "skipping AppRun hook creation on Qt 6" and relies on
+# usr/bin/qt.conf alone. When that does not take effect the plugin search path ends up
+# empty and Qt aborts with:
+#   Could not find the Qt platform plugin "xcb" in ""
+# The plugin binaries are present in the AppImage; only the paths are missing. Set them
+# explicitly. linuxdeploy sources every file in apprun-hooks/ from its AppRun.
+mkdir -p "$APPDIR/apprun-hooks"
+cat > "$APPDIR/apprun-hooks/proxor-qt-paths.sh" <<'HOOK'
+#!/bin/sh
+export QT_PLUGIN_PATH="${APPDIR}/usr/plugins${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}"
+export QT_QPA_PLATFORM_PLUGIN_PATH="${APPDIR}/usr/plugins/platforms"
+HOOK
+chmod +x "$APPDIR/apprun-hooks/proxor-qt-paths.sh"
+
 echo "AppDir ready: $APPDIR"
 ls -la "$APPDIR/usr/bin"
