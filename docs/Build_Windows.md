@@ -118,6 +118,37 @@ To stage the required Qt runtime files next to the executable:
 windeployqt proxor.exe
 ```
 
+## Symbols
+
+Packaging also emits `deployment/proxor-<version>-symbols.zip`, containing `app.pdb`,
+`proxor.pdb` and the exact `app.exe` and `proxor.exe` they belong to, plus a `MANIFEST.txt`
+with the SHA256 of each file.
+
+**Attach it to the GitHub release.** `deployment/` is gitignored and `*.pdb` is gitignored,
+so the archive exists only on the machine that built it. Without that upload, symbols are
+lost the moment the build directory is overwritten -- and every build overwrites them.
+
+Losing them is not hypothetical. Crash dumps from a shipped release can only be symbolised
+against the PDB from that exact build; once it is gone the dump is unreadable assembly and
+there is no way to recover it.
+
+### Why hashes and not the version number
+
+The version number is not a sufficient key. The same version can be rebuilt at any time and
+will produce a different binary and a different PDB, which will not match dumps from the
+build that was actually published. The manifest's SHA256 values identify the precise build,
+so you can confirm an archived PDB belongs to the binary a user is running before trusting
+anything it tells you.
+
+To check a suspect pairing, compare the hash of the user's `app.exe` against the manifest.
+
+### Naming constraint
+
+The asset name must **not** end in `windows64.zip`. `updateArchiveSuffixes` in
+`go/grpc_server/update.go` selects release assets by that suffix, so an asset named
+`proxor-1.6.4-symbols-windows64.zip` would be offered to users as an application update.
+`proxor-1.6.4-symbols.zip` is safe.
+
 ## Build the Go Core
 
 Build the backend and updater into the deployment directory:
