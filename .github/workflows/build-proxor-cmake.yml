@@ -67,6 +67,14 @@ jobs:
         include:
           - platform: windows-latest
             arch: x64
+            qt_host: windows
+            qt_arch: win64_msvc2019_64
+            qt_tools: tools_opensslv3_x64
+          - platform: ubuntu-latest
+            arch: x64
+            qt_host: linux
+            qt_arch: linux_gcc_64
+            qt_tools: ""
       fail-fast: false
     runs-on: ${{ matrix.platform }}
     steps:
@@ -74,23 +82,30 @@ jobs:
         uses: actions/checkout@v5
         with:
           submodules: "recursive"
+      # Qt 6 will not configure on a bare runner without GL and xkb development headers.
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends             libgl1-mesa-dev libglu1-mesa-dev libxkbcommon-dev libxkbcommon-x11-dev             libxcb1-dev libxcb-cursor-dev libxcb-icccm4-dev libxcb-image0-dev             libxcb-keysyms1-dev libxcb-randr0-dev libxcb-render-util0-dev             libxcb-shape0-dev libxcb-xinerama0-dev libxcb-xkb-dev             libfontconfig1-dev libfreetype-dev
       - name: Install MSVC compiler
+        if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: ${{ matrix.arch }}
       # Official Qt via aqt instead of a self-hosted 7z. The previous approach depended on
       # a qt-runtime-* release that was never published, which is why every run failed.
-      # tools_opensslv3_x64 supplies the libcrypto/libssl DLLs the bundled SDK used to carry.
       - name: Install Qt ${{ env.QT_VERSION }}
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
-          host: windows
+          host: ${{ matrix.qt_host }}
           target: desktop
-          arch: win64_msvc2019_64
+          arch: ${{ matrix.qt_arch }}
           # No `modules:` -- Qt Svg is an essential module in Qt 6 and ships in the base
           # install. Asking aqt for it fails with "packages ['qtsvg'] were not found".
-          tools: tools_opensslv3_x64
+          # tools_opensslv3_x64 is Windows-only; Linux links the system OpenSSL.
+          tools: ${{ matrix.qt_tools }}
           cache: true
       - name: Install ninja-build tool
         uses: seanmiddleditch/gha-setup-ninja@v4
@@ -106,14 +121,15 @@ jobs:
         run: ./libs/build_deps_all.sh
       - name: Generate MakeFile and Build
         shell: bash
-        env:
-          CC: cl.exe
-          CXX: cl.exe
         run: |
+          if [ "${RUNNER_OS}" = "Windows" ]; then
+            export CC=cl.exe CXX=cl.exe
+          fi
           mkdir -p build && cd build
           cmake -GNinja -DQT_VERSION_MAJOR=6 -DCMAKE_BUILD_TYPE=Release ..
           ninja
-      - name: Uploading Artifact
+      - name: Uploading Artifact (Windows)
+        if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
           name: Proxor-${{ github.sha }}-${{ matrix.platform }}-${{ matrix.arch }}-Qt${{ env.QT_VERSION }}
@@ -121,7 +137,14 @@ jobs:
             build/proxor.exe
             build/app.exe
             build/*.pdb
-
+      # On Linux the launcher target is WIN32-only and the GUI target keeps its default
+      # name, so the single artifact is build/proxor.
+      - name: Uploading Artifact (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Proxor-${{ github.sha }}-${{ matrix.platform }}-${{ matrix.arch }}-Qt${{ env.QT_VERSION }}
+          path: build/proxor
   publish:
     name: Pack & Publish Release
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'y' && github.event.inputs.tag != ''
