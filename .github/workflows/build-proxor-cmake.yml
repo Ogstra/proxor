@@ -28,6 +28,8 @@ jobs:
         include:
           - cross_os: windows
             cross_arch: amd64
+          - cross_os: linux
+            cross_arch: amd64
           - cross_os: public_res
             cross_arch: public_res
       fail-fast: false
@@ -70,7 +72,10 @@ jobs:
             qt_host: windows
             qt_arch: win64_msvc2019_64
             qt_tools: tools_opensslv3_x64
-          - platform: ubuntu-latest
+          # ubuntu-22.04 on purpose, not ubuntu-latest: the AppImage inherits the build
+          # host's glibc. 22.04 is glibc 2.35, below Debian 12 (2.36) and 13 (2.41).
+          # Building on 24.04 (2.39) would produce something Debian 12 cannot run.
+          - platform: ubuntu-22.04
             arch: x64
             qt_host: linux
             qt_arch: linux_gcc_64
@@ -145,6 +150,59 @@ jobs:
         with:
           name: Proxor-${{ github.sha }}-${{ matrix.platform }}-${{ matrix.arch }}-Qt${{ env.QT_VERSION }}
           path: build/proxor
+  appimage:
+    name: Linux AppImage
+    needs: [build-cpp, build-go]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checking out sources
+        uses: actions/checkout@v5
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: download-artifact
+      - name: Stage build outputs
+        shell: bash
+        run: |
+          mkdir -p build deployment
+          cp download-artifact/Proxor-${{ github.sha }}-ubuntu-22.04-x64-Qt${{ env.QT_VERSION }}/proxor build/
+          chmod +x build/proxor
+          find download-artifact -name artifacts.tgz -exec tar xzf {} \;
+      - name: Install Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          cache: true
+      - name: Install AppImage tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libfuse2 file desktop-file-utils
+          curl -fsSLo linuxdeploy https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          curl -fsSLo linuxdeploy-plugin-qt https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x linuxdeploy linuxdeploy-plugin-qt
+      - name: Assemble AppDir
+        shell: bash
+        run: ./libs/deploy_linux.sh
+      - name: Build AppImage
+        shell: bash
+        env:
+          QMAKE: ${{ env.QT_ROOT_DIR }}/bin/qmake
+          EXTRA_QT_PLUGINS: svg
+        run: |
+          export PATH="$PWD:$PATH"
+          source libs/env_deploy.sh
+          ./linuxdeploy --appdir deployment/AppDir --plugin qt --output appimage
+          mv Proxor*.AppImage "$version_standalone-linux64.AppImage" 2>/dev/null ||             mv ./*.AppImage "$version_standalone-linux64.AppImage"
+          ls -la ./*.AppImage
+      - name: Uploading AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: Proxor-${{ github.sha }}-AppImage-x86_64
+          path: "*.AppImage"
+
   publish:
     name: Pack & Publish Release
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'y' && github.event.inputs.tag != ''

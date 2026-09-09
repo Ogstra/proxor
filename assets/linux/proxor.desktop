@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Proxor
+GenericName=Proxy Client
+Comment=Qt-based proxy client for managing sing-box profiles, subscriptions and routing
+Exec=proxor
+Icon=proxor
+Terminal=false
+Categories=Network;
+Keywords=proxy;vpn;sing-box;shadowsocks;vmess;vless;trojan;
+StartupWMClass=proxor
