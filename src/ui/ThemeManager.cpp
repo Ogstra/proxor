@@ -1,6 +1,7 @@
 #include <QStyle>
 #include <QApplication>
 #include <QComboBox>
+#include <QDir>
 #include <QEvent>
 #include <QWidget>
 #include <QFile>
@@ -8,6 +9,8 @@
 #include <QPalette>
 #include <QStyleFactory>
 #include <QStyleHints>
+#include <QSettings>
+#include <QStandardPaths>
 #include <QTextStream>
 #include <QTimer>
 #include <QColor>
@@ -150,10 +153,27 @@ QPalette makeArcDarkPalette() {
 
 bool systemPrefersDark() {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
-    return qApp->styleHints()->colorScheme() == Qt::ColorScheme::Dark;
-#else
-    return QPalette().color(QPalette::Window).lightness() < 128;
+    const auto scheme = qApp->styleHints()->colorScheme();
+    if (scheme == Qt::ColorScheme::Dark) return true;
+    if (scheme == Qt::ColorScheme::Light) return false;
 #endif
+
+#ifdef Q_OS_LINUX
+    const auto gtkTheme = qEnvironmentVariable("GTK_THEME");
+    if (gtkTheme.contains(QLatin1String("dark"), Qt::CaseInsensitive)) return true;
+
+    const auto configRoot = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+    for (const auto &version : {QStringLiteral("gtk-4.0"), QStringLiteral("gtk-3.0")}) {
+        QSettings gtk(QDir(configRoot).filePath(version + QStringLiteral("/settings.ini")), QSettings::IniFormat);
+        if (gtk.value(QStringLiteral("Settings/gtk-application-prefer-dark-theme")).toBool()) return true;
+        if (gtk.value(QStringLiteral("Settings/gtk-theme")).toString().contains(QLatin1String("dark"), Qt::CaseInsensitive)) return true;
+    }
+
+    QSettings kde(QDir(configRoot).filePath(QStringLiteral("kdeglobals")), QSettings::IniFormat);
+    if (kde.value(QStringLiteral("General/ColorScheme")).toString().contains(QLatin1String("dark"), Qt::CaseInsensitive)) return true;
+#endif
+
+    return qApp->palette().color(QPalette::Window).lightness() < 128;
 }
 
 QPalette paletteForMode(const QString &requestedMode) {
@@ -391,7 +411,13 @@ void ThemeManager::ApplyTheme(const QString &theme, bool force) {
     // setPalette keeps setStyle from resetting it to the style's standard palette.
     if (lowerTheme == "system") {
         qApp->setStyleSheet("");
+#ifdef Q_OS_LINUX
+        // Some Linux platform plugins report ColorScheme::Unknown even when GTK/KDE
+        // is dark. Apply the resolved system palette before the native style polishes.
+        qApp->setPalette(paletteForMode(QString()));
+#else
         qApp->setPalette(QPalette());
+#endif
         qApp->setStyle(this->system_style_name);
     } else if (lowerTheme == "fusion") {
         qApp->setStyleSheet("");
