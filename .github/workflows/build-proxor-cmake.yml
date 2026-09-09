@@ -88,7 +88,8 @@ jobs:
           host: windows
           target: desktop
           arch: win64_msvc2019_64
-          modules: qtsvg
+          # No `modules:` -- Qt Svg is an essential module in Qt 6 and ships in the base
+          # install. Asking aqt for it fails with "packages ['qtsvg'] were not found".
           tools: tools_openssl_x64
           cache: true
       - name: Install ninja-build tool
@@ -138,7 +139,6 @@ jobs:
           host: windows
           target: desktop
           arch: win64_msvc2019_64
-          modules: qtsvg
           tools: tools_openssl_x64
           cache: true
       - name: Install MSVC compiler
