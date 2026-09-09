@@ -2,24 +2,26 @@
 
 ## Expected Workspace Layout
 
-The repository expects the desktop project and the forked Go workspaces to live side by side:
+sing-box is a **git submodule** at `3rdparty/sing-box`, pointing at the fork declared in
+`.gitmodules`. `go.work` wires it in directly:
 
 ```text
-proxor/
-  go/cmd/*
-sing-box/
-sing-box-extra/
+replace github.com/sagernet/sing-box => ./3rdparty/sing-box
 ```
 
-The helper bootstrap script prepares that layout for local development.
+There is no sibling-directory layout. An older `proxor/` + `sing-box/` side-by-side scheme
+is no longer used, and `libs/get_source.sh` — which clones a sibling copy from upstream at a
+pinned commit — is a leftover of it. That script is not part of the build: it clones the
+wrong repository, and nothing reads what it produces. Do not run it.
 
 ## Bootstrap Sources
 
 ```bash
-bash libs/get_source.sh
+git submodule update --init --recursive
 ```
 
-This script prepares the local fork/workspace layout used by the Go modules and `go.work`.
+That is the whole bootstrap. If you cloned without `--recursive`, this is the step you
+missed, and `go build` will fail with unresolved sing-box packages until you run it.
 
 ## Standard Build
 

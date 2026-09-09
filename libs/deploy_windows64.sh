@@ -21,8 +21,31 @@ rm -rf libEGL.dll libGLESv2.dll Qt6Pdf.dll
 rm -f dxcompiler.dll dxil.dll
 
 if [ "$DL_QT_VER" != "5.15" ]; then
-  cp $SRC_ROOT/qtsdk/Qt/bin/libcrypto-3-x64.dll .
-  cp $SRC_ROOT/qtsdk/Qt/bin/libssl-3-x64.dll .
+  # The bundled qtsdk ships OpenSSL in its bin/. Official Qt builds (what CI installs
+  # via aqt) do not, so accept an explicit override and fall back to searching the Qt
+  # prefix. Keeps the local and CI paths on the same script instead of forking them.
+  OPENSSL_SEARCH_DIRS=(
+    "${PROXOR_OPENSSL_DIR:-}"
+    "$SRC_ROOT/qtsdk/Qt/bin"
+    "${QT_ROOT_DIR:-}/bin"
+    "${IQTA_TOOLS:-}/OpenSSL/Win_x64/bin"
+  )
+  openssl_found=""
+  for d in "${OPENSSL_SEARCH_DIRS[@]}"; do
+    [ -n "$d" ] || continue
+    if [ -f "$d/libcrypto-3-x64.dll" ] && [ -f "$d/libssl-3-x64.dll" ]; then
+      cp "$d/libcrypto-3-x64.dll" "$d/libssl-3-x64.dll" .
+      openssl_found="$d"
+      break
+    fi
+  done
+  if [ -z "$openssl_found" ]; then
+    echo "ERROR: libcrypto-3-x64.dll / libssl-3-x64.dll not found." >&2
+    echo "Searched: ${OPENSSL_SEARCH_DIRS[*]}" >&2
+    echo "Set PROXOR_OPENSSL_DIR to the directory containing them." >&2
+    exit 1
+  fi
+  echo "OpenSSL runtime taken from: $openssl_found"
 fi
 
 MSVC_REDIST_DIR=""
