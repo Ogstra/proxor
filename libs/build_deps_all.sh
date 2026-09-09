@@ -16,7 +16,7 @@ fi
 # CMake 4.x while still configuring fine on the CMake 3.x used locally. Only pass the
 # escape hatch when it is actually needed, so older CMake does not see an unused variable.
 CMAKE_COMPAT_ARGS=""
-cmake_major=$($cmake --version 2>/dev/null | head -1 | sed -E 's/[^0-9]*([0-9]+).*//')
+cmake_major=$($cmake --version 2>/dev/null | head -1 | tr -dc '0-9.' | cut -d. -f1)
 if [ -n "$cmake_major" ] && [ "$cmake_major" -ge 4 ] 2>/dev/null; then
   CMAKE_COMPAT_ARGS="-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
   echo "CMake $cmake_major detected; passing $CMAKE_COMPAT_ARGS to legacy dependencies."
