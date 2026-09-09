@@ -10,6 +10,7 @@
 
 #include "3rdparty/RunGuard.hpp"
 #include "main/ProxorGui.hpp"
+#include "sys/LogFile.hpp"
 
 #include "ui/mainwindow_interface.h"
 
@@ -90,6 +91,10 @@ int main(int argc, char* argv[]) {
     if (!wd.exists("config")) wd.mkdir("config");
     QDir::setCurrent(wd.absoluteFilePath("config"));
     QDir("temp").removeRecursively();
+
+    // Before anything can log: until this existed the log lived only in the in-app
+    // widget, so a crash took its own explanation with it.
+    ProxorGui_log::Init();
 
     // dispatchers
     DS_cores = new QThread;

@@ -1,4 +1,5 @@
 #include "./ui_mainwindow.h"
+#include "sys/LogFile.hpp"
 #include "mainwindow.h"
 
 #include "fmt/Preset.hpp"
@@ -652,13 +653,19 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         auto bar = ui->masterLogBrowser->verticalScrollBar();
         bar->setValue(bar->maximum());
     });
+    // Every line also goes to disk. These three assignments are the only sink, so the 45
+    // MW_show_log call sites needed no change.
     MW_show_log = [=](const QString &log) {
+        ProxorGui_log::Write(ProxorGui_log::InferLevel(log), log);
         runOnUiThread([=] { show_log_impl(log); });
     };
     MW_show_log_ext = [=](const QString &tag, const QString &log) {
-        runOnUiThread([=] { show_log_impl("[" + tag + "] " + log); });
+        const QString line = "[" + tag + "] " + log;
+        ProxorGui_log::Write(ProxorGui_log::InferLevel(log), line);
+        runOnUiThread([=] { show_log_impl(line); });
     };
     MW_show_log_ext_vt100 = [=](const QString &log) {
+        ProxorGui_log::Write(ProxorGui_log::InferLevel(log), log);
         runOnUiThread([=] { show_log_impl(log); });
     };
 

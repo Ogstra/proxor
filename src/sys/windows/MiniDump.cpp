@@ -10,9 +10,12 @@
 #include <QApplication>
 #include <QDir>
 #include <QDateTime>
+#include <QFile>
 #include <QMessageBox>
+#include <QTextStream>
 
 #include "main/ProxorGui.hpp"
+#include "sys/LogFile.hpp"
 
 typedef BOOL(WINAPI *MINIDUMPWRITEDUMP)(
     HANDLE hProcess,
@@ -53,6 +56,25 @@ LONG __stdcall CreateCrashHandler(EXCEPTION_POINTERS *pException) {
                 Dump(GetCurrentProcess(), GetCurrentProcessId(), DumpHandle, MiniDumpNormal, &dumpInfo,
                      NULL, NULL);
                 CloseHandle(DumpHandle);
+
+                // A dump with no log is assembly and guesswork. Write the recent log lines
+                // beside it so whoever receives the pair can see what led up to the fault.
+                // Recent() uses a bounded tryLock and never blocks the crash path.
+                const QStringList recent = ProxorGui_log::Recent();
+                QFile companion(QString(dumpText).replace(QStringLiteral(".dmp"), QStringLiteral(".log")));
+                if (companion.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                    QTextStream out(&companion);
+                    out << "Proxor " << NKR_VERSION << " crash context" << Qt::endl
+                        << "exception " << errCode << " at " << errAddr << Qt::endl
+                        << "captured " << QDateTime::currentDateTime().toString(Qt::ISODate) << Qt::endl;
+                    if (recent.isEmpty()) {
+                        out << Qt::endl << "(no log lines available)" << Qt::endl;
+                    } else {
+                        out << Qt::endl << "last " << recent.size() << " log lines:" << Qt::endl << Qt::endl;
+                        for (const QString &l : recent) out << l << Qt::endl;
+                    }
+                    companion.close();
+                }
             } else {
                 dumpText = "";
             }
