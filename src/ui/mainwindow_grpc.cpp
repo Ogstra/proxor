@@ -346,7 +346,7 @@ void MainWindow::stop_core_daemon() {
 
 void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
     if (ProxorGui::dataStore->prepare_exit) return;
-    if (startup_tun_pending || startup_tun_failed) {
+    if ((startup_tun_pending && !startup_tun_authorized) || startup_tun_failed) {
         MW_show_log(tr("Profile start is deferred until Tun authorization succeeds."));
         return;
     }

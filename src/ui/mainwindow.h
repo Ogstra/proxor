@@ -198,6 +198,7 @@ private:
     bool start_pending = false;
     bool started_via_ssid_trigger = false;
     bool startup_tun_pending = false;
+    bool startup_tun_authorized = false;
     bool startup_tun_failed = false;
     int startup_deferred_profile_id = -1;
     std::function<void()> startup_network_work;
@@ -250,8 +251,10 @@ private:
 
     bool StartVPNProcess();
 
+    void authorizeStartupTun();
     void completeStartupTunAuthorization();
     void failStartupTunAuthorization();
+    void resumeDeferredStartupProfile();
 
     void syncWindowsHostsMapping(bool enable);
 
