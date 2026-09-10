@@ -5,8 +5,8 @@ This document covers native Linux builds for the GUI application.
 ## Status
 
 GitHub Actions builds an x86_64 AppImage from Ubuntu 22.04 and validates its required
-executables, desktop metadata, icon, and geodata. Tagged releases publish that AppImage
-alongside the Windows package.
+executables, desktop metadata, icon, geodata, and startup on Debian 12. Tagged releases
+publish that AppImage alongside the Windows package.
 
 There is no `.deb` package. Native builds remain supported for distribution-specific
 integration and for internal Tun mode without a privileged compatibility process.

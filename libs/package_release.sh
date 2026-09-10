@@ -55,7 +55,7 @@ shopt -s dotglob nullglob
 for path in "$SOURCE_DIR"/*; do
   name="$(basename "$path")"
   case "$name" in
-    config|*.log|*.dmp)
+    *.log|*.dmp)
       continue
       ;;
   esac
