@@ -163,6 +163,12 @@ QString getUserAutostartDir_private() {
     return config;
 }
 
+QString desktopEntryQuote(QString value) {
+    value.replace('\\', QStringLiteral("\\\\"));
+    value.replace('"', QStringLiteral("\\\""));
+    return QStringLiteral("\"") + value + QStringLiteral("\"");
+}
+
 void AutoRun_SetEnabled(bool enable) {
     // From https://github.com/nextcloud/desktop/blob/master/src/common/utility_unix.cpp
     QString appName = QCoreApplication::applicationName();
@@ -207,9 +213,11 @@ void AutoRun_SetEnabled(bool enable) {
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
         ts.setCodec("UTF-8");
 #endif
+        QStringList escapedCommand;
+        for (const auto &argument : appCmdList) escapedCommand << desktopEntryQuote(argument);
         ts << QLatin1String("[Desktop Entry]") << NEWLINE
-           << QLatin1String("Name=") << appName << NEWLINE
-           << QLatin1String("Exec=") << appCmdList.join(" ") << NEWLINE
+            << QLatin1String("Name=") << appName << NEWLINE
+           << QLatin1String("Exec=") << escapedCommand.join(" ") << NEWLINE
            << QLatin1String("Terminal=") << "false" << NEWLINE
            << QLatin1String("Categories=") << "Network" << NEWLINE
            << QLatin1String("Type=") << "Application" << NEWLINE

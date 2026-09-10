@@ -55,5 +55,5 @@ namespace ProxorGui {
 
     QString WriteVPNSingBoxConfig();
 
-    QString WriteVPNLinuxScript(const QString &configPath);
+    QString WriteVPNLinuxScript();
 } // namespace ProxorGui

@@ -20,6 +20,10 @@ env:
   # Keep in step with qtsdk/Qt used locally and with libs/download_proxor_qtsdk_win.sh
   QT_VERSION: "6.7.2"
   GO_VERSION: "1.26.1"
+  LINUXDEPLOY_VERSION: "1-alpha-20251107-1"
+  LINUXDEPLOY_SHA256: "c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d"
+  LINUXDEPLOY_QT_VERSION: "1-alpha-20250213-1"
+  LINUXDEPLOY_QT_SHA256: "15106be885c1c48a021198e7e1e9a48ce9d02a86dd0a1848f00bdbf3c1c92724"
 
 jobs:
   build-go:
@@ -180,12 +184,26 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libfuse2 file desktop-file-utils
-          curl -fsSLo linuxdeploy https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
-          curl -fsSLo linuxdeploy-plugin-qt https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          curl -fsSLo linuxdeploy "https://github.com/linuxdeploy/linuxdeploy/releases/download/${LINUXDEPLOY_VERSION}/linuxdeploy-x86_64.AppImage"
+          echo "${LINUXDEPLOY_SHA256}  linuxdeploy" | sha256sum --check --status
+          curl -fsSLo linuxdeploy-plugin-qt "https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/${LINUXDEPLOY_QT_VERSION}/linuxdeploy-plugin-qt-x86_64.AppImage"
+          echo "${LINUXDEPLOY_QT_SHA256}  linuxdeploy-plugin-qt" | sha256sum --check --status
           chmod +x linuxdeploy linuxdeploy-plugin-qt
       - name: Assemble AppDir
         shell: bash
         run: ./libs/deploy_linux.sh
+      - name: Verify AppDir contents
+        shell: bash
+        run: |
+          test -x deployment/AppDir/usr/bin/proxor
+          test -x deployment/AppDir/usr/bin/proxor_core
+          test -f deployment/AppDir/usr/share/applications/proxor.desktop
+          test -f deployment/AppDir/usr/share/icons/hicolor/256x256/apps/proxor.png
+          test -s deployment/AppDir/usr/share/proxor/geoip.dat
+          test -s deployment/AppDir/usr/share/proxor/geosite.dat
+          test -s deployment/AppDir/usr/share/proxor/geoip.db
+          test -s deployment/AppDir/usr/share/proxor/geosite.db
+          desktop-file-validate deployment/AppDir/usr/share/applications/proxor.desktop
       - name: Build AppImage
         shell: bash
         env:
@@ -197,6 +215,17 @@ jobs:
           ./linuxdeploy --appdir deployment/AppDir --plugin qt --output appimage
           mv Proxor*.AppImage "$version_standalone-linux64.AppImage" 2>/dev/null ||             mv ./*.AppImage "$version_standalone-linux64.AppImage"
           ls -la ./*.AppImage
+      - name: Verify packaged AppImage
+        shell: bash
+        run: |
+          appimage="$(find . -maxdepth 1 -name '*.AppImage' -print -quit)"
+          test -n "$appimage"
+          "$appimage" --appimage-extract >/dev/null
+          test -x squashfs-root/usr/bin/proxor
+          test -x squashfs-root/usr/bin/proxor_core
+          test -s squashfs-root/usr/share/proxor/geosite.db
+          desktop-file-validate squashfs-root/usr/share/applications/proxor.desktop
+          rm -rf squashfs-root
       - name: Uploading AppImage
         uses: actions/upload-artifact@v4
         with:
@@ -207,7 +236,7 @@ jobs:
     name: Pack & Publish Release
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'y' && github.event.inputs.tag != ''
     runs-on: windows-latest
-    needs: [build-cpp, build-go]
+    needs: [build-cpp, build-go, appimage]
     steps:
       - name: Checking out sources
         uses: actions/checkout@v5
@@ -270,7 +299,8 @@ jobs:
           source libs/env_deploy.sh
           gh release create "${{ github.event.inputs.tag }}" \
             --title "${{ github.event.inputs.tag }}" \
-            --prerelease \
-            --generate-notes \
-            "deployment/$version_standalone-windows64.zip" \
-            "deployment/$version_standalone-symbols.zip"
+             --prerelease \
+             --generate-notes \
+             "deployment/$version_standalone-windows64.zip" \
+             "deployment/$version_standalone-symbols.zip" \
+             "download-artifact/Proxor-${{ github.sha }}-AppImage-x86_64/"*.AppImage

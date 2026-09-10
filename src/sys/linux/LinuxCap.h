@@ -4,6 +4,8 @@
 
 QString Linux_GetCapString(const QString &path);
 
+QString Linux_PkexecPath();
+
 int Linux_Pkexec_SetCapString(const QString &path, const QString &cap);
 
 bool Linux_HavePkexec();
