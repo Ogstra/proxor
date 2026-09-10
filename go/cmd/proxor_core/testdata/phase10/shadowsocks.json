@@ -1,0 +1,33 @@
+{
+  "log": {
+    "level": "warn"
+  },
+  "inbounds": [
+    {
+      "type": "mixed",
+      "tag": "in",
+      "listen": "127.0.0.1",
+      "listen_port": 2103
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "shadowsocks",
+      "tag": "proxy",
+      "server": "1.1.1.1",
+      "server_port": 443,
+      "method": "aes-128-gcm",
+      "password": "secret",
+      "plugin": "obfs-local",
+      "plugin_opts": "obfs=http;obfs-host=example.com",
+      "udp_over_tcp": false
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "route": {
+    "final": "proxy"
+  }
+}
