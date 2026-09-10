@@ -5,6 +5,7 @@ set -x
 CORE_PATH=${1:?missing core path}
 CONFIG_PATH=${2:?missing config path}
 TUN_NAME=${3:-}
+SOCKS_PORT=${4:-}
 
 if [ "$EUID" -ne 0 ]; then
   echo "[Warning] Tun script not running as root"
@@ -21,7 +22,26 @@ pre_start_linux() {
   ip6tables -I INPUT -s fdfe:dcba:9876::2 -d fdfe:dcba:9876::1 -p tcp -j ACCEPT
 }
 
+wait_for_socks() {
+  [ -z "$SOCKS_PORT" ] && return 0
+
+  PORT_HEX=$(printf '%04X' "$SOCKS_PORT")
+  attempt=0
+  while [ "$attempt" -lt 100 ]; do
+    if awk -v port=":$PORT_HEX" '$2 ~ port && $4 == "0A" { found = 1 } END { exit !found }' /proc/net/tcp /proc/net/tcp6 2>/dev/null; then
+      return 0
+    fi
+    attempt=$((attempt + 1))
+    sleep 0.1
+  done
+
+  echo "Timed out waiting for the local SOCKS listener on port $SOCKS_PORT" >&2
+  return 1
+}
+
 start() {
+  echo "PROXOR_TUN_AUTHORIZED"
+  wait_for_socks
   pre_start_linux
   "$CORE_PATH" run -c "$CONFIG_PATH" &
   CORE_PID=$!

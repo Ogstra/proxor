@@ -985,6 +985,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     const bool restore_vpn = ProxorGui::dataStore->remember_spmode.contains("vpn") || ProxorGui::dataStore->flag_restart_tun_on;
     // A remembered TUN must be ready before any automatic work creates traffic.
     startup_tun_pending = restore_vpn;
+    if (startup_tun_pending && ProxorGui::dataStore->remember_enable && ProxorGui::dataStore->remember_id >= 0) {
+        startup_deferred_profile_id = ProxorGui::dataStore->remember_id;
+    }
 
     // Start core
     runOnUiThread(
@@ -992,7 +995,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             core_process = new ProxorGui_sys::CoreProcess(core_path, args);
             // Remember last started
             if (ProxorGui::dataStore->remember_enable && ProxorGui::dataStore->remember_id >= 0) {
-                if (startup_tun_pending) {
+                if (startup_tun_pending && !startup_tun_authorized) {
                     startup_deferred_profile_id = ProxorGui::dataStore->remember_id;
                 } else {
                     core_process->start_profile_when_core_is_up = ProxorGui::dataStore->remember_id;
@@ -1804,6 +1807,7 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
     if (enable && startup_tun_failed) {
         startup_tun_failed = false;
         startup_tun_pending = true;
+        startup_tun_authorized = false;
     }
     if (enable != ProxorGui::dataStore->spmode_vpn) {
         if (enable) {
@@ -3220,14 +3224,19 @@ bool MainWindow::StartVPNProcess() {
         value.replace('"', QStringLiteral("\\\""));
         return QStringLiteral("\"") + value + QStringLiteral("\"");
     };
-    const auto command = QStringLiteral("bash %1 %2 %3").arg(
+    const auto command = QStringLiteral("bash %1 %2 %3 '' %4").arg(
         shellQuote(scriptPath),
         shellQuote(corePath),
-        shellQuote(configPath)
+        shellQuote(configPath),
+        shellQuote(Int2String(ProxorGui::dataStore->inbound_socks_port))
     );
     vpn_process->start("osascript", {"-e", QStringLiteral("do shell script %1 with administrator privileges").arg(appleScriptQuote(command))});
 #else
-    vpn_process->start(Linux_PkexecPath(), {"bash", scriptPath, corePath, configPath, "proxor-tun"});
+    QStringList vpnArgs{"bash", scriptPath, corePath, configPath, "proxor-tun"};
+    if (startup_tun_pending && startup_deferred_profile_id >= 0) {
+        vpnArgs += Int2String(ProxorGui::dataStore->inbound_socks_port);
+    }
+    vpn_process->start(Linux_PkexecPath(), vpnArgs);
 #endif
     if (!vpn_process->waitForStarted()) {
         vpn_process->deleteLater();
@@ -3239,10 +3248,11 @@ bool MainWindow::StartVPNProcess() {
         auto output = QString::fromUtf8(vpn_process->readAllStandardOutput());
         if (startup_tun_pending) {
             *startupMarkerBuffer += output;
+            if (startupMarkerBuffer->contains("PROXOR_TUN_AUTHORIZED")) authorizeStartupTun();
             if (startupMarkerBuffer->contains("PROXOR_TUN_READY")) completeStartupTunAuthorization();
-            if (startupMarkerBuffer->size() > 32) *startupMarkerBuffer = startupMarkerBuffer->right(32);
+            if (startupMarkerBuffer->size() > 64) *startupMarkerBuffer = startupMarkerBuffer->right(64);
         }
-        const auto log = output.replace("PROXOR_TUN_READY", "").trimmed();
+        const auto log = output.replace("PROXOR_TUN_AUTHORIZED", "").replace("PROXOR_TUN_READY", "").trimmed();
         if (!log.isEmpty()) MW_show_log(log);
     };
     connect(vpn_process, &QProcess::readyReadStandardOutput, this, handleStandardOutput);
@@ -3256,11 +3266,7 @@ bool MainWindow::StartVPNProcess() {
     return true;
 }
 
-void MainWindow::completeStartupTunAuthorization() {
-    if (!startup_tun_pending) return;
-    startup_tun_pending = false;
-    MW_show_log(tr("Tun authorization complete; resuming deferred startup work."));
-
+void MainWindow::resumeDeferredStartupProfile() {
     if (startup_deferred_profile_id >= 0) {
         const auto profileId = startup_deferred_profile_id;
         startup_deferred_profile_id = -1;
@@ -3272,6 +3278,22 @@ void MainWindow::completeStartupTunAuthorization() {
             startup_deferred_profile_id = profileId;
         }
     }
+}
+
+void MainWindow::authorizeStartupTun() {
+    if (!startup_tun_pending || startup_tun_authorized) return;
+    startup_tun_authorized = true;
+    MW_show_log(tr("Tun authorization granted; starting the deferred proxy profile."));
+    resumeDeferredStartupProfile();
+}
+
+void MainWindow::completeStartupTunAuthorization() {
+    if (!startup_tun_pending) return;
+    startup_tun_pending = false;
+    startup_tun_authorized = true;
+    MW_show_log(tr("Tun interface ready; resuming deferred startup work."));
+
+    resumeDeferredStartupProfile();
     if (startup_network_work) {
         auto startupWork = std::move(startup_network_work);
         startupWork();
@@ -3281,6 +3303,7 @@ void MainWindow::completeStartupTunAuthorization() {
 void MainWindow::failStartupTunAuthorization() {
     if (!startup_tun_pending) return;
     startup_tun_pending = false;
+    startup_tun_authorized = false;
     startup_tun_failed = true;
     MW_show_log(tr("Tun authorization failed; automatic startup network work remains disabled."));
 }
