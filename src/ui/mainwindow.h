@@ -19,6 +19,9 @@
 #include <QSemaphore>
 #include <QMutex>
 #include <atomic>
+#include <functional>
+#include <memory>
+#include <utility>
 
 #include "GroupSort.hpp"
 
@@ -176,7 +179,7 @@ private:
     QShortcut *shortcut_ctrl_s = new QShortcut(QKeySequence("Ctrl+S"), this);
     QShortcut *shortcut_esc = new QShortcut(QKeySequence("Esc"), this);
     //
-    ProxorGui_sys::CoreProcess *core_process;
+    ProxorGui_sys::CoreProcess *core_process = nullptr;
     WifiMonitor *wifi_monitor = nullptr;
     qint64 vpn_pid = 0;
     //
@@ -194,6 +197,10 @@ private:
     std::shared_ptr<ProxorGui::ProxyEntity> running;
     bool start_pending = false;
     bool started_via_ssid_trigger = false;
+    bool startup_tun_pending = false;
+    bool startup_tun_failed = false;
+    int startup_deferred_profile_id = -1;
+    std::function<void()> startup_network_work;
     QString auto_start_consumed_ssid;
     QString traffic_update_cache;
     QTime last_test_time;
@@ -242,6 +249,9 @@ private:
     void HotkeyEvent(const QString &key);
 
     bool StartVPNProcess();
+
+    void completeStartupTunAuthorization();
+    void failStartupTunAuthorization();
 
     void syncWindowsHostsMapping(bool enable);
 

@@ -475,6 +475,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
         auto *chosen = menu.exec(tabBar->mapToGlobal(pos));
         if (chosen == updateAction) {
+            if (startup_tun_pending || startup_tun_failed) {
+                MessageBoxWarning(software_name, tr("Subscription updates are disabled until Tun authorization succeeds."));
+                return;
+            }
             ProxorGui_sub::groupUpdater->AsyncUpdate(group->url, group->id);
             return;
         }
@@ -977,13 +981,22 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     // a still-null defaultClient.
     setup_grpc();
 
+    const bool restore_system_proxy = ProxorGui::dataStore->remember_spmode.contains("system_proxy");
+    const bool restore_vpn = ProxorGui::dataStore->remember_spmode.contains("vpn") || ProxorGui::dataStore->flag_restart_tun_on;
+    // A remembered TUN must be ready before any automatic work creates traffic.
+    startup_tun_pending = restore_vpn;
+
     // Start core
     runOnUiThread(
         [=] {
             core_process = new ProxorGui_sys::CoreProcess(core_path, args);
             // Remember last started
             if (ProxorGui::dataStore->remember_enable && ProxorGui::dataStore->remember_id >= 0) {
-                core_process->start_profile_when_core_is_up = ProxorGui::dataStore->remember_id;
+                if (startup_tun_pending) {
+                    startup_deferred_profile_id = ProxorGui::dataStore->remember_id;
+                } else {
+                    core_process->start_profile_when_core_is_up = ProxorGui::dataStore->remember_id;
+                }
             }
             // Setup
             core_process->Start();
@@ -993,9 +1006,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     wifi_monitor = new WifiMonitor(this);
     connect(wifi_monitor, &WifiMonitor::ssidChanged, this, &MainWindow::onWifiSsidChanged);
     wifi_monitor->start();
-
-    const bool restore_system_proxy = ProxorGui::dataStore->remember_spmode.contains("system_proxy");
-    const bool restore_vpn = ProxorGui::dataStore->remember_spmode.contains("vpn") || ProxorGui::dataStore->flag_restart_tun_on;
 
     connect(qApp, &QGuiApplication::commitDataRequest, this, &MainWindow::on_commitDataRequest);
 
@@ -1014,36 +1024,44 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             TM_auto_update_subsctiption->start(60 * 1000);
         }
     };
-    connect(TM_auto_update_subsctiption, &QTimer::timeout, this, [&] { UI_update_due_groups_on_timer(); });
+    connect(TM_auto_update_subsctiption, &QTimer::timeout, this, [this] {
+        if (!startup_tun_pending && !startup_tun_failed) UI_update_due_groups_on_timer();
+    });
     TM_auto_update_subsctiption_Reset_Minute(ProxorGui::dataStore->sub_auto_update);
     const bool niLoaded = QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability);
     QNetworkInformation *ni = niLoaded ? QNetworkInformation::instance() : nullptr;
     const bool isOnline = ni && ni->reachability() == QNetworkInformation::Reachability::Online;
 
-    if (ProxorGui::dataStore->sub_update_on_start) {
-        if (!ni || isOnline) {
-            setTimeout([this] { UI_update_all_groups(true); }, this, 2000);
+    startup_network_work = [this, ni, isOnline] {
+        if (ProxorGui::dataStore->sub_update_on_start) {
+            if (!ni || isOnline) {
+                setTimeout([this] { UI_update_all_groups(true); }, this, 2000);
+            } else {
+                runOnceWhenOnline(ni, this, [this] { UI_update_all_groups(true); });
+            }
         } else {
-            runOnceWhenOnline(ni, this, [this] { UI_update_all_groups(true); });
+            if (!ni || isOnline) {
+                setTimeout([this] { UI_update_due_groups_on_start(); }, this, 2000);
+            } else {
+                runOnceWhenOnline(ni, this, [this] { UI_update_due_groups_on_start(); });
+            }
         }
-    } else {
-        if (!ni || isOnline) {
-            setTimeout([this] { UI_update_due_groups_on_start(); }, this, 2000);
-        } else {
-            runOnceWhenOnline(ni, this, [this] { UI_update_due_groups_on_start(); });
-        }
-    }
-    setTimeout([this] { run_subscription_ping_on_open(); }, this, 2500);
+        setTimeout([this] { run_subscription_ping_on_open(); }, this, 2500);
 
-    if (ProxorGui::dataStore->check_update_on_start) {
-        auto doCheck = [this]() {
-            setTimeout([this] { runOnNewThread([this] { CheckUpdate(true); }); }, this, 1500);
-        };
-        if (!ni || isOnline) {
-            doCheck();
-        } else {
-            runOnceWhenOnline(ni, this, [this] { runOnNewThread([this] { CheckUpdate(true); }); });
+        if (ProxorGui::dataStore->check_update_on_start) {
+            auto doCheck = [this]() {
+                setTimeout([this] { runOnNewThread([this] { CheckUpdate(true); }); }, this, 1500);
+            };
+            if (!ni || isOnline) {
+                doCheck();
+            } else {
+                runOnceWhenOnline(ni, this, [this] { runOnNewThread([this] { CheckUpdate(true); }); });
+            }
         }
+    };
+    if (!startup_tun_pending) {
+        auto startupWork = std::move(startup_network_work);
+        startupWork();
     }
 
     if (!ProxorGui::dataStore->flag_tray) show();
@@ -1057,12 +1075,18 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             }
             if (restore_vpn) {
                 proxor_set_spmode_vpn(true, false);
+                if (ProxorGui::UseInternalTun() && ProxorGui::dataStore->spmode_vpn) {
+                    completeStartupTunAuthorization();
+                } else if (!ProxorGui::UseInternalTun() && !ProxorGui::dataStore->spmode_vpn) {
+                    failStartupTunAuthorization();
+                }
             }
         }, this, 0);
     }
 }
 
 void MainWindow::run_subscription_ping_on_open(int attempts) {
+    if (startup_tun_pending || startup_tun_failed) return;
     constexpr int maxAttempts = 90;
     if (attempts > maxAttempts) return;
 
@@ -1212,6 +1236,7 @@ std::shared_ptr<ProxorGui::ProxyEntity> MainWindow::resolveSsidOnDemandProfile()
 }
 
 void MainWindow::onWifiSsidChanged(const QString &ssid) {
+    if (startup_tun_pending || startup_tun_failed) return;
     if (!ProxorGui::dataStore->ssid_on_demand_enabled) return;
 
     bool isTrigger = !ssid.isEmpty() &&
@@ -1297,6 +1322,7 @@ void MainWindow::on_tabWidget_currentChanged(int index) {
                 ProxorGui::profileManager->AddGroup(ent);
                 refresh_groups();
                 if (!ent->url.trimmed().isEmpty()) {
+                    if (startup_tun_pending || startup_tun_failed) return;
                     ProxorGui_sub::groupUpdater->AsyncUpdate(ent->url, ent->id);
                 }
             } else {
@@ -1775,6 +1801,10 @@ void MainWindow::proxor_set_spmode_system_proxy(bool enable, bool save) {
 }
 
 void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
+    if (enable && startup_tun_failed) {
+        startup_tun_failed = false;
+        startup_tun_pending = true;
+    }
     if (enable != ProxorGui::dataStore->spmode_vpn) {
         if (enable) {
             if (ProxorGui::UseInternalTun()) {
@@ -1849,6 +1879,9 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
     ProxorGui::dataStore->spmode_vpn = enable;
     refresh_status();
 
+    if (enable && startup_tun_pending && ProxorGui::UseInternalTun()) {
+        completeStartupTunAuthorization();
+    }
     if (ProxorGui::UseInternalTun() && ProxorGui::dataStore->started_id >= 0) proxor_start(ProxorGui::dataStore->started_id);
 }
 
@@ -3170,13 +3203,14 @@ bool MainWindow::StartVPNProcess() {
     auto vpn_process = new QProcess;
     QProcess::connect(vpn_process, &QProcess::stateChanged, this, [=](QProcess::ProcessState state) {
         if (state == QProcess::NotRunning) {
+            if (startup_tun_pending) failStartupTunAuthorization();
             vpn_pid = 0;
             vpn_process->deleteLater();
             GetMainWindow()->proxor_set_spmode_vpn(false);
         }
     });
     //
-    vpn_process->setProcessChannelMode(QProcess::ForwardedChannels);
+    vpn_process->setProcessChannelMode(QProcess::SeparateChannels);
 #ifdef Q_OS_MACOS
     auto shellQuote = [](QString value) {
         return QStringLiteral("'") + value.replace(QStringLiteral("'"), QStringLiteral("'\\\"'\\\"'")) + QStringLiteral("'");
@@ -3193,12 +3227,62 @@ bool MainWindow::StartVPNProcess() {
     );
     vpn_process->start("osascript", {"-e", QStringLiteral("do shell script %1 with administrator privileges").arg(appleScriptQuote(command))});
 #else
-    vpn_process->start(Linux_PkexecPath(), {"bash", scriptPath, corePath, configPath});
+    vpn_process->start(Linux_PkexecPath(), {"bash", scriptPath, corePath, configPath, "proxor-tun"});
 #endif
-    vpn_process->waitForStarted();
+    if (!vpn_process->waitForStarted()) {
+        vpn_process->deleteLater();
+        if (startup_tun_pending) failStartupTunAuthorization();
+        return false;
+    }
+    auto startupMarkerBuffer = std::make_shared<QString>();
+    auto handleStandardOutput = [this, vpn_process, startupMarkerBuffer] {
+        auto output = QString::fromUtf8(vpn_process->readAllStandardOutput());
+        if (startup_tun_pending) {
+            *startupMarkerBuffer += output;
+            if (startupMarkerBuffer->contains("PROXOR_TUN_READY")) completeStartupTunAuthorization();
+            if (startupMarkerBuffer->size() > 32) *startupMarkerBuffer = startupMarkerBuffer->right(32);
+        }
+        const auto log = output.replace("PROXOR_TUN_READY", "").trimmed();
+        if (!log.isEmpty()) MW_show_log(log);
+    };
+    connect(vpn_process, &QProcess::readyReadStandardOutput, this, handleStandardOutput);
+    connect(vpn_process, &QProcess::readyReadStandardError, this, [vpn_process] {
+        const auto log = QString::fromUtf8(vpn_process->readAllStandardError()).trimmed();
+        if (!log.isEmpty()) MW_show_log(log);
+    });
+    handleStandardOutput();
     vpn_pid = vpn_process->processId(); // actually it's pkexec or bash PID
 #endif
     return true;
+}
+
+void MainWindow::completeStartupTunAuthorization() {
+    if (!startup_tun_pending) return;
+    startup_tun_pending = false;
+    MW_show_log(tr("Tun authorization complete; resuming deferred startup work."));
+
+    if (startup_deferred_profile_id >= 0) {
+        const auto profileId = startup_deferred_profile_id;
+        startup_deferred_profile_id = -1;
+        if (ProxorGui::dataStore->core_running) {
+            proxor_start(profileId);
+        } else if (core_process != nullptr) {
+            core_process->start_profile_when_core_is_up = profileId;
+        } else {
+            startup_deferred_profile_id = profileId;
+        }
+    }
+    if (startup_network_work) {
+        auto startupWork = std::move(startup_network_work);
+        startupWork();
+    }
+}
+
+void MainWindow::failStartupTunAuthorization() {
+    if (!startup_tun_pending) return;
+    startup_tun_pending = false;
+    startup_tun_failed = true;
+    MW_show_log(tr("Tun authorization failed; automatic startup network work remains disabled."));
 }
 
 bool MainWindow::StopVPNProcess(bool unconditional) {
