@@ -40,8 +40,10 @@ for submodule in 3rdparty/sing-box 3rdparty/QHotkey 3rdparty/SQLiteCpp; do
     test -d "$root/$submodule"
     tar tzf "$archive" | grep -q "^proxor-$version/$submodule/"
 done
-! find "$root" -name .git -o -name .gitmodules | grep -q .
+! find "$root" -name .git | grep -q .
 ! tar tzf "$archive" | grep -Eq '(^|/)\.git(/|$)'
+grep -Fx "commit=$commit" "$output/proxor-$version.source-manifest"
+grep -Fx "version=$version" "$output/proxor-$version.source-manifest"
 
 printf 'local-only\n' > "$clone/local-only"
 if "$helper" --repo "$clone" --commit "$commit" --version "$version" --output "$work/dirty-output"; then

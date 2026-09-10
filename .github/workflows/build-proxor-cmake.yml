@@ -29,6 +29,32 @@ env:
   LINUXDEPLOY_QT_SHA256: "15106be885c1c48a021198e7e1e9a48ce9d02a86dd0a1848f00bdbf3c1c92724"
 
 jobs:
+  stage-package-source:
+    name: Stage verified package source
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the exact recursive source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          submodules: "recursive"
+      - name: Verify and stage immutable source
+        shell: bash
+        run: |
+          bash packaging/source/tests/test-stage-recursive-source.sh
+          version="$(tr -d '\n' < VERSION.txt)"
+          packaging/source/stage-recursive-source.sh \
+            --repo "$GITHUB_WORKSPACE" --commit "$GITHUB_SHA" --version "$version" \
+            --output "$RUNNER_TEMP/source-stage"
+      - name: Upload verified source release input
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets-source
+          path: |
+            ${{ runner.temp }}/source-stage/proxor-*.tar.gz
+            ${{ runner.temp }}/source-stage/proxor-*.source-manifest
+          if-no-files-found: error
+
   build-go:
     strategy:
       matrix:
@@ -43,14 +69,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checking out sources
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           # go.work does `replace github.com/sagernet/sing-box => ./3rdparty/sing-box`,
           # so the submodule IS the source. Without this the build has no sing-box at all.
           submodules: "recursive"
       - name: Install Golang
         if: matrix.cross_os != 'public_res'
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: false
@@ -75,11 +101,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checking out sources
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           submodules: "recursive"
       - name: Install Golang
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: false
@@ -112,7 +138,7 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - name: Checking out sources
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           submodules: "recursive"
       # Qt 6 will not configure on a bare runner without GL and xkb development headers.
@@ -184,7 +210,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checking out sources
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
@@ -294,7 +320,7 @@ jobs:
     needs: [build-cpp, build-go, test-go, appimage]
     steps:
       - name: Checking out sources
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           submodules: "recursive"
       - name: Install Qt ${{ env.QT_VERSION }}
