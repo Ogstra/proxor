@@ -41,6 +41,10 @@
             },
             {
                 "inbound": "%FAKE_DNS_INBOUND%",
+                "query_type": [
+                    1,
+                    28
+                ],
                 "server": "dns-fake"
             }
         ]

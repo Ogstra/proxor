@@ -767,6 +767,8 @@ namespace ProxorGui {
         if (dataStore->fake_dns && UseInternalTun() && dataStore->spmode_vpn && !status->forTest) {
             dnsRules += QJsonObject{
                 {"inbound", "tun-in"},
+                // FakeIP can only synthesize address records; preserve PTR and other DNS types.
+                {"query_type", QJsonArray{1, 28}},
                 {"server", "dns-fake"},
             };
         }
