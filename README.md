@@ -48,8 +48,10 @@ If the application reports missing runtime DLLs, install the [Microsoft Visual C
 
 ### Linux
 
-Linux packaging and deployment vary by distribution. Use the local build and runtime guides in [`docs/`](docs/readme.md) instead of old third-party package references.
-Linux remains manual-build only for now. `.deb`, AppImage, and CI-produced Linux release artifacts are not currently supported.
+Linux packaging and deployment vary by distribution. GitHub Actions publishes an x86_64
+AppImage built on an Ubuntu 22.04 compatibility baseline and smoke-tested on Debian 12.
+Use the local build and runtime guides in [`docs/`](docs/readme.md) for native builds and
+AppImage limitations. There is no `.deb` package.
 
 ## Dependencies
 
