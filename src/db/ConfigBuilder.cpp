@@ -93,6 +93,20 @@ namespace ProxorGui {
         return {};
     }
 
+    QJsonArray BuildTunRouteExclusions() {
+        QJsonArray exclusions{
+            "10.0.0.0/8",      // RFC 1918
+            "172.16.0.0/12",   // RFC 1918
+            "192.168.0.0/16",  // RFC 1918
+            "100.64.0.0/10",   // carrier-grade NAT, commonly used by Tailscale/WireGuard
+            "169.254.0.0/16",  // IPv4 link-local
+            "fc00::/7",        // IPv6 unique local
+            "fe80::/10",       // IPv6 link-local
+        };
+        for (const auto &route : BuildSshRouteExclusions()) exclusions += route;
+        return exclusions;
+    }
+
     QString QJsonArray2QStringCompact(const QJsonArray &array) {
         return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));
     }
@@ -551,7 +565,7 @@ namespace ProxorGui {
             inboundObj["stack"] = Preset::SingBox::VpnImplementation.value(dataStore->vpn_implementation);
             inboundObj["strict_route"] = dataStore->vpn_strict_route;
             inboundObj["address"] = BuildTunAddressArray(dataStore->vpn_ipv6);
-            auto routeExclusions = BuildSshRouteExclusions();
+            auto routeExclusions = BuildTunRouteExclusions();
 #ifdef Q_OS_WIN
             // Exclude Windows NCSI/NLA probe destinations from the TUN default route so they
             // travel over the real underlying adapter. Without this, Windows Network Location
@@ -990,8 +1004,10 @@ namespace ProxorGui {
         const auto dnsRemote = QJsonObject2QString(BuildTypedDnsServer("dns-remote", dataStore->routing->remote_dns, "proxor-socks", dataStore->routing->remote_dns_strategy), true);
         const auto dnsDirect = QJsonObject2QString(BuildTypedDnsServer("dns-direct", "local", {}, dataStore->routing->direct_dns_strategy), true);
         const auto dnsLocal = QJsonObject2QString(BuildTypedDnsServer("dns-local", BOX_UNDERLYING_DNS), true);
-        auto routeExclusions = QJsonArray{"13.107.4.52/32", "23.103.160.10/32", "131.107.255.255/32"};
-        for (const auto &route : BuildSshRouteExclusions()) routeExclusions += route;
+        auto routeExclusions = BuildTunRouteExclusions();
+        routeExclusions += "13.107.4.52/32";
+        routeExclusions += "23.103.160.10/32";
+        routeExclusions += "131.107.255.255/32";
         // gen config
         auto configFn = ":/proxor/vpn/sing-box-vpn.json";
         if (QFile::exists("vpn/sing-box-vpn.json")) configFn = "vpn/sing-box-vpn.json";
