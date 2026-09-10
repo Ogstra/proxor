@@ -3232,10 +3232,12 @@ bool MainWindow::StartVPNProcess() {
     );
     vpn_process->start("osascript", {"-e", QStringLiteral("do shell script %1 with administrator privileges").arg(appleScriptQuote(command))});
 #else
-    QStringList vpnArgs{"bash", scriptPath, corePath, configPath, "proxor-tun"};
-    if (startup_tun_pending && startup_deferred_profile_id >= 0) {
-        vpnArgs += Int2String(ProxorGui::dataStore->inbound_socks_port);
-    }
+    // The compatibility core forwards every non-bypassed TUN flow to the GUI
+    // core's local SOCKS inbound.  Always gate TUN route installation on that
+    // listener, not just during remembered-profile startup.
+    QStringList vpnArgs{
+        "bash", scriptPath, corePath, configPath, "proxor-tun", Int2String(ProxorGui::dataStore->inbound_socks_port)
+    };
     vpn_process->start(Linux_PkexecPath(), vpnArgs);
 #endif
     if (!vpn_process->waitForStarted()) {
