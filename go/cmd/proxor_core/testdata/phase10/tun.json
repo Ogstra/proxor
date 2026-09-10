@@ -1,0 +1,47 @@
+{
+  "log": {
+    "level": "warn"
+  },
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-local",
+        "type": "local"
+      }
+    ],
+    "rules": [],
+    "independent_cache": true
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "interface_name": "proxor-tun-test",
+      "address": [
+        "172.19.0.1/28"
+      ],
+      "mtu": 1500,
+      "auto_route": false,
+      "strict_route": false,
+      "stack": "system",
+      "endpoint_independent_nat": true,
+      "sniff": false
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "route": {
+    "final": "direct",
+    "auto_detect_interface": false,
+    "rules": [
+      {
+        "protocol": "dns",
+        "action": "hijack-dns"
+      }
+    ]
+  }
+}

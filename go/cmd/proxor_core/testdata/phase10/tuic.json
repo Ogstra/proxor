@@ -1,0 +1,37 @@
+{
+  "log": {
+    "level": "warn"
+  },
+  "inbounds": [
+    {
+      "type": "mixed",
+      "tag": "in",
+      "listen": "127.0.0.1",
+      "listen_port": 2106
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "tuic",
+      "tag": "proxy",
+      "server": "1.1.1.1",
+      "server_port": 443,
+      "uuid": "11111111-1111-1111-1111-111111111111",
+      "password": "secret",
+      "congestion_control": "cubic",
+      "udp_relay_mode": "native",
+      "tls": {
+        "enabled": true,
+        "server_name": "example.com",
+        "insecure": true
+      }
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "route": {
+    "final": "proxy"
+  }
+}
