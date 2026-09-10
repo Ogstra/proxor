@@ -1,6 +1,5 @@
 #!/bin/sh
 set -e
-set -x
 
 CORE_PATH=${1:?missing core path}
 CONFIG_PATH=${2:?missing config path}
@@ -41,7 +40,7 @@ wait_for_socks() {
 
 start() {
   echo "PROXOR_TUN_AUTHORIZED"
-  wait_for_socks
+  wait_for_socks || return $?
   pre_start_linux
   "$CORE_PATH" run -c "$CONFIG_PATH" &
   CORE_PID=$!
