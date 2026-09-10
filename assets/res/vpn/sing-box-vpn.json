@@ -61,11 +61,7 @@
             "stack": "%STACK%",
             "endpoint_independent_nat": true,
             "sniff": false,
-            "route_exclude_address": [
-                "13.107.4.52/32",
-                "23.103.160.10/32",
-                "131.107.255.255/32"
-            ]
+            "route_exclude_address": %ROUTE_EXCLUDE_ADDRESSES%
         }
     ],
     "outbounds": [
@@ -89,6 +85,7 @@
     "route": {
         "final": "%FINAL_OUT%",
         "auto_detect_interface": true,
+        "find_process": true,
         "rules": [
             {
                 "network": "udp",

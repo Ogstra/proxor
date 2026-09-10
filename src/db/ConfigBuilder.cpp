@@ -7,6 +7,7 @@
 #include <QApplication>
 #include <QFile>
 #include <QFileInfo>
+#include <QHostAddress>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QUrl>
@@ -78,6 +79,18 @@ namespace ProxorGui {
         QJsonArray addresses{"172.19.0.1/28"};
         if (includeIPv6) addresses += "fdfe:dcba:9876::1/126";
         return addresses;
+    }
+
+    QJsonArray BuildSshRouteExclusions() {
+        const auto fields = qEnvironmentVariable("SSH_CONNECTION").simplified().split(' ', Qt::SkipEmptyParts);
+        if (fields.isEmpty()) return {};
+
+        const QHostAddress clientAddress(fields.first());
+        if (clientAddress.protocol() == QAbstractSocket::IPv4Protocol)
+            return QJsonArray{clientAddress.toString() + "/32"};
+        if (clientAddress.protocol() == QAbstractSocket::IPv6Protocol)
+            return QJsonArray{clientAddress.toString() + "/128"};
+        return {};
     }
 
     QString QJsonArray2QStringCompact(const QJsonArray &array) {
@@ -538,18 +551,20 @@ namespace ProxorGui {
             inboundObj["stack"] = Preset::SingBox::VpnImplementation.value(dataStore->vpn_implementation);
             inboundObj["strict_route"] = dataStore->vpn_strict_route;
             inboundObj["address"] = BuildTunAddressArray(dataStore->vpn_ipv6);
+            auto routeExclusions = BuildSshRouteExclusions();
 #ifdef Q_OS_WIN
             // Exclude Windows NCSI/NLA probe destinations from the TUN default route so they
             // travel over the real underlying adapter. Without this, Windows Network Location
             // Awareness marks the TUN network "No internet" (globe icon) because its HTTP/DNS
             // connectivity probes fail through the tunnel, and then shows an Ethernet icon
             // (wintun registers as Ethernet media type) instead of the real WiFi icon.
-            inboundObj["route_exclude_address"] = QJsonArray{
+            QJSONARRAY_ADD(routeExclusions, QJsonArray{
                 "13.107.4.52/32",    // www.msftconnecttest.com — primary NCSI HTTP probe
                 "23.103.160.10/32",  // legacy NCSI probe target
                 "131.107.255.255/32" // dns.msftncsi.com — expected NCSI DNS answer IP
-            };
+            })
 #endif
+            if (!routeExclusions.isEmpty()) inboundObj["route_exclude_address"] = routeExclusions;
             status->inbounds += inboundObj;
         }
 
@@ -977,11 +992,14 @@ namespace ProxorGui {
         const auto dnsRemote = QJsonObject2QString(BuildTypedDnsServer("dns-remote", dataStore->routing->remote_dns, "proxor-socks", dataStore->routing->remote_dns_strategy), true);
         const auto dnsDirect = QJsonObject2QString(BuildTypedDnsServer("dns-direct", "local", {}, dataStore->routing->direct_dns_strategy), true);
         const auto dnsLocal = QJsonObject2QString(BuildTypedDnsServer("dns-local", BOX_UNDERLYING_DNS), true);
+        auto routeExclusions = QJsonArray{"13.107.4.52/32", "23.103.160.10/32", "131.107.255.255/32"};
+        QJSONARRAY_ADD(routeExclusions, BuildSshRouteExclusions())
         // gen config
         auto configFn = ":/proxor/vpn/sing-box-vpn.json";
         if (QFile::exists("vpn/sing-box-vpn.json")) configFn = "vpn/sing-box-vpn.json";
         auto config = ReadFileText(configFn)
-                          .replace("%TUN_ADDRESSES%", tunAddresses)
+                           .replace("%TUN_ADDRESSES%", tunAddresses)
+                           .replace("%ROUTE_EXCLUDE_ADDRESSES%", QJsonArray2QStringCompact(routeExclusions))
                           .replace("%DNS_REMOTE_SERVER%", dnsRemote)
                           .replace("%DNS_DIRECT_SERVER%", dnsDirect)
                           .replace("%DNS_LOCAL_SERVER%", dnsLocal)
