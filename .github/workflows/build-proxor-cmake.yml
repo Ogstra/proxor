@@ -15,6 +15,9 @@ on:
       publish:
         description: "Publish: set to y to publish a release"
         required: false
+      prerelease:
+        description: "Publish as a prerelease"
+        required: false
 
 env:
   # Keep in step with qtsdk/Qt used locally and with libs/download_proxor_qtsdk_win.sh
@@ -66,6 +69,27 @@ jobs:
         with:
           name: Proxor-${{ github.sha }}-Common-${{ matrix.cross_os }}-${{ matrix.cross_arch }}
           path: artifacts.tgz
+
+  test-go:
+    name: Go tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checking out sources
+        uses: actions/checkout@v5
+        with:
+          submodules: "recursive"
+      - name: Install Golang
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - name: Run Go tests
+        shell: bash
+        run: |
+          go test ./go/grpc_server/...
+          go test ./go/proxorlib/...
+          go test ./go/cmd/proxor_core/...
+          go test ./go/cmd/updater/...
 
   build-cpp:
     strategy:
@@ -183,7 +207,7 @@ jobs:
       - name: Install AppImage tooling
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libfuse2 file desktop-file-utils
+          sudo apt-get install -y --no-install-recommends libfuse2 file desktop-file-utils xvfb xauth
           curl -fsSLo linuxdeploy "https://github.com/linuxdeploy/linuxdeploy/releases/download/${LINUXDEPLOY_VERSION}/linuxdeploy-x86_64.AppImage"
           echo "${LINUXDEPLOY_SHA256}  linuxdeploy" | sha256sum --check --status
           curl -fsSLo linuxdeploy-plugin-qt "https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/${LINUXDEPLOY_QT_VERSION}/linuxdeploy-plugin-qt-x86_64.AppImage"
@@ -225,7 +249,36 @@ jobs:
           test -x squashfs-root/usr/bin/proxor_core
           test -s squashfs-root/usr/share/proxor/geosite.db
           desktop-file-validate squashfs-root/usr/share/applications/proxor.desktop
-          rm -rf squashfs-root
+          set +e
+          xvfb-run -a timeout 10s "$appimage" -many
+          app_rc=$?
+          set -e
+           test "$app_rc" -eq 0 -o "$app_rc" -eq 124
+           rm -rf squashfs-root
+      # The AppImage is built on Ubuntu 22.04 to keep its glibc requirement below
+      # Debian 12. Test the completed artifact in that actual target too: extracted-run
+      # mode exercises its bundled Qt runtime without requiring FUSE in the container.
+      - name: Smoke test AppImage on Debian 12
+        shell: bash
+        run: |
+          appimage="$(find . -maxdepth 1 -name '*.AppImage' -print -quit)"
+          test -n "$appimage"
+          docker run --rm --volume "$PWD:/work:ro" --workdir /work debian:12-slim bash -ceu '
+            apt-get update
+            apt-get install -y --no-install-recommends \
+              xvfb xauth \
+              libdbus-1-3 libegl1 libfontconfig1 libfreetype6 libgl1 \
+              libxkbcommon-x11-0 \
+              libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+              libxcb-randr0 libxcb-render-util0 libxcb-shape0 \
+              libxcb-xinerama0 libxcb-xkb1
+            appimage="$(find . -maxdepth 1 -name "*.AppImage" -print -quit)"
+            set +e
+            APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a timeout 10s "$appimage" -many
+            app_rc=$?
+            set -e
+            test "$app_rc" -eq 0 -o "$app_rc" -eq 124
+          '
       - name: Uploading AppImage
         uses: actions/upload-artifact@v4
         with:
@@ -236,7 +289,9 @@ jobs:
     name: Pack & Publish Release
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'y' && github.event.inputs.tag != ''
     runs-on: windows-latest
-    needs: [build-cpp, build-go, appimage]
+    permissions:
+      contents: write
+    needs: [build-cpp, build-go, test-go, appimage]
     steps:
       - name: Checking out sources
         uses: actions/checkout@v5
@@ -269,9 +324,21 @@ jobs:
         shell: bash
         run: |
           source libs/env_deploy.sh
+          release_version="${{ github.event.inputs.tag }}"
+          release_version="${release_version#v}"
+          test "$release_version" = "$(cat VERSION.txt)" || {
+            echo "Release tag must match VERSION.txt ($release_version != $(cat VERSION.txt))" >&2
+            exit 1
+          }
           ./libs/deploy_windows64.sh
-          cp -r deployment/public_res/* deployment/windows64/ 2>/dev/null || true
-          bash ./libs/package_release.sh windows64 $version_standalone-windows64.zip
+          test -s deployment/windows64/proxor.exe
+          test -s deployment/windows64/proxor_core.exe
+          test -s deployment/windows64/updater.exe
+          test -s deployment/windows64/libcronet.dll
+          test -s deployment/windows64/config/runtime/app.exe
+          test -s deployment/windows64/config/runtime/Qt6Core.dll
+          test -s deployment/windows64/config/runtime/plugins/platforms/qwindows.dll
+          bash ./libs/package_release.sh "deployment/windows64" "deployment/$version_standalone-windows64.zip"
       # Symbols are kept, not deleted. The previous workflow ran `rm -rf *.pdb` at this
       # point, which would have discarded exactly what makes a crash from a shipped build
       # diagnosable. See docs/Build_Windows.md.
@@ -297,10 +364,14 @@ jobs:
         shell: bash
         run: |
           source libs/env_deploy.sh
+          release_version="${{ github.event.inputs.tag }}"
+          release_version="${release_version#v}"
+          test "$release_version" = "$(cat VERSION.txt)" || exit 1
           gh release create "${{ github.event.inputs.tag }}" \
             --title "${{ github.event.inputs.tag }}" \
-             --prerelease \
+             --target "${{ github.sha }}" \
              --generate-notes \
              "deployment/$version_standalone-windows64.zip" \
              "deployment/$version_standalone-symbols.zip" \
-             "download-artifact/Proxor-${{ github.sha }}-AppImage-x86_64/"*.AppImage
+              "download-artifact/Proxor-${{ github.sha }}-AppImage-x86_64/"*.AppImage \
+              ${{ github.event.inputs.prerelease == 'y' && '--prerelease' || '' }}

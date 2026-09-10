@@ -1,17 +1,26 @@
 #!/bin/bash
-set -e
+set -eu
 
 source libs/env_deploy.sh
-DEST=$DEPLOYMENT/windows64
-rm -rf $DEST
-mkdir -p $DEST
+DEST="$DEPLOYMENT/windows64"
+
+# CI extracts the Go artifact to the same destination this script assembles.
+# Preserve those files before replacing the Qt deployment tree.
+GO_STAGE="$(mktemp -d "${TMPDIR:-/tmp}/proxor-go.XXXXXX")"
+trap 'rm -rf "$GO_STAGE"' EXIT
+if [ -d "$DEST" ]; then
+  cp -a "$DEST/." "$GO_STAGE/"
+fi
+rm -rf "$DEST"
+mkdir -p "$DEST"
 
 #### copy exe ####
-cp $BUILD/proxor.exe $DEST
-mkdir -p $DEST/config/runtime
-cp $BUILD/app.exe $DEST/config/runtime/
-cp $SRC_ROOT/go/cmd/proxor_core/proxor_core.exe $DEST
-cp $SRC_ROOT/go/cmd/updater/updater.exe $DEST
+cp "$BUILD/proxor.exe" "$DEST"
+mkdir -p "$DEST/config/runtime"
+cp "$BUILD/app.exe" "$DEST/config/runtime/"
+cp "${GO_STAGE}/proxor_core.exe" "$DEST" 2>/dev/null || cp "$SRC_ROOT/go/cmd/proxor_core/proxor_core.exe" "$DEST"
+cp "${GO_STAGE}/updater.exe" "$DEST" 2>/dev/null || cp "$SRC_ROOT/go/cmd/updater/updater.exe" "$DEST"
+cp "${GO_STAGE}/libcronet.dll" "$DEST" 2>/dev/null || true
 
 #### deploy qt & DLL runtime ####
 pushd $DEST/config/runtime
@@ -112,4 +121,4 @@ if [ -d "$DEPLOYMENT/public_res" ]; then
   done
 fi
 
-cp $BUILD/*.pdb $DEPLOYMENT
+cp "$BUILD"/*.pdb "$DEPLOYMENT" 2>/dev/null || true
