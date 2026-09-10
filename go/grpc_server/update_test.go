@@ -21,8 +21,8 @@ func TestUpdateArchiveSuffixes(t *testing.T) {
 	}{
 		{goos: "windows", goarch: "amd64", expected: []string{"windows64.zip"}},
 		{goos: "windows", goarch: "arm64", expected: []string{"windows-arm64.zip"}},
-		{goos: "linux", goarch: "amd64", expected: []string{"linux64.zip", "linux64.tar.gz"}},
-		{goos: "linux", goarch: "arm64", expected: []string{"linux-arm64.zip", "linux-arm64.tar.gz"}},
+		{goos: "linux", goarch: "amd64", wantErr: true},
+		{goos: "linux", goarch: "arm64", wantErr: true},
 		{goos: "darwin", goarch: "amd64", wantErr: true},
 	}
 
@@ -45,6 +45,18 @@ func TestUpdateArchiveSuffixes(t *testing.T) {
 				t.Fatalf("%s/%s: expected %v, got %v", tt.goos, tt.goarch, tt.expected, got)
 			}
 		}
+	}
+}
+
+func TestLinuxUpdateGuidanceUsesPackageManagerOrAppImage(t *testing.T) {
+
+	_, err := updateArchiveSuffixes("linux", "amd64")
+	if err == nil {
+		t.Fatal("linux/amd64: expected no self-update error")
+	}
+	const want = "self-update is not available on Linux; use your package manager or download the latest AppImage from the release page"
+	if err.Error() != want {
+		t.Fatalf("linux/amd64 guidance = %q, want %q", err.Error(), want)
 	}
 }
 
