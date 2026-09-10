@@ -19,6 +19,16 @@ void PackagePolicyTest::wingetSuppressesEverySelfUpdateStep() {
     QVERIFY(!decision.allowApply);
     QVERIFY(!decision.allowUpdaterLaunch);
     QCOMPARE(decision.guidance, QStringLiteral("winget upgrade Ogstra.Proxor"));
+
+    int updateDispatcherCalls = 0;
+    const auto dispatch = [&updateDispatcherCalls](bool allowed) {
+        if (allowed) ++updateDispatcherCalls;
+    };
+    dispatch(decision.allowCheck);
+    dispatch(decision.allowDownload);
+    dispatch(decision.allowApply);
+    dispatch(decision.allowUpdaterLaunch);
+    QCOMPARE(updateDispatcherCalls, 0);
 }
 
 void PackagePolicyTest::flatpakDisablesEveryPrivilegedLifecycleEntryPoint() {
@@ -29,6 +39,16 @@ void PackagePolicyTest::flatpakDisablesEveryPrivilegedLifecycleEntryPoint() {
         QVERIFY(!decision.allowTun);
         QVERIFY(!decision.allowSystemProxy);
         QVERIFY(!decision.requestPrivilegedOperation);
+
+        bool tunEnabled = true;
+        bool systemProxyEnabled = true;
+        int privilegedOperations = 0;
+        if (!decision.allowTun) tunEnabled = false;
+        if (!decision.allowSystemProxy) systemProxyEnabled = false;
+        if (decision.requestPrivilegedOperation) ++privilegedOperations;
+        QVERIFY(!tunEnabled);
+        QVERIFY(!systemProxyEnabled);
+        QCOMPARE(privilegedOperations, 0);
     }
 }
 
