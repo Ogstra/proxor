@@ -558,11 +558,9 @@ namespace ProxorGui {
             // Awareness marks the TUN network "No internet" (globe icon) because its HTTP/DNS
             // connectivity probes fail through the tunnel, and then shows an Ethernet icon
             // (wintun registers as Ethernet media type) instead of the real WiFi icon.
-            QJSONARRAY_ADD(routeExclusions, QJsonArray{
-                "13.107.4.52/32",    // www.msftconnecttest.com — primary NCSI HTTP probe
-                "23.103.160.10/32",  // legacy NCSI probe target
-                "131.107.255.255/32" // dns.msftncsi.com — expected NCSI DNS answer IP
-            })
+            routeExclusions += "13.107.4.52/32";    // www.msftconnecttest.com — primary NCSI HTTP probe
+            routeExclusions += "23.103.160.10/32";  // legacy NCSI probe target
+            routeExclusions += "131.107.255.255/32"; // dns.msftncsi.com — expected NCSI DNS answer IP
 #endif
             if (!routeExclusions.isEmpty()) inboundObj["route_exclude_address"] = routeExclusions;
             status->inbounds += inboundObj;
@@ -993,7 +991,7 @@ namespace ProxorGui {
         const auto dnsDirect = QJsonObject2QString(BuildTypedDnsServer("dns-direct", "local", {}, dataStore->routing->direct_dns_strategy), true);
         const auto dnsLocal = QJsonObject2QString(BuildTypedDnsServer("dns-local", BOX_UNDERLYING_DNS), true);
         auto routeExclusions = QJsonArray{"13.107.4.52/32", "23.103.160.10/32", "131.107.255.255/32"};
-        QJSONARRAY_ADD(routeExclusions, BuildSshRouteExclusions())
+        for (const auto &route : BuildSshRouteExclusions()) routeExclusions += route;
         // gen config
         auto configFn = ":/proxor/vpn/sing-box-vpn.json";
         if (QFile::exists("vpn/sing-box-vpn.json")) configFn = "vpn/sing-box-vpn.json";
