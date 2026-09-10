@@ -1,12 +1,20 @@
 # Linux Runtime Guide
 
-This document focuses on running locally built or locally staged Linux packages for this repository.
-
-Linux packaging automation is not available right now. Use this guide for manual/local runs only, not as a promise of supported `.deb` or AppImage artifacts.
+This document covers locally built packages and the x86_64 AppImage produced by GitHub Actions.
 
 ## Scope
 
 Distribution-specific package managers and third-party distribution channels are intentionally out of scope for this fork documentation. Use the local build artifacts and scripts in this repository instead.
+
+## AppImage
+
+The AppImage stores configuration under the user application-data directory because its
+mount is read-only. It includes geodata and Qt plugins. Tun mode is supported through a
+separate privileged compatibility core, which requires PolicyKit (`pkexec`), `iptables`, and
+`ip6tables`. The embedded core itself cannot receive `setcap` on the AppImage mount.
+
+System Proxy integration is supported on GNOME-family desktops and KDE Plasma. Other desktop
+environments must configure their proxy manually or use Tun mode.
 
 ## Runtime Options
 

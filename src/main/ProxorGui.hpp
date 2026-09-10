@@ -20,6 +20,8 @@ namespace ProxorGui {
 
     QString FindProxorCoreRealPath();
 
+    bool UseInternalTun();
+
     bool IsAdmin();
 } // namespace ProxorGui
 

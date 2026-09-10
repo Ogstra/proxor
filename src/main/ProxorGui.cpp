@@ -551,6 +551,15 @@ namespace ProxorGui {
         return fn;
     }
 
+    bool UseInternalTun() {
+#ifdef Q_OS_LINUX
+        // AppImage cannot add capabilities to its read-only core. It uses the
+        // separate privileged compatibility process instead.
+        if (qEnvironmentVariableIsSet("APPIMAGE")) return false;
+#endif
+        return dataStore->vpn_internal_tun;
+    }
+
     short isAdminCache = -1;
 
     // IsAdmin 主要判断：有无权限启动 Tun

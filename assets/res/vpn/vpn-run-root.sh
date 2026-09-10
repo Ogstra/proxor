@@ -2,6 +2,9 @@
 set -e
 set -x
 
+CORE_PATH=${1:?missing core path}
+CONFIG_PATH=${2:?missing config path}
+
 if [ "$EUID" -ne 0 ]; then
   echo "[Warning] Tun script not running as root"
 fi
@@ -9,7 +12,7 @@ fi
 command -v pkill >/dev/null 2>&1 || echo "[Warning] pkill not found"
 
 BASEDIR=$(dirname "$0")
-cd $BASEDIR
+cd "$BASEDIR"
 
 pre_start_linux() {
   # for Tun2Socket
@@ -19,7 +22,7 @@ pre_start_linux() {
 
 start() {
   pre_start_linux
-  "./proxor_core" run -c "$CONFIG_PATH"
+  "$CORE_PATH" run -c "$CONFIG_PATH"
 }
 
 stop() {

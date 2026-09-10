@@ -1745,7 +1745,18 @@ void MainWindow::proxor_set_spmode_system_proxy(bool enable, bool save) {
         if (enable) {
             auto socks_port = ProxorGui::dataStore->inbound_socks_port;
             auto http_port = ProxorGui::dataStore->inbound_socks_port;
-            SetSystemProxy(http_port, socks_port);
+            if (!SetSystemProxy(http_port, socks_port)) {
+#ifdef Q_OS_LINUX
+                MessageBoxWarning(
+                    software_name,
+                    tr("System Proxy could not be configured for this desktop environment. Use GNOME, KDE Plasma, or a native installation with Tun mode.")
+                );
+#else
+                MessageBoxWarning(software_name, tr("System Proxy could not be configured."));
+#endif
+                refresh_status();
+                return;
+            }
         } else {
             ClearSystemProxy();
         }
@@ -1766,17 +1777,10 @@ void MainWindow::proxor_set_spmode_system_proxy(bool enable, bool save) {
 void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
     if (enable != ProxorGui::dataStore->spmode_vpn) {
         if (enable) {
-            if (ProxorGui::dataStore->vpn_internal_tun) {
+            if (ProxorGui::UseInternalTun()) {
                 bool requestPermission = !ProxorGui::IsAdmin();
                 if (requestPermission) {
 #ifdef Q_OS_LINUX
-                    if (QProcessEnvironment::systemEnvironment().contains("APPIMAGE")) {
-                        MessageBoxWarning(
-                            software_name,
-                            tr("Tun mode is unavailable in the AppImage because it cannot grant cap_net_admin to its read-only bundled core. Use a native installation instead.")
-                        );
-                        proxor_set_spmode_FAILED
-                    }
                     if (!Linux_HavePkexec()) {
                         MessageBoxWarning(software_name, tr("Tun mode needs pkexec. Install PolicyKit and try again."));
                         proxor_set_spmode_FAILED
@@ -1806,6 +1810,15 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
                     proxor_set_spmode_FAILED
                 }
             } else {
+#ifdef Q_OS_LINUX
+                if (!Linux_HavePkexec()) {
+                    MessageBoxWarning(software_name, tr("Tun mode needs pkexec. Install PolicyKit and try again."));
+                    proxor_set_spmode_FAILED
+                }
+                if (qEnvironmentVariableIsSet("APPIMAGE")) {
+                    MW_show_log(tr("AppImage Tun uses a separate privileged compatibility core."));
+                }
+#endif
                 if (ProxorGui::dataStore->need_keep_vpn_off) {
                     MessageBoxWarning(software_name, tr("Current server is incompatible with Tun. Please stop the server first, enable Tun Mode, and then restart."));
                     proxor_set_spmode_FAILED
@@ -1815,7 +1828,7 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
                 }
             }
         } else {
-            if (ProxorGui::dataStore->vpn_internal_tun) {
+            if (ProxorGui::UseInternalTun()) {
                 // current core is sing-box
             } else {
                 if (!StopVPNProcess()) {
@@ -1836,7 +1849,7 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
     ProxorGui::dataStore->spmode_vpn = enable;
     refresh_status();
 
-    if (ProxorGui::dataStore->vpn_internal_tun && ProxorGui::dataStore->started_id >= 0) proxor_start(ProxorGui::dataStore->started_id);
+    if (ProxorGui::UseInternalTun() && ProxorGui::dataStore->started_id >= 0) proxor_start(ProxorGui::dataStore->started_id);
 }
 
 void MainWindow::syncWindowsHostsMapping(bool enable) {
@@ -3127,7 +3140,7 @@ bool MainWindow::StartVPNProcess() {
     }
     //
     auto configPath = ProxorGui::WriteVPNSingBoxConfig();
-    auto scriptPath = ProxorGui::WriteVPNLinuxScript(configPath);
+    auto scriptPath = ProxorGui::WriteVPNLinuxScript();
     //
 #ifdef Q_OS_WIN
     runOnNewThread([=] {
@@ -3140,6 +3153,20 @@ bool MainWindow::StartVPNProcess() {
     });
 #else
     //
+    auto corePath = ProxorGui::FindProxorCoreRealPath();
+#ifdef Q_OS_LINUX
+    if (qEnvironmentVariableIsSet("APPIMAGE")) {
+        const auto runtimeDir = QDir::current().filePath("runtime");
+        const auto copiedCorePath = QDir(runtimeDir).filePath("proxor_core");
+        if (!QDir().mkpath(runtimeDir) || !QFile::remove(copiedCorePath) && QFile::exists(copiedCorePath) ||
+            !QFile::copy(corePath, copiedCorePath)) {
+            MessageBoxWarning(software_name, tr("Failed to prepare the AppImage Tun compatibility core."));
+            return false;
+        }
+        QFile::setPermissions(copiedCorePath, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+        corePath = copiedCorePath;
+    }
+#endif
     auto vpn_process = new QProcess;
     QProcess::connect(vpn_process, &QProcess::stateChanged, this, [=](QProcess::ProcessState state) {
         if (state == QProcess::NotRunning) {
@@ -3151,10 +3178,22 @@ bool MainWindow::StartVPNProcess() {
     //
     vpn_process->setProcessChannelMode(QProcess::ForwardedChannels);
 #ifdef Q_OS_MACOS
-    vpn_process->start("osascript", {"-e", QStringLiteral("do shell script \"%1\" with administrator privileges")
-                                               .arg("bash " + scriptPath)});
+    auto shellQuote = [](QString value) {
+        return QStringLiteral("'") + value.replace(QStringLiteral("'"), QStringLiteral("'\\\"'\\\"'")) + QStringLiteral("'");
+    };
+    auto appleScriptQuote = [](QString value) {
+        value.replace('\\', QStringLiteral("\\\\"));
+        value.replace('"', QStringLiteral("\\\""));
+        return QStringLiteral("\"") + value + QStringLiteral("\"");
+    };
+    const auto command = QStringLiteral("bash %1 %2 %3").arg(
+        shellQuote(scriptPath),
+        shellQuote(corePath),
+        shellQuote(configPath)
+    );
+    vpn_process->start("osascript", {"-e", QStringLiteral("do shell script %1 with administrator privileges").arg(appleScriptQuote(command))});
 #else
-    vpn_process->start("pkexec", {"bash", scriptPath});
+    vpn_process->start(Linux_PkexecPath(), {"bash", scriptPath, corePath, configPath});
 #endif
     vpn_process->waitForStarted();
     vpn_pid = vpn_process->processId(); // actually it's pkexec or bash PID
@@ -3178,9 +3217,9 @@ bool MainWindow::StopVPNProcess(bool unconditional) {
                                         .arg("pkill -2 -U 0 proxor_core")});
 #else
         if (unconditional) {
-            p.start("pkexec", {"killall", "-2", "proxor_core"});
+            p.start(Linux_PkexecPath(), {"killall", "-2", "proxor_core"});
         } else {
-            p.start("pkexec", {"pkill", "-2", "-P", Int2String(vpn_pid)});
+            p.start(Linux_PkexecPath(), {"pkill", "-2", "-P", Int2String(vpn_pid)});
         }
 #endif
         p.waitForFinished();

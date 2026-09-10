@@ -4,13 +4,12 @@ This document covers native Linux builds for the GUI application.
 
 ## Status
 
-Linux is currently supported as a manual build path only.
+GitHub Actions builds an x86_64 AppImage from Ubuntu 22.04 and validates its required
+executables, desktop metadata, icon, and geodata. Tagged releases publish that AppImage
+alongside the Windows package.
 
-Official release packaging is not available right now:
-
-- no supported `.deb` output
-- no supported AppImage output
-- no supported CI-produced Linux artifacts
+There is no `.deb` package. Native builds remain supported for distribution-specific
+integration and for internal Tun mode without a privileged compatibility process.
 
 ## Prerequisites
 
@@ -73,3 +72,11 @@ By default the build looks for local dependencies in `./libs/deps/built`. That p
 ## Go Core
 
 The GUI build does not produce `proxor_core`. For the backend build, see [Build_Core.md](./Build_Core.md).
+
+## AppImage
+
+The AppImage keeps persistent data in the per-user application data directory because its
+mounted package is read-only. Its Tun mode uses a temporary core copied into that writable
+directory and started through PolicyKit; this requires `pkexec`, `iptables`, and `ip6tables`.
+If those tools are unavailable, use a native installation or configure a system proxy in a
+supported desktop environment.

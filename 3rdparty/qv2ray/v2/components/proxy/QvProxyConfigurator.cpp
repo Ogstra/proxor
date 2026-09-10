@@ -226,7 +226,7 @@ namespace Qv2ray::components::proxy {
     }
 #endif
 
-    void SetSystemProxy(int httpPort, int socksPort) {
+    bool SetSystemProxy(int httpPort, int socksPort) {
         const QString &address = "127.0.0.1";
         bool hasHTTP = (httpPort > 0 && httpPort < 65536);
         bool hasSOCKS = (socksPort > 0 && socksPort < 65536);
@@ -234,14 +234,14 @@ namespace Qv2ray::components::proxy {
 #ifdef Q_OS_WIN
         if (!hasHTTP) {
             LOG("Nothing?");
-            return;
+            return false;
         } else {
             LOG("Qv2ray will set system proxy to use HTTP");
         }
 #else
         if (!hasHTTP && !hasSOCKS) {
             LOG("Nothing?");
-            return;
+            return false;
         }
 
         if (hasHTTP) {
@@ -271,13 +271,24 @@ namespace Qv2ray::components::proxy {
         }
 
         __QueryProxyOptions();
+        return true;
 #elif defined(Q_OS_LINUX)
         QList<ProcessArgument> actions;
-        actions << ProcessArgument{"gsettings", {"set", "org.gnome.system.proxy", "mode", "manual"}};
-        //
-        bool isKDE = qEnvironmentVariable("XDG_SESSION_DESKTOP") == "KDE" ||
-                     qEnvironmentVariable("XDG_SESSION_DESKTOP") == "plasma";
+        const auto desktop = (qEnvironmentVariable("XDG_CURRENT_DESKTOP") + ":" + qEnvironmentVariable("XDG_SESSION_DESKTOP")).toLower();
+        const bool isKDE = desktop.contains("kde") || desktop.contains("plasma");
+        const bool isGnome = desktop.contains("gnome") || desktop.contains("cinnamon") || desktop.contains("mate");
+        if (!isKDE && !isGnome) {
+            LOG("System proxy is unsupported on this Linux desktop: " + desktop);
+            return false;
+        }
         const auto configPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
+        const auto kdeConfig = QStandardPaths::findExecutable("kwriteconfig6").isEmpty()
+                                   ? QStandardPaths::findExecutable("kwriteconfig5")
+                                   : QStandardPaths::findExecutable("kwriteconfig6");
+        if (isKDE && kdeConfig.isEmpty()) {
+            LOG("No KDE proxy configuration tool found");
+            return false;
+        }
 
         //
         // Configure HTTP Proxies for HTTP, FTP and HTTPS
@@ -286,15 +297,17 @@ namespace Qv2ray::components::proxy {
             for (const auto &protocol: QStringList{"http", "ftp", "https"}) {
                 // for GNOME:
                 {
-                    actions << ProcessArgument{"gsettings",
-                                               {"set", "org.gnome.system.proxy." + protocol, "host", address}};
-                    actions << ProcessArgument{"gsettings",
-                                               {"set", "org.gnome.system.proxy." + protocol, "port", QSTRN(httpPort)}};
+                    if (isGnome) {
+                        actions << ProcessArgument{"gsettings",
+                                                   {"set", "org.gnome.system.proxy." + protocol, "host", address}};
+                        actions << ProcessArgument{"gsettings",
+                                                   {"set", "org.gnome.system.proxy." + protocol, "port", QSTRN(httpPort)}};
+                    }
                 }
 
                 // for KDE:
                 if (isKDE) {
-                    actions << ProcessArgument{"kwriteconfig5",
+                    actions << ProcessArgument{kdeConfig,
                                                {"--file", configPath + "/kioslaverc", //
                                                 "--group", "Proxy Settings",          //
                                                 "--key", protocol + "Proxy",          //
@@ -307,13 +320,15 @@ namespace Qv2ray::components::proxy {
         if (hasSOCKS) {
             // for GNOME:
             {
-                actions << ProcessArgument{"gsettings", {"set", "org.gnome.system.proxy.socks", "host", address}};
-                actions << ProcessArgument{"gsettings",
-                                           {"set", "org.gnome.system.proxy.socks", "port", QSTRN(socksPort)}};
+                if (isGnome) {
+                    actions << ProcessArgument{"gsettings", {"set", "org.gnome.system.proxy.socks", "host", address}};
+                    actions << ProcessArgument{"gsettings",
+                                               {"set", "org.gnome.system.proxy.socks", "port", QSTRN(socksPort)}};
+                }
 
                 // for KDE:
                 if (isKDE) {
-                    actions << ProcessArgument{"kwriteconfig5",
+                    actions << ProcessArgument{kdeConfig,
                                                {"--file", configPath + "/kioslaverc", //
                                                 "--group", "Proxy Settings",          //
                                                 "--key", "socksProxy",                //
@@ -325,12 +340,12 @@ namespace Qv2ray::components::proxy {
         {
             // for GNOME:
             {
-                actions << ProcessArgument{"gsettings", {"set", "org.gnome.system.proxy", "mode", "manual"}};
+                if (isGnome) actions << ProcessArgument{"gsettings", {"set", "org.gnome.system.proxy", "mode", "manual"}};
             }
 
             // for KDE:
             if (isKDE) {
-                actions << ProcessArgument{"kwriteconfig5",
+                actions << ProcessArgument{kdeConfig,
                                            {"--file", configPath + "/kioslaverc", //
                                             "--group", "Proxy Settings",          //
                                             "--key", "ProxyType", "1"}};
@@ -360,7 +375,9 @@ namespace Qv2ray::components::proxy {
 
         if (results.count(true) != actions.size()) {
             LOG("Something wrong when setting proxies.");
+            return false;
         }
+        return true;
 #else
 
         for (const auto &service: macOSgetNetworkServices()) {
@@ -378,6 +395,7 @@ namespace Qv2ray::components::proxy {
             }
         }
 
+        return true;
 #endif
     }
 
