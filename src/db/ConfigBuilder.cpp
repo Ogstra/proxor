@@ -674,7 +674,9 @@ namespace ProxorGui {
         const auto directDnsAddress = dataStore->vpn_internal_tun && dataStore->spmode_vpn && !status->forTest
                                           ? QStringLiteral("local")
                                           : dataStore->routing->direct_dns;
-        QJsonObject directObj = BuildTypedDnsServer("dns-direct", directDnsAddress, status->forTest ? QString{} : QStringLiteral("direct"), dataStore->routing->direct_dns_strategy);
+        // An empty direct outbound is the default dialer. sing-box rejects wrapping it
+        // in a DNS detour, so direct DNS must omit detour entirely.
+        QJsonObject directObj = BuildTypedDnsServer("dns-direct", directDnsAddress, {}, dataStore->routing->direct_dns_strategy);
         if (dataStore->routing->dns_final_out == "bypass") {
             dnsServers.prepend(directObj);
         } else {
@@ -698,7 +700,7 @@ namespace ProxorGui {
         }
 
         // Underlying 100% Working DNS ?
-        dnsServers += BuildTypedDnsServer("dns-local", BOX_UNDERLYING_DNS, status->forTest ? QString{} : QStringLiteral("direct"));
+        dnsServers += BuildTypedDnsServer("dns-local", BOX_UNDERLYING_DNS);
 
         // Hosts mapping (user-defined hostname -> IP overrides)
         // Format per line: "host ip [skip_ssids_csv]". If current WiFi SSID matches any in
