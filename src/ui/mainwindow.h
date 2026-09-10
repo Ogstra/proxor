@@ -202,6 +202,9 @@ private:
     bool startup_tun_failed = false;
     int startup_deferred_profile_id = -1;
     std::function<void()> startup_network_work;
+    bool application_was_inactive = false;
+    bool subscription_resume_check_pending = false;
+    qint64 subscription_timer_last_tick_ms = 0;
     QString auto_start_consumed_ssid;
     QString traffic_update_cache;
     QTime last_test_time;
@@ -259,6 +262,7 @@ private:
     void syncWindowsHostsMapping(bool enable);
 
     void update_connection_statistics_polling_state();
+    void queue_resume_subscription_check();
 
     // grpc and ...
 

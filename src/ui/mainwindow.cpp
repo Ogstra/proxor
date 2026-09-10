@@ -44,6 +44,7 @@
 #include <QAbstractItemView>
 #include <QBrush>
 #include <QColor>
+#include <QDateTime>
 #include <QLabel>
 #include <QCheckBox>
 #include <QFontMetrics>
@@ -440,8 +441,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->down_tab->setCornerWidget(m_quotaLabel, Qt::TopRightCorner);
     m_quotaLabel->hide();
     connect(ui->down_tab, &QTabWidget::currentChanged, this, &MainWindow::on_down_tab_currentChanged);
-    connect(qApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState) {
+    connect(qApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState state) {
         update_connection_statistics_polling_state();
+        if (state != Qt::ApplicationActive) {
+            application_was_inactive = true;
+        } else if (application_was_inactive) {
+            application_was_inactive = false;
+            queue_resume_subscription_check();
+        }
     });
     update_connection_statistics_polling_state();
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
@@ -1028,6 +1035,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         }
     };
     connect(TM_auto_update_subsctiption, &QTimer::timeout, this, [this] {
+        const auto now = QDateTime::currentMSecsSinceEpoch();
+        const bool resumed = subscription_timer_last_tick_ms > 0 && now - subscription_timer_last_tick_ms > 70 * 1000;
+        subscription_timer_last_tick_ms = now;
+        if (resumed) {
+            queue_resume_subscription_check();
+            return;
+        }
         if (!startup_tun_pending && !startup_tun_failed) UI_update_due_groups_on_timer();
     });
     TM_auto_update_subsctiption_Reset_Minute(ProxorGui::dataStore->sub_auto_update);
@@ -1365,6 +1379,17 @@ void MainWindow::update_connection_statistics_polling_state() {
                                QApplication::applicationState() == Qt::ApplicationActive;
     conn_stats_tab_active.store(tabActive, std::memory_order_relaxed);
     conn_stats_window_visible.store(windowVisible, std::memory_order_relaxed);
+}
+
+void MainWindow::queue_resume_subscription_check() {
+    if (subscription_resume_check_pending || !UI_has_scheduled_subscription_updates()) return;
+    subscription_resume_check_pending = true;
+    setTimeout([this] {
+        subscription_resume_check_pending = false;
+        if (!startup_tun_pending && !startup_tun_failed && !UI_subscription_updates_running()) {
+            UI_update_due_groups_on_timer();
+        }
+    }, this, 2000);
 }
 
 void MainWindow::update_quota_display() {
