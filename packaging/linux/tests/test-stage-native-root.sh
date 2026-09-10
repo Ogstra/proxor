@@ -22,6 +22,7 @@ DESTDIR="$stage" "$helper" --gui "$fixtures/proxor" --core "$fixtures/proxor_cor
 test -x "$stage/usr/bin/proxor"
 test -x "$stage/usr/lib/proxor/proxor"
 test -x "$stage/usr/lib/proxor/proxor_core"
+grep -Fx 'exec /usr/lib/proxor/proxor "$@"' "$stage/usr/bin/proxor"
 for asset in geoip.dat geosite.dat geoip.db geosite.db; do
     test -s "$stage/usr/share/proxor/$asset"
     cmp "$fixtures/geodata/$asset" "$stage/usr/share/proxor/$asset"
