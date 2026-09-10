@@ -1857,8 +1857,23 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
                     MessageBoxWarning(software_name, tr("Current server is incompatible with Tun. Please stop the server first, enable Tun Mode, and then restart."));
                     proxor_set_spmode_FAILED
                 }
-                if (!StartVPNProcess()) {
-                    proxor_set_spmode_FAILED
+                const bool restoringProfile = startup_tun_pending && startup_deferred_profile_id >= 0;
+                if (ProxorGui::dataStore->started_id >= 0 || restoringProfile) {
+                    if (!StartVPNProcess()) {
+                        proxor_set_spmode_FAILED
+                    }
+                } else {
+                    // A compatibility TUN forwards traffic through the selected profile's
+                    // local SOCKS listener; do not install routes before it exists.
+                    MW_show_log(tr("Tun is enabled and will start after a proxy profile is running."));
+                    if (startup_tun_pending) {
+                        startup_tun_pending = false;
+                        startup_tun_authorized = true;
+                        if (startup_network_work) {
+                            auto startupWork = std::move(startup_network_work);
+                            startupWork();
+                        }
+                    }
                 }
             }
         } else {
@@ -3233,9 +3248,9 @@ bool MainWindow::StartVPNProcess() {
     vpn_process->start("osascript", {"-e", QStringLiteral("do shell script %1 with administrator privileges").arg(appleScriptQuote(command))});
 #else
     QStringList vpnArgs{"bash", scriptPath, corePath, configPath, "proxor-tun"};
-    // A restored profile needs its SOCKS listener before the TUN routes system
-    // traffic. Manual TUN activation can occur before a profile is selected.
-    if (startup_tun_pending && startup_deferred_profile_id >= 0) {
+    // The script only starts after a profile is active or is being restored.
+    // Wait for its SOCKS listener before TUN routes system traffic.
+    if (ProxorGui::dataStore->started_id >= 0 || (startup_tun_pending && startup_deferred_profile_id >= 0)) {
         vpnArgs += Int2String(ProxorGui::dataStore->inbound_socks_port);
     }
     vpn_process->start(Linux_PkexecPath(), vpnArgs);

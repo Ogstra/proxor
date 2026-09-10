@@ -433,6 +433,10 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
             start_pending = false;
             refresh_status();
             refresh_proxy_list(ent->id);
+            if (ProxorGui::dataStore->spmode_vpn && !ProxorGui::UseInternalTun() && vpn_pid == 0) {
+                MW_show_log(tr("Proxy profile ready; starting Tun."));
+                StartVPNProcess();
+            }
         });
 
         return true;
