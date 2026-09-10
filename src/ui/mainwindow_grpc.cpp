@@ -346,6 +346,10 @@ void MainWindow::stop_core_daemon() {
 
 void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
     if (ProxorGui::dataStore->prepare_exit) return;
+    if (startup_tun_pending || startup_tun_failed) {
+        MW_show_log(tr("Profile start is deferred until Tun authorization succeeds."));
+        return;
+    }
 
     auto ents = get_now_selected_list();
     auto ent = (_id < 0 && !ents.isEmpty()) ? ents.first() : ProxorGui::profileManager->GetProfile(_id);
@@ -616,6 +620,8 @@ void MainWindow::proxor_stop(bool crash, bool sem) {
 void MainWindow::CheckUpdate(bool silent) {
     // on new thread...
 #ifndef NKR_NO_GRPC
+
+    if (startup_tun_pending || startup_tun_failed) return;
 
     // The core may not have finished starting up yet. The client may not exist,
     // and even once it does, Call() short-circuits with -1919 until the core
