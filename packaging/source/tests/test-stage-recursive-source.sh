@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+trap 'printf "source staging test failed at line %s\n" "$LINENO" >&2' ERR
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)"
 helper="$repo_root/packaging/source/stage-recursive-source.sh"
