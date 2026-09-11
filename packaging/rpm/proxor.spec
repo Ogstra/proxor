@@ -29,8 +29,8 @@ install -Dpm0644 assets/res/public/proxor.png %{buildroot}%{_datadir}/icons/hico
 
 %files
 %{_bindir}/proxor
-%{_libdir}/proxor/proxor
-%{_libdir}/proxor/proxor_core
+/usr/lib/proxor/proxor
+/usr/lib/proxor/proxor_core
 %{_datadir}/proxor/geoip.dat
 %{_datadir}/proxor/geosite.dat
 %{_datadir}/proxor/geoip.db
