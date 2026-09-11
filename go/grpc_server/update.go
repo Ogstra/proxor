@@ -94,9 +94,9 @@ func updateArchiveSuffixes(goos, goarch string) ([]string, error) {
 	case goos == "windows" && goarch == "arm64":
 		return []string{"windows-arm64.zip"}, nil
 	case goos == "linux" && goarch == "amd64":
-		return []string{"linux64.zip", "linux64.tar.gz"}, nil
+		return nil, fmt.Errorf("self-update is not available on Linux; use your package manager or download the latest AppImage from the release page")
 	case goos == "linux" && goarch == "arm64":
-		return []string{"linux-arm64.zip", "linux-arm64.tar.gz"}, nil
+		return nil, fmt.Errorf("self-update is not available for Linux/%s", goarch)
 	default:
 		return nil, fmt.Errorf("self-update is not available on %s/%s", goos, goarch)
 	}

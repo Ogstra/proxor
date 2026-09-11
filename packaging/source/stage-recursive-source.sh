@@ -64,11 +64,11 @@ root="$stage/proxor-$version"
 mkdir -p "$root"
 git -C "$repo" archive "$requested_commit" | tar -xf - -C "$root"
 
-while IFS=' ' read -r submodule_path submodule_commit; do
-    [ -n "$submodule_path" ] || continue
+for submodule_path in "${submodules[@]}"; do
+    submodule_commit="$(git -C "$repo/$submodule_path" rev-parse HEAD)"
     mkdir -p "$root/$submodule_path"
     git -C "$repo/$submodule_path" archive "$submodule_commit" | tar -xf - -C "$root/$submodule_path"
-done < <(git -C "$repo" submodule foreach --quiet --recursive 'printf "%s %s\n" "$displaypath" "$sha1"')
+done
 
 archive="$stage/proxor-$version.tar.gz"
 tar -C "$stage" -czf "$archive" "proxor-$version"
