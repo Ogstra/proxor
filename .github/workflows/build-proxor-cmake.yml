@@ -522,3 +522,97 @@ jobs:
           name: release-assets-rpm
           path: ${{ runner.temp }}/rpm-work/rpmbuild/RPMS/x86_64/*.rpm
           if-no-files-found: error
+
+  package-arch:
+    name: Build Arch source recipe
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
+    needs: [stage-package-source, package-rpm]
+    runs-on: ubuntu-latest
+    permissions: {contents: read}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          submodules: recursive
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-assets-source
+          path: source-input
+      - name: Render and validate the source recipe as builder
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\n' < VERSION.txt)"
+          test "${{ github.event.inputs.tag }}" = "v$version"
+          archive="source-input/proxor-$version.tar.gz"
+          sha="$(sha256sum "$archive" | awk '{print $1}')"
+          docker run --rm -v "$PWD:/checkout:ro" -v "$RUNNER_TEMP:/work" archlinux:base bash -ceu '
+            pacman -Syu --noconfirm --needed base-devel namcap git
+            useradd -m builder
+            cp -a /checkout/packaging /work/packaging
+            /work/packaging/arch/render-pkgbuild.sh --version "'$version'" --url "https://github.com/Ogstra/proxor/releases/download/${GITHUB_SHA}/proxor-'$version'.tar.gz" --sha256 "'$sha'" --output /work/aur
+            su - builder -c "/work/packaging/arch/tests/test-aur-package.sh /work/aur"
+          '
+      - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        with:
+          name: release-assets-arch
+          path: ${{ runner.temp }}/aur
+          if-no-files-found: error
+
+  package-flatpak:
+    name: Validate restricted Flatpak inputs
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
+    needs: [stage-package-source, package-arch]
+    runs-on: ubuntu-latest
+    permissions: {contents: read}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          submodules: recursive
+      - name: Validate restricted source contract
+        shell: bash
+        run: |
+          bash packaging/flatpak/generate-go-sources.sh --check
+          bash packaging/flatpak/tests/test-source-closure.sh
+          bash packaging/flatpak/tests/test-flatpak-package.sh
+      - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        with:
+          name: release-assets-flatpak
+          path: |
+            packaging/flatpak/io.github.Ogstra.Proxor.yml
+            packaging/flatpak/generated-go-sources.json
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish verified release assets
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'y' && github.event.inputs.tag != ''
+    needs: [stage-package-source, appimage, package-windows, package-deb, package-rpm, package-arch, package-flatpak]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          submodules: recursive
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: release-input
+      - name: Create source-first GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\n' < VERSION.txt)"
+          test "$TAG" = "v$version"
+          mkdir -p release-stage
+          packaging/release/prepare-release-assets.sh prepare-source-release --input release-input --version "$version" --output release-stage
+          gh release create "$TAG" "release-stage/proxor-$version.tar.gz" --title "Proxor $version" --generate-notes
+          source_url="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/$TAG" --jq '.assets[] | select(.name == "proxor-'"$version"'.tar.gz") | .browser_download_url')"
+          test -n "$source_url"
+          packaging/release/prepare-release-assets.sh prepare-final-assets --input release-input --version "$version" --output release-stage --public-source-url "$source_url"
+          (cd release-stage && shasum -a 256 -c SHA256SUMS)
+          gh release upload "$TAG" release-stage/* release-stage/aur/* release-stage/winget-manifests/*

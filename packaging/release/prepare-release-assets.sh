@@ -14,8 +14,11 @@ if [ "$phase" = prepare-source-release ]; then exit 0; fi
 case "$public_url" in "https://github.com/Ogstra/proxor/releases/download/"*/"proxor-$version.tar.gz") ;; *) echo 'public source URL must be the attached release asset' >&2; exit 1;; esac
 for required in '*-windows64.zip' '*-winget-x64.zip' '*.AppImage' '*.deb' '*.rpm' '*.flatpak'; do find "$input" -type f -name "$required" -print -quit | grep -q . || { echo "missing $required" >&2; exit 1; }; done
 ! find "$input" -type f \( -iname '*.msi' -o -iname '*.dmg' \) -print -quit | grep -q .
+duplicates="$(find "$input" -type f -exec basename {} \; | sort | uniq -d)"
+[ -z "$duplicates" ] || { printf 'duplicate release asset names:\n%s\n' "$duplicates" >&2; exit 1; }
 winget="$(find "$input" -type f -name '*-winget-x64.zip' -print -quit)"; winget_sha="$(shasum -a 256 "$winget"|awk '{print $1}')"
-packaging/winget/render-manifest.sh --version "$version" --url "https://github.com/Ogstra/proxor/releases/download/${public_url##*/downloads/}" --sha256 "$winget_sha" --output "$output/winget-manifests"
+tag="${public_url#https://github.com/Ogstra/proxor/releases/download/}"; tag="${tag%%/*}"
+packaging/winget/render-manifest.sh --version "$version" --url "https://github.com/Ogstra/proxor/releases/download/$tag/proxor-$version-winget-x64.zip" --sha256 "$winget_sha" --output "$output/winget-manifests"
 packaging/arch/render-pkgbuild.sh --version "$version" --url "$public_url" --sha256 "$sha" --output "$output/aur"
 find "$input" -type f \( -name '*.zip' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' -o -name '*.flatpak' \) -exec cp {} "$output/" \;
 (cd "$output" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 shasum -a 256 > SHA256SUMS && shasum -a 256 -c SHA256SUMS)
