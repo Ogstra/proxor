@@ -4,7 +4,9 @@ This document covers locally built packages and the x86_64 AppImage produced by 
 
 ## Scope
 
-Distribution-specific package managers and third-party distribution channels are intentionally out of scope for this fork documentation. Use the local build artifacts and scripts in this repository instead.
+Supported x86_64 channels are the retained AppImage, Debian/Ubuntu `.deb`, Fedora RPM, source
+AUR `proxor`, and the GitHub Flatpak bundle. `.deb` upgrades use apt/dpkg, RPM upgrades use dnf,
+AUR upgrades use the selected AUR helper, and Flatpak upgrades use `flatpak update`.
 
 ## AppImage
 
@@ -15,6 +17,14 @@ separate privileged compatibility core, which requires PolicyKit (`pkexec`), `ip
 
 System Proxy integration is supported on GNOME-family desktops and KDE Plasma. Other desktop
 environments must configure their proxy manually or use Tun mode.
+
+## Native packages and Flatpak
+
+Native `.deb`, RPM, and AUR installations use the system Qt/runtime dependencies and retain the
+interactive PolicyKit TUN authorization flow; no package install hook grants capabilities.
+The Flatpak bundle intentionally has network/display permissions only. It cannot use TUN or
+modify the host system proxy, so use it as a restricted profile client. Do not use an in-app
+updater for Linux package-managed installs; update through the owning package manager.
 
 ## Runtime Options
 

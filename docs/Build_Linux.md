@@ -8,8 +8,9 @@ GitHub Actions builds an x86_64 AppImage from Ubuntu 22.04 and validates its req
 executables, desktop metadata, icon, geodata, and startup on Debian 12. Tagged releases
 publish that AppImage alongside the Windows package.
 
-There is no `.deb` package. Native builds remain supported for distribution-specific
-integration and for internal Tun mode without a privileged compatibility process.
+Tagged releases provide a native Debian/Ubuntu `.deb`, Fedora RPM, source AUR `proxor`, and a
+restricted Flatpak bundle in addition to AppImage. Native packages are built from source in
+their target environment; AppImage is not repackaged as a distro package.
 
 ## Prerequisites
 
