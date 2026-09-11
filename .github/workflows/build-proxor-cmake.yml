@@ -550,7 +550,7 @@ jobs:
             pacman -Syu --noconfirm --needed base-devel namcap git
             useradd -m builder
             cp -a /checkout/packaging /work/packaging
-            /work/packaging/arch/render-pkgbuild.sh --version "'$version'" --url "https://github.com/Ogstra/proxor/releases/download/${GITHUB_SHA}/proxor-'$version'.tar.gz" --sha256 "'$sha'" --output /work/aur
+            /work/packaging/arch/render-pkgbuild.sh --version "'$version'" --url "file:///work/source-input/proxor-'$version'.tar.gz" --sha256 "'$sha'" --output /work/aur
             su - builder -c "/work/packaging/arch/tests/test-aur-package.sh /work/aur"
           '
       - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
