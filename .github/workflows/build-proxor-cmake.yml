@@ -567,6 +567,7 @@ jobs:
             useradd -m builder
             cp -a /checkout/packaging /work/packaging
             mkdir /work/aur
+            chmod a+r /work/source-input/proxor-'$version'.tar.gz
             chown -R builder:builder /work/packaging /work/aur
             su - builder -c "/work/packaging/arch/render-pkgbuild.sh --version '$version' --url file:///work/source-input/proxor-'$version'.tar.gz --sha256 '$sha' --output /work/aur"
             su - builder -c "/work/packaging/arch/tests/test-aur-package.sh /work/aur"
