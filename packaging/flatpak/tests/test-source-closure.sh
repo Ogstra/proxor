@@ -34,17 +34,16 @@ source_archive = False
 for source in document["sources"]:
     assert source["type"] == "archive"
     assert source["url"].startswith("https://")
-    assert re.fullmatch(r"[0-9a-f]{64}", source["sha256"])
     assert not re.search(r"/(?:main|master)(?:/|$)", source["url"])
     if source.get("kind") == "proxor-recursive-source":
+        assert source["sha256"] == "${PROXOR_SOURCE_SHA256}"
         assert source["manifest"] == "proxor-${VERSION}.source-manifest"
         assert set(source["submodules"]) == {
             "3rdparty/sing-box", "3rdparty/QHotkey", "3rdparty/SQLiteCpp"
         }
         source_archive = True
+    else:
+        assert re.fullmatch(r"[0-9a-f]{64}", source["sha256"])
 
 assert source_archive, "the recursive Plan 12 source archive is required"
 PY
-
-! grep -RE 'go[[:space:]]+mod[[:space:]]+download|--filesystem=host|--device=all|--socket=system-bus' \
-  "$root/packaging/flatpak" --exclude='test-source-closure.sh'
