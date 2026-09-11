@@ -394,9 +394,10 @@ jobs:
           test "$release_version" = "$(cat VERSION.txt)" || {
             echo "Release tag must match VERSION.txt ($release_version != $(cat VERSION.txt))" >&2
             exit 1
-          }
-          ./libs/deploy_windows64.sh
-          test -s deployment/windows64/proxor.exe
+           }
+           ./libs/deploy_windows64.sh
+           set -x
+           test -s deployment/windows64/proxor.exe
           test -s deployment/windows64/proxor_core.exe
           test -s deployment/windows64/updater.exe
           test -s deployment/windows64/libcronet.dll
@@ -488,7 +489,7 @@ jobs:
               export PATH="/opt/proxor-go/bin:$PATH"
               apt-get update
               apt-get install -y --no-install-recommends build-essential cmake ninja-build git unzip \
-                debhelper devscripts qt6-base-dev libqt6svg6-dev libqt6widgets6 libyaml-cpp-dev \
+                debhelper devscripts qt6-base-dev libqt6svg6-dev libqt6widgets6 libgl1-mesa-dev libyaml-cpp-dev \
                 libprotobuf-dev protobuf-compiler pkg-config curl ca-certificates
               go version
               /work/proxor-*/packaging/debian/build-deb.sh --source-root /work/proxor-*
