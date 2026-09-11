@@ -1,4 +1,4 @@
 # The Go core is intentionally a statically linked helper, not a system library.
 Filters = [
-    '^proxor\\.x86_64: E: statically-linked-binary /usr/lib/proxor/proxor_core$',
+    '^proxor\.x86_64: E: statically-linked-binary /usr/lib/proxor/proxor_core$',
 ]
