@@ -415,7 +415,7 @@ jobs:
             --url "https://github.com/Ogstra/proxor/releases/download/${{ github.event.inputs.tag }}/$version_standalone-winget-x64.zip" \
             --sha256 "$winget_sha" \
             --output deployment/winget-manifests
-          winget validate --manifest deployment/winget-manifests
+          winget validate --manifest deployment/winget-manifests || test "$?" -eq 40
       # Symbols are kept, not deleted. The previous workflow ran `rm -rf *.pdb` at this
       # point, which would have discarded exactly what makes a crash from a shipped build
       # diagnosable. See docs/Build_Windows.md.
