@@ -488,3 +488,37 @@ jobs:
           name: release-assets-deb
           path: ${{ runner.temp }}/deb-work/proxor_*.deb
           if-no-files-found: error
+
+  package-rpm:
+    name: Build and smoke native Fedora RPM
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
+    needs: [stage-package-source, package-deb]
+    runs-on: ubuntu-latest
+    permissions: {contents: read}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          submodules: recursive
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-assets-source
+          path: source-input
+      - name: Build from immutable archive in Fedora
+        shell: bash
+        run: |
+          set -euo pipefail; mkdir -p "$RUNNER_TEMP/rpm-work"
+          cp source-input/proxor-*.tar.gz "$RUNNER_TEMP/rpm-work/"
+          docker run --rm -v "$PWD:/driver:ro" -v "$RUNNER_TEMP/rpm-work:/work" -w /work fedora@sha256:43b29f65a41eb9c35e1cd5323e3bdf3b655c2357a9f4f1ff2f9c2798e5045d80 bash -ceu '
+            dnf -y install rpm-build cmake ninja-build gcc-c++ golang qt6-qtbase-devel qt6-qtsvg-devel yaml-cpp-devel zxing-cpp-devel protobuf-devel curl
+            cp -a /driver/packaging /work/packaging; /work/packaging/rpm/build-rpm.sh --source-archive /work/proxor-*.tar.gz
+          '
+      - name: Smoke installed Fedora RPM
+        shell: bash
+        run: packaging/rpm/tests/test-rpm-package.sh "$RUNNER_TEMP/rpm-work/rpmbuild/RPMS/x86_64/proxor-"*.rpm
+      - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
+        with:
+          name: release-assets-rpm
+          path: ${{ runner.temp }}/rpm-work/rpmbuild/RPMS/x86_64/*.rpm
+          if-no-files-found: error
