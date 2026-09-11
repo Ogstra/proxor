@@ -4,6 +4,7 @@
 	dh $@
 
 override_dh_auto_build:
+	NKR_PACKAGE=ON ./libs/build_deps_all.sh
 	./libs/build_public_res.sh
 	GOOS=linux GOARCH=amd64 ./libs/build_go.sh
 	cmake -S . -B build -GNinja -DQT_VERSION_MAJOR=6 -DCMAKE_BUILD_TYPE=Release -DNKR_PACKAGE=ON

@@ -33,7 +33,8 @@ version="$(tr -d '\n' < "$repo_root/VERSION.txt")"
 clone="$work/clone"
 git clone --quiet "$repo_root" "$clone"
 git -C "$clone" checkout --quiet --detach "$commit"
-git -C "$clone" submodule update --init --recursive
+git -C "$clone" submodule update --init \
+    3rdparty/sing-box 3rdparty/QHotkey 3rdparty/SQLiteCpp
 
 output="$work/output"
 "$helper" --repo "$clone" --commit "$commit" --version "$version" --output "$output"

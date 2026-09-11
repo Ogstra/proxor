@@ -2,7 +2,7 @@ Source: proxor
 Section: net
 Priority: optional
 Maintainer: Proxor maintainers <maintainers@ogstra.github.io>
-Build-Depends: debhelper-compat (= 13), cmake, g++, golang-go, libqt6svg6-dev, libqt6widgets6, libyaml-cpp-dev, libzxing-dev, libprotobuf-dev, protobuf-compiler, pkg-config
+Build-Depends: debhelper-compat (= 13), cmake, g++, golang-go, curl, git, unzip, libqt6svg6-dev, libqt6widgets6, libyaml-cpp-dev, libprotobuf-dev, protobuf-compiler, pkg-config
 Standards-Version: 4.6.2
 Rules-Requires-Root: no
 

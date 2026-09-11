@@ -51,8 +51,8 @@ for submodule in "${submodules[@]}"; do
         exit 1
     }
 done
-if git -C "$repo" submodule status --recursive | grep -Eq '^[-+]'; then
-    printf '%s\n' 'recursive submodules are not initialized or do not match their recorded commits' >&2
+if git -C "$repo" submodule status "${submodules[@]}" | grep -Eq '^[-+]'; then
+    printf '%s\n' 'required source submodules are not initialized or do not match their recorded commits' >&2
     exit 1
 fi
 
