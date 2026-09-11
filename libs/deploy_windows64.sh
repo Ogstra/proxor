@@ -29,7 +29,7 @@ rm -rf translations
 rm -rf libEGL.dll libGLESv2.dll Qt6Pdf.dll
 rm -f dxcompiler.dll dxil.dll
 
-if [ "$DL_QT_VER" != "5.15" ]; then
+if [ "${DL_QT_VER:-}" != "5.15" ]; then
   # The bundled qtsdk ships OpenSSL in its bin/. Official Qt builds (what CI installs
   # via aqt) do not, so accept an explicit override and fall back to searching the Qt
   # prefix. Keeps the local and CI paths on the same script instead of forking them.
