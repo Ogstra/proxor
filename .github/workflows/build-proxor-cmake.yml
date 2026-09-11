@@ -311,17 +311,47 @@ jobs:
           name: Proxor-${{ github.sha }}-AppImage-x86_64
           path: "*.AppImage"
 
-  publish:
-    name: Pack & Publish Release
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'y' && github.event.inputs.tag != ''
+  package-policy-tests:
+    name: Package policy tests (${{ matrix.os }})
+    needs: [stage-package-source]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-22.04]
+    steps:
+      - name: Check out the exact recursive source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          submodules: "recursive"
+      - name: Verify package provenance
+        shell: bash
+        run: bash packaging/source/tests/test-stage-recursive-source.sh
+      - name: Install Qt Core and Test
+        uses: jurplel/install-qt-action@c6c7281365daef91a238e1c2ddce4eaa94a2991d # v4.1.1
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: ${{ runner.os == 'Windows' && 'windows' || 'linux' }}
+          target: desktop
+          arch: ${{ runner.os == 'Windows' && 'win64_msvc2019_64' || 'linux_gcc_64' }}
+          cache: true
+      - name: Run package policy fixture
+        shell: bash
+        run: test/package_mode/run-tests.sh
+
+  package-windows:
+    name: Package Windows release assets
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
     runs-on: windows-latest
     permissions:
-      contents: write
-    needs: [build-cpp, build-go, test-go, appimage]
+      contents: read
+    needs: [stage-package-source, build-cpp, build-go, test-go, appimage, package-policy-tests]
     steps:
       - name: Checking out sources
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
+          ref: ${{ github.sha }}
           submodules: "recursive"
       - name: Install Qt ${{ env.QT_VERSION }}
         uses: jurplel/install-qt-action@c6c7281365daef91a238e1c2ddce4eaa94a2991d # v4.1.1
@@ -346,7 +376,10 @@ jobs:
           mkdir -p build
           cp download-artifact/Proxor-${{ github.sha }}-windows-latest-x64-Qt${{ env.QT_VERSION }}/* build/
           find download-artifact -name artifacts.tgz -exec tar xvzf {} \;
-      - name: Deploy and package
+      - name: Verify package source provenance
+        shell: bash
+        run: bash packaging/source/tests/test-stage-recursive-source.sh
+      - name: Deploy and package separate Windows channels
         shell: bash
         run: |
           source libs/env_deploy.sh
@@ -365,6 +398,17 @@ jobs:
           test -s deployment/windows64/config/runtime/Qt6Core.dll
           test -s deployment/windows64/config/runtime/plugins/platforms/qwindows.dll
           bash ./libs/package_release.sh "deployment/windows64" "deployment/$version_standalone-windows64.zip"
+          bash ./libs/package_winget.sh "deployment/windows64" "deployment/$version_standalone-winget-x64.zip"
+          unzip -Z1 "deployment/$version_standalone-windows64.zip" | grep -qx 'proxor/proxor.exe'
+          ! unzip -Z1 "deployment/$version_standalone-windows64.zip" | grep -q 'package-manager/winget'
+          unzip -Z1 "deployment/$version_standalone-winget-x64.zip" | grep -qx 'proxor/config/package-manager/winget'
+          winget_sha="$(sha256sum "deployment/$version_standalone-winget-x64.zip" | awk '{print $1}')"
+          bash packaging/winget/render-manifest.sh \
+            --version "$release_version" \
+            --url "https://github.com/Ogstra/proxor/releases/download/${{ github.event.inputs.tag }}/$version_standalone-winget-x64.zip" \
+            --sha256 "$winget_sha" \
+            --output deployment/winget-manifests
+          winget validate --manifest deployment/winget-manifests
       # Symbols are kept, not deleted. The previous workflow ran `rm -rf *.pdb` at this
       # point, which would have discarded exactly what makes a crash from a shipped build
       # diagnosable. See docs/Build_Windows.md.
@@ -384,20 +428,13 @@ jobs:
             (cd symbols-stage && sha256sum *)
           } > symbols-stage/MANIFEST.txt
           7z a -tzip "deployment/$version_standalone-symbols.zip" ./symbols-stage/*
-      - name: Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          source libs/env_deploy.sh
-          release_version="${{ github.event.inputs.tag }}"
-          release_version="${release_version#v}"
-          test "$release_version" = "$(cat VERSION.txt)" || exit 1
-          gh release create "${{ github.event.inputs.tag }}" \
-            --title "${{ github.event.inputs.tag }}" \
-             --target "${{ github.sha }}" \
-             --generate-notes \
-             "deployment/$version_standalone-windows64.zip" \
-             "deployment/$version_standalone-symbols.zip" \
-              "download-artifact/Proxor-${{ github.sha }}-AppImage-x86_64/"*.AppImage \
-              ${{ github.event.inputs.prerelease == 'y' && '--prerelease' || '' }}
+      - name: Upload immutable Windows release candidates
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        with:
+          name: release-assets-windows
+          path: |
+            deployment/*-windows64.zip
+            deployment/*-winget-x64.zip
+            deployment/*-symbols.zip
+            deployment/winget-manifests/*.yaml
+          if-no-files-found: error
