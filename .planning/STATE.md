@@ -2,14 +2,13 @@
 gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: Update & Subscription UX
-status: uat_pending
-last_updated: "2026-09-10T22:00:00Z"
+status: unknown
+last_updated: "2026-09-11T03:31:19.298Z"
 progress:
   total_phases: 3
-  completed_phases: 0
+  completed_phases: 3
   total_plans: 4
   completed_plans: 4
-  percent: 100
 ---
 
 # Proxor — Project State
@@ -51,6 +50,7 @@ Linux delivery task Phase 1 passed GitHub Actions Debian 12 AppImage runtime smo
 Historical Phase 02 execution resumed 2026-09-11: Plans 02-01, 02-03, 02-04, and 02-12 are complete locally. Plan 02-12 now pins package workflow action provenance; Windows CI produces portable and winget candidate assets without creating a release or catalog entry. Plan 02-02 integration is present but intentionally owner-held in the dirty worktree; do not stage, reset, revert, or otherwise alter its production files. Plans 02-05 through 02-11 remain for Debian, RPM, AUR, Flatpak, release fan-in, and documentation infrastructure. Windows UAT for phases 18-20 is explicitly deferred by user instruction.
 
 ---
+- Phase 02 package follow-up: Flatpak Plans 02-08/09, Arch CI/.SRCINFO (02-07), release publisher (02-10), and protected winget validation (02-11) remain incomplete; Docker and format CLIs require CI validation.
 
 ### Quick Tasks Completed
 
