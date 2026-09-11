@@ -1,0 +1,28 @@
+app-id: io.github.Ogstra.Proxor
+runtime: org.kde.Platform
+runtime-version: "6.8"
+sdk: org.kde.Sdk
+command: proxor
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --share=network
+modules:
+  - name: proxor
+    buildsystem: simple
+    build-commands:
+      - test -f generated-go-sources.json
+      - test -f .flatpak-input/proxor-source.tar.gz
+      - tar -xzf .flatpak-input/proxor-source.tar.gz
+      - source_root="$(find . -maxdepth 1 -type d -name 'proxor-*' -print -quit)"; test -n "$source_root"; cd "$source_root"; export GOPROXY=off GONOSUMDB='*' FLATPAK_ID=io.github.Ogstra.Proxor; ./packaging/flatpak/build-offline.sh "$PWD" /app
+    sources:
+      - type: file
+        path: generated-go-sources.json
+      - type: file
+        path: .flatpak-input/proxor-source.tar.gz
+      - type: dir
+        path: .flatpak-input/geodata
+      - type: dir
+        path: .flatpak-input/go-cache
