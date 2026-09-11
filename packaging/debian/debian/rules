@@ -19,3 +19,6 @@ override_dh_auto_install:
 		--geodata "$(CURDIR)/deployment/public_res"
 	install -D -m 0644 assets/linux/proxor.desktop "$(CURDIR)/debian/proxor/usr/share/applications/proxor.desktop"
 	install -D -m 0644 assets/res/public/proxor.png "$(CURDIR)/debian/proxor/usr/share/icons/hicolor/256x256/apps/proxor.png"
+
+override_dh_builddeb:
+	dh_builddeb -- -Zxz

@@ -406,7 +406,7 @@ jobs:
           test -s deployment/windows64/config/runtime/plugins/platforms/qwindows.dll
           bash ./libs/package_release.sh "deployment/windows64" "deployment/$version_standalone-windows64.zip"
           bash ./libs/package_winget.sh "deployment/windows64" "deployment/$version_standalone-winget-x64.zip"
-          unzip -Z1 "deployment/$version_standalone-windows64.zip" | tr '\\' '/' | grep -qx 'proxor/proxor.exe'
+          unzip -Z1 "deployment/$version_standalone-windows64.zip" | grep -Eqi 'proxor[\\/]+proxor\.exe'
           ! unzip -Z1 "deployment/$version_standalone-windows64.zip" | grep -q 'package-manager/winget'
           unzip -Z1 "deployment/$version_standalone-winget-x64.zip" | grep -qx 'proxor/config/package-manager/winget'
           winget_sha="$(sha256sum "deployment/$version_standalone-winget-x64.zip" | awk '{print $1}')"

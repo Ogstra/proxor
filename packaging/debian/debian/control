@@ -9,7 +9,7 @@ Rules-Requires-Root: no
 Package: proxor
 Architecture: amd64
 Depends: ${shlibs:Depends}, ${misc:Depends}
-Recommends: policykit-1, libcap2-bin
+Recommends: polkitd, pkexec, libcap2-bin
 Description: Qt proxy client for sing-box profiles
  Proxor is a Qt-based client for managing sing-box proxy profiles,
  subscriptions, and routing. TUN authorization remains an explicit action
