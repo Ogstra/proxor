@@ -16,5 +16,11 @@ are not allowed.
 | --- | --- | --- |
 | actions/checkout@`fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09` | v5 | GitHub API commit resolution recorded 2026-09-10 |
 | actions/setup-go@`40f1582b2485089dde7abd97c1529aa768e1baff` | v5 | GitHub API commit resolution recorded 2026-09-10 |
-| Qt provision | Qt 6.7.2 via the CI's reviewed installer | CI must record archive SHA-256 before native package jobs are enabled |
-| Flatpak SDK / Builder | Flatpak SDK and Builder versions are selected in the Flatpak package job | CI must verify the published SDK commit and checksum before use |
+| Qt provision | Qt 6.7.2 via `jurplel/install-qt-action@c6c7281365daef91a238e1c2ddce4eaa94a2991d` | v4.1.1 action commit; action's aqt download verification is reviewed before enabling native package jobs |
+| Flatpak SDK / Builder | Flatpak SDK 24.08 and Builder 24.08, resolved from the verified Flathub runtime remote in the Flatpak package job | Job must record the resolved SDK/Builder commits and reject an unsigned or changed remote summary before use |
+| actions/upload-artifact@`65462800fd760344b1a7b4382951275a0abb4808` | v4.3.3 | GitHub action commit pinned in package artifact jobs |
+| actions/download-artifact@`d3f86a106a0bac45b974a628896c90dbdf5c8093` | v4 | GitHub action commit pinned in package fan-in jobs |
+| actions/cache@`0057852bfaa89a56745cba8c7296529d2fc39830` | v4 | GitHub action commit pinned in native build jobs |
+| jurplel/install-qt-action@`c6c7281365daef91a238e1c2ddce4eaa94a2991d` | v4.1.1 | GitHub action commit resolution recorded 2026-09-11 |
+| ilammy/msvc-dev-cmd@`0b201ec74fa43914dc39ae48a89fd1d8cb592756` | v1 | GitHub action commit resolution recorded 2026-09-11 |
+| seanmiddleditch/gha-setup-ninja@`8b297075da4cd2a5f1fd21fe011b499edf06e9d2` | v4 | GitHub action commit resolution recorded 2026-09-11 |
