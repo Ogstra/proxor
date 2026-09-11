@@ -14,4 +14,8 @@ fi
 
 cmake "${cmake_args[@]}"
 cmake --build "$build_dir" --parallel
-ctest --test-dir "$build_dir" --output-on-failure
+ctest_args=(--test-dir "$build_dir" --output-on-failure)
+if [ "${RUNNER_OS:-}" = "Windows" ]; then
+    ctest_args+=(--build-config Debug)
+fi
+ctest "${ctest_args[@]}"
