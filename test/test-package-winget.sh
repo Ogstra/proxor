@@ -4,6 +4,7 @@ set -euo pipefail
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 packer="$repo_root/libs/package_winget.sh"
 release_packer="$repo_root/libs/package_release.sh"
+renderer="$repo_root/packaging/winget/render-manifest.sh"
 
 test -x "$release_packer" || { printf '%s\n' 'direct package packer is missing' >&2; exit 1; }
 test -x "$packer" || { printf '%s\n' 'winget package packer is missing' >&2; exit 1; }
@@ -43,3 +44,22 @@ printf '%s\n' "$winget_entries" | grep -q 'fixture.log' && exit 1
 
 test ! -e "$source_tree/config/package-manager/winget"
 test "$(unzip -p "$winget_zip" proxor/config/package-manager/winget)" = 'winget-managed-install'
+
+manifest_dir="$work/manifests"
+"$renderer" \
+    --version 1.6.4 \
+    --url https://github.com/Ogstra/proxor/releases/download/v1.6.4/proxor-1.6.4-winget-x64.zip \
+    --sha256 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
+    --output "$manifest_dir"
+for manifest in Ogstra.Proxor.yaml Ogstra.Proxor.locale.en-US.yaml Ogstra.Proxor.installer.yaml; do
+    test -s "$manifest_dir/$manifest"
+done
+grep -qx 'PackageIdentifier: Ogstra.Proxor' "$manifest_dir/Ogstra.Proxor.yaml"
+grep -qx 'InstallerType: zip' "$manifest_dir/Ogstra.Proxor.installer.yaml"
+grep -qx 'NestedInstallerType: portable' "$manifest_dir/Ogstra.Proxor.installer.yaml"
+grep -qx 'RelativeFilePath: proxor/proxor.exe' "$manifest_dir/Ogstra.Proxor.installer.yaml"
+grep -qx 'InstallerSha256: 0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF' "$manifest_dir/Ogstra.Proxor.installer.yaml"
+! grep -Eqi 'msi|macos|windows64\.zip' "$manifest_dir"/*.yaml
+! "$renderer" --version 1.6 --url https://github.com/Ogstra/proxor/releases/download/v1.6/proxor-1.6-winget-x64.zip --sha256 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef --output "$work/invalid-version"
+! "$renderer" --version 1.6.4 --url http://example.invalid/proxor-1.6.4-winget-x64.zip --sha256 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef --output "$work/invalid-url"
+! "$renderer" --version 1.6.4 --url https://github.com/Ogstra/proxor/releases/download/v1.6.4/proxor-1.6.4-winget-x64.zip --sha256 short --output "$work/invalid-hash"
