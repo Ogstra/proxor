@@ -620,13 +620,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.inputs.tag }}
+          PRERELEASE: ${{ github.event.inputs.prerelease }}
         run: |
           set -euo pipefail
           version="$(tr -d '\n' < VERSION.txt)"
           test "$TAG" = "v$version"
           mkdir -p release-stage
           packaging/release/prepare-release-assets.sh prepare-source-release --input release-input --version "$version" --output release-stage
-          gh release create "$TAG" "release-stage/proxor-$version.tar.gz" --title "Proxor $version" --generate-notes
+          args=()
+          if [ "$PRERELEASE" = y ]; then args+=(--prerelease); fi
+          gh release create "$TAG" "release-stage/proxor-$version.tar.gz" --title "Proxor $version" --generate-notes "${args[@]}"
           source_url="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/$TAG" --jq '.assets[] | select(.name == "proxor-'"$version"'.tar.gz") | .browser_download_url')"
           test -n "$source_url"
           packaging/release/prepare-release-assets.sh prepare-final-assets --input release-input --version "$version" --output release-stage --public-source-url "$source_url"
