@@ -449,7 +449,7 @@ jobs:
   package-deb:
     name: Build and smoke native Debian package
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
-    needs: [stage-package-source, build-go, build-cpp, test-go, appimage]
+    needs: [stage-package-source]
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -508,7 +508,7 @@ jobs:
   package-rpm:
     name: Build and smoke native Fedora RPM
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
-    needs: [stage-package-source, package-deb]
+    needs: [stage-package-source]
     runs-on: ubuntu-latest
     permissions: {contents: read}
     steps:
@@ -542,7 +542,7 @@ jobs:
   package-arch:
     name: Build Arch source recipe
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
-    needs: [stage-package-source, package-rpm]
+    needs: [stage-package-source]
     runs-on: ubuntu-latest
     permissions: {contents: read}
     steps:
@@ -554,6 +554,11 @@ jobs:
         with:
           name: release-assets-source
           path: source-input
+      - name: Install release Go toolchain
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
       - name: Render and validate the source recipe as builder
         shell: bash
         run: |
@@ -562,7 +567,9 @@ jobs:
           test "${{ github.event.inputs.tag }}" = "v$version"
           archive="source-input/proxor-$version.tar.gz"
           sha="$(sha256sum "$archive" | awk '{print $1}')"
-          docker run --rm -v "$PWD:/checkout:ro" -v "$RUNNER_TEMP:/work" archlinux:base bash -ceu '
+          go_root="$(go env GOROOT)"
+          docker run --rm -v "$PWD:/checkout:ro" -v "$RUNNER_TEMP:/work" -v "$go_root:/opt/proxor-go:ro" archlinux:base bash -ceu '
+            export PATH="/opt/proxor-go/bin:$PATH"
             pacman -Syu --noconfirm --needed base-devel cmake ninja go namcap git protobuf qt6-base qt6-svg yaml-cpp zxing-cpp
             useradd -m builder
             cp -a /checkout/packaging /work/packaging
@@ -580,7 +587,7 @@ jobs:
   package-flatpak:
     name: Validate restricted Flatpak inputs
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
-    needs: [stage-package-source, package-arch]
+    needs: [stage-package-source]
     runs-on: ubuntu-latest
     permissions: {contents: read}
     steps:
