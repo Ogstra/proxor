@@ -1,0 +1,13 @@
+pkgname=proxor
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc='Qt proxy client for sing-box profiles'
+arch=('x86_64')
+url='https://github.com/Ogstra/proxor'
+license=('GPL-3.0-or-later')
+depends=('qt6-base' 'qt6-svg' 'yaml-cpp' 'zxing-cpp' 'protobuf')
+makedepends=('base-devel' 'cmake' 'ninja' 'go')
+source=("proxor-${pkgver}.tar.gz::@SOURCE_URL@")
+sha256sums=('@SHA256@')
+build() { cd "proxor-${pkgver}"; ./libs/build_public_res.sh; GOOS=linux GOARCH=amd64 ./libs/build_go.sh; cmake -S . -B build -GNinja -DQT_VERSION_MAJOR=6 -DCMAKE_BUILD_TYPE=Release -DNKR_PACKAGE=ON; cmake --build build; }
+package() { cd "proxor-${pkgver}"; DESTDIR="$pkgdir" ./packaging/linux/stage-native-root.sh --gui build/proxor --core deployment/linux64/proxor_core --geodata deployment/public_res; install -Dpm644 assets/linux/proxor.desktop "$pkgdir/usr/share/applications/proxor.desktop"; install -Dpm644 assets/res/public/proxor.png "$pkgdir/usr/share/icons/hicolor/256x256/apps/proxor.png"; }
