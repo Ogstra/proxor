@@ -72,7 +72,11 @@ done
 
 archive="$stage/proxor-$version.tar.gz"
 tar -C "$stage" -czf "$archive" "proxor-$version"
-archive_sha="$(shasum -a 256 "$archive" | awk '{print $1}')"
+if command -v sha256sum >/dev/null 2>&1; then
+    archive_sha="$(sha256sum "$archive" | awk '{print $1}')"
+else
+    archive_sha="$(shasum -a 256 "$archive" | awk '{print $1}')"
+fi
 {
     printf 'commit=%s\n' "$requested_commit"
     printf 'version=%s\n' "$version"
