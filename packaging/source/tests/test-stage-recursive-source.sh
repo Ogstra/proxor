@@ -42,12 +42,14 @@ root="$output/proxor-$version"
 archive="$output/proxor-$version.tar.gz"
 test -d "$root"
 test -s "$archive"
+archive_list="$work/archive-list"
+tar tzf "$archive" > "$archive_list"
 for submodule in 3rdparty/sing-box 3rdparty/QHotkey 3rdparty/SQLiteCpp; do
     test -d "$root/$submodule"
-    tar tzf "$archive" | grep -q "^proxor-$version/$submodule/"
+    grep -q "^proxor-$version/$submodule/" "$archive_list"
 done
 ! find "$root" -name .git | grep -q .
-! tar tzf "$archive" | grep -Eq '(^|/)\.git(/|$)'
+! grep -Eq '(^|/)\.git(/|$)' "$archive_list"
 grep -Fx "commit=$commit" "$output/proxor-$version.source-manifest"
 grep -Fx "version=$version" "$output/proxor-$version.source-manifest"
 
