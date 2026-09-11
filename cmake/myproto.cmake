@@ -1,4 +1,8 @@
-find_package(Protobuf REQUIRED)
+if (WIN32)
+    find_package(Protobuf CONFIG REQUIRED)
+else ()
+    find_package(Protobuf REQUIRED)
+endif ()
 
 set(PROTO_FILES
         go/grpc_server/gen/libcore.proto
