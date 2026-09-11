@@ -4,4 +4,5 @@ set -euo pipefail
 [ "$1" = --version ] && [ "$3" = --url ] && [ "$5" = --sha256 ] && [ "$7" = --output ] || exit 2
 v="$2"; u="$4"; h="$6"; out="$8"; case "$v:$h" in [0-9]*.[0-9]*.[0-9]*:[0-9a-f][0-9a-f]*) ;; *) exit 1;; esac
 case "$u" in https://github.com/Ogstra/proxor/releases/download/*/proxor-"$v".tar.gz|file:///work/source-input/proxor-"$v".tar.gz) ;; *) exit 1;; esac
-mkdir -p "$out"; sed -e "s|@VERSION@|$v|g" -e "s|@SOURCE_URL@|$u|g" -e "s|@SHA256@|$h|g" packaging/arch/PKGBUILD.in > "$out/PKGBUILD"; (cd "$out" && makepkg --printsrcinfo > .SRCINFO)
+root="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+mkdir -p "$out"; sed -e "s|@VERSION@|$v|g" -e "s|@SOURCE_URL@|$u|g" -e "s|@SHA256@|$h|g" "$root/PKGBUILD.in" > "$out/PKGBUILD"; (cd "$out" && makepkg --printsrcinfo > .SRCINFO)
