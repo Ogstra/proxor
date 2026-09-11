@@ -14,8 +14,10 @@ A fail-closed source-first release preparation helper and fixture are committed;
 - `bash -n packaging/release/prepare-release-assets.sh packaging/release/tests/test-prepare-release-assets.sh`
 - `bash packaging/release/tests/test-prepare-release-assets.sh`
 
+## Completion Update
+- `8ddae033` adds a sole guarded `publish-release` job: it verifies source provenance, creates one source-first GitHub Release, resolves the attached browser URL, renders AUR/winget outputs, verifies SHA256SUMS, then uploads remaining assets without replacement.
+
 ## Incomplete Work
-- Add the single source-first `gh release create`/no-clobber upload job after Arch and Flatpak asset jobs exist.
-- Exercise fan-in against real artifacts in CI.
+- The job intentionally cannot publish until the Flatpak CI produces a real `.flatpak` bundle; this prevents an incomplete release.
 
 ## Self-Check: PASSED

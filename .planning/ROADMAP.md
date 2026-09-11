@@ -110,13 +110,13 @@ Plans:
 - [ ] 02-02-PLAN.md — Managed update, Flatpak capability, and asset lookup gates (present, intentionally uncommitted/owner-held)
 - [x] 02-03-PLAN.md — Shared native FHS staging contract
 - [x] 02-04-PLAN.md — Windows portable/winget packages and CI validation
-- [ ] 02-05-PLAN.md — Debian native package and acceptance CI
-- [ ] 02-06-PLAN.md — Fedora native RPM and acceptance CI
-- [ ] 02-07-PLAN.md — Source AUR recipe and non-root CI
-- [ ] 02-08-PLAN.md — Flatpak source closure and metadata
-- [ ] 02-09-PLAN.md — Restricted Flatpak bundle and CI
-- [ ] 02-10-PLAN.md — Release fan-in and checksums
-- [ ] 02-11-PLAN.md — Documentation and protected post-release handoffs
+- [x] 02-05-PLAN.md — Debian native package and acceptance CI
+- [x] 02-06-PLAN.md — Fedora native RPM and acceptance CI
+- [x] 02-07-PLAN.md — Source AUR recipe and non-root CI
+- [x] 02-08-PLAN.md — Flatpak source closure and metadata
+- [ ] 02-09-PLAN.md — Restricted Flatpak bundle and CI (restricted bundle runtime gate pending)
+- [ ] 02-10-PLAN.md — Release fan-in and checksums (blocked on verified Flatpak bundle)
+- [x] 02-11-PLAN.md — Documentation and protected post-release handoffs
 - [x] 02-12-PLAN.md — Immutable recursive source/toolchain provenance contract
 
 ### Phase 21: Low-Risk Churn Reduction

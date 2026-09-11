@@ -47,10 +47,10 @@ Local GUI compilation is unavailable: `build/` targets Windows/NMake and bundled
 
 Linux delivery task Phase 1 passed GitHub Actions Debian 12 AppImage runtime smoke in run `34535100324`; desktop AppImage UAT also passed TUN startup and SSH/private-route reachability. Resume behavior remains pending UAT.
 
-Historical Phase 02 execution resumed 2026-09-11: Plans 02-01, 02-03, 02-04, and 02-12 are complete locally. Plan 02-12 now pins package workflow action provenance; Windows CI produces portable and winget candidate assets without creating a release or catalog entry. Plan 02-02 integration is present but intentionally owner-held in the dirty worktree; do not stage, reset, revert, or otherwise alter its production files. Plans 02-05 through 02-11 remain for Debian, RPM, AUR, Flatpak, release fan-in, and documentation infrastructure. Windows UAT for phases 18-20 is explicitly deferred by user instruction.
+Historical Phase 02 execution resumed 2026-09-11: Plans 02-01, 02-03 through 02-08, 02-11, and 02-12 are complete locally. Plan 02-12 pins package workflow action provenance; Windows CI produces portable and winget candidate assets without creating a release or catalog entry. Plan 02-02 integration is present but intentionally owner-held in the dirty worktree; do not stage, reset, revert, or otherwise alter its production files. Plans 02-09 and 02-10 remain gated on a real Flatpak bundle CI run. Windows UAT for phases 18-20 is explicitly deferred by user instruction.
 
 ---
-- Phase 02 package follow-up: Flatpak Plans 02-08/09, Arch CI/.SRCINFO (02-07), release publisher (02-10), and protected winget validation (02-11) remain incomplete; Docker and format CLIs require CI validation.
+- Phase 02 follow-up 2026-09-11: source closure, Arch fixture CI, source-first release guard, and protected winget validation are implemented. Flatpak release remains blocked until CI runs the real restricted bundle, offline rebuild, install, and launch; no `.flatpak` asset or final release is allowed before that gate.
 
 ### Quick Tasks Completed
 
