@@ -1045,7 +1045,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         if (!startup_tun_pending && !startup_tun_failed) UI_update_due_groups_on_timer();
     });
     TM_auto_update_subsctiption_Reset_Minute(ProxorGui::dataStore->sub_auto_update);
+    #if QT_VERSION >= QT_VERSION_CHECK(6, 4, 0)
     const bool niLoaded = QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability);
+    #elif QT_VERSION >= QT_VERSION_CHECK(6, 3, 0)
+    const bool niLoaded = QNetworkInformation::loadDefaultBackend();
+    #else
+    const bool niLoaded = false;
+    #endif
     QNetworkInformation *ni = niLoaded ? QNetworkInformation::instance() : nullptr;
     const bool isOnline = ni && ni->reachability() == QNetworkInformation::Reachability::Online;
 
