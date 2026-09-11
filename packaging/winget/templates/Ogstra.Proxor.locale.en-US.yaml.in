@@ -1,0 +1,10 @@
+PackageIdentifier: Ogstra.Proxor
+PackageVersion: @VERSION@
+PackageLocale: en-US
+Publisher: Ogstra
+PublisherUrl: https://github.com/Ogstra
+PackageName: Proxor
+License: GPL-3.0-only
+ShortDescription: A cross-platform proxy client.
+ManifestType: defaultLocale
+ManifestVersion: 1.12.0
