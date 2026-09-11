@@ -531,7 +531,7 @@ jobs:
           '
       - name: Smoke installed Fedora RPM
         shell: bash
-        run: packaging/rpm/tests/test-rpm-package.sh "$RUNNER_TEMP/rpm-work/rpmbuild/RPMS/x86_64/proxor-"*.rpm
+        run: packaging/rpm/tests/test-rpm-package.sh "$RUNNER_TEMP/rpm-work/rpmbuild/RPMS/x86_64/proxor-"[0-9]*.rpm
       - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
         with:
