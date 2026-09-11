@@ -20,4 +20,6 @@ import sys
 p = Path(sys.argv[1])
 p.write_text(p.read_text().replace('@VERSION@', sys.argv[2]).replace('@DATE@', sys.argv[3]))
 PY
-(cd "$root" && dpkg-buildpackage -us -uc -b)
+# CI supplies the declared Go build dependency by mounting the release toolchain,
+# rather than installing Ubuntu's incompatible golang-go package.
+(cd "$root" && dpkg-buildpackage -us -uc -b -d)
