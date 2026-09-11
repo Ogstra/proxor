@@ -19,6 +19,12 @@ for image in ubuntu-22.04 debian-12 fedora arch; do
 done
 grep -Eq 'actions/checkout@[^[:space:]]+.*[0-9a-f]{40}' "$provenance"
 grep -Eq 'actions/setup-go@[^[:space:]]+.*[0-9a-f]{40}' "$provenance"
+for action in actions/upload-artifact actions/download-artifact actions/cache jurplel/install-qt-action ilammy/msvc-dev-cmd seanmiddleditch/gha-setup-ninja; do
+    grep -Eq "${action}@[^[:space:]]+.*[0-9a-f]{40}" "$provenance" || {
+        printf 'missing immutable action provenance for %s\n' "$action" >&2
+        exit 1
+    }
+done
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/proxor-source-stage.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
