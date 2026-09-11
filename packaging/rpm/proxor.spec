@@ -7,11 +7,10 @@ URL:            https://github.com/Ogstra/proxor
 Source0:        proxor-%{version}.tar.gz
 BuildArch:       x86_64
 BuildRequires:   cmake ninja-build gcc-c++ golang qt6-qtbase-devel qt6-qtsvg-devel yaml-cpp-devel zxing-cpp-devel protobuf-devel
-Requires:        policycoreutils, libcap
 
 %description
 Qt client for sing-box profiles. TUN authorization is explicitly initiated by
-the user and this package never grants capabilities in scriptlets.
+the user and this package never grants capabilities during installation.
 
 %prep
 %autosetup -n proxor-%{version}
