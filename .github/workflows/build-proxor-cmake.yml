@@ -563,7 +563,7 @@ jobs:
           archive="source-input/proxor-$version.tar.gz"
           sha="$(sha256sum "$archive" | awk '{print $1}')"
           docker run --rm -v "$PWD:/checkout:ro" -v "$RUNNER_TEMP:/work" archlinux:base bash -ceu '
-            pacman -Syu --noconfirm --needed base-devel namcap git
+            pacman -Syu --noconfirm --needed base-devel cmake ninja go namcap git protobuf qt6-base qt6-svg yaml-cpp zxing-cpp
             useradd -m builder
             cp -a /checkout/packaging /work/packaging
             mkdir /work/aur
