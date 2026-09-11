@@ -438,3 +438,53 @@ jobs:
             deployment/*-symbols.zip
             deployment/winget-manifests/*.yaml
           if-no-files-found: error
+
+  package-deb:
+    name: Build and smoke native Debian package
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
+    needs: [stage-package-source, build-go, build-cpp, test-go, appimage]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+      - name: Check out exact package definitions
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          submodules: recursive
+      - name: Download immutable source input
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-assets-source
+          path: source-input
+      - name: Build from staged source on Ubuntu 22.04
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\n' < VERSION.txt)"
+          tag="${{ github.event.inputs.tag }}"
+          if [ -n "$tag" ]; then test "${tag#v}" = "$version"; fi
+          test -f "source-input/proxor-$version.tar.gz"
+          test -f "source-input/proxor-$version.source-manifest"
+          mkdir -p "$RUNNER_TEMP/deb-work"
+          tar -xzf "source-input/proxor-$version.tar.gz" -C "$RUNNER_TEMP/deb-work"
+          docker run --rm -v "$RUNNER_TEMP/deb-work:/work" \
+            ubuntu@sha256:829f6df217bcbae2b371026e81711d1a787c61b2967ad09d015063663ebafbf7 \
+            bash -ceu '
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              apt-get install -y --no-install-recommends build-essential cmake ninja-build golang-go \
+                debhelper devscripts libqt6svg6-dev libqt6widgets6 libyaml-cpp-dev libzxing-dev \
+                libprotobuf-dev protobuf-compiler pkg-config curl ca-certificates
+              /work/proxor-*/packaging/debian/build-deb.sh --source-root /work/proxor-*
+            '
+      - name: Inspect installed package on Debian 12
+        shell: bash
+        run: packaging/debian/tests/test-deb-package.sh "$RUNNER_TEMP/deb-work/proxor_"*.deb
+      - name: Upload immutable Debian release asset
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        with:
+          name: release-assets-deb
+          path: ${{ runner.temp }}/deb-work/proxor_*.deb
+          if-no-files-found: error
