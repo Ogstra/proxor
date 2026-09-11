@@ -48,10 +48,10 @@ If the application reports missing runtime DLLs, install the [Microsoft Visual C
 
 ### Linux
 
-Linux packaging and deployment vary by distribution. GitHub Actions publishes an x86_64
-AppImage built on an Ubuntu 22.04 compatibility baseline and smoke-tested on Debian 12.
-Use the local build and runtime guides in [`docs/`](docs/readme.md) for native builds and
-AppImage limitations. There is no `.deb` package.
+Linux releases provide the retained x86_64 AppImage plus native Debian/Ubuntu `.deb`, Fedora
+RPM, source AUR `proxor`, and a restricted GitHub Flatpak bundle. Use the package manager that
+installed Proxor for upgrades; Flatpak cannot provide TUN or host system-proxy changes. See the
+[Linux runtime guide](docs/Run_Linux.md) and [publication handoff](packaging/PUBLISHING.md).
 
 ## Dependencies
 
