@@ -30,7 +30,7 @@ done
 work="$(mktemp -d "${TMPDIR:-/tmp}/proxor-source-stage.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 commit="$(git -C "$repo_root" rev-parse HEAD)"
-version="$(tr -d '\n' < "$repo_root/VERSION.txt")"
+version="$(tr -d '\r\n' < "$repo_root/VERSION.txt")"
 clone="$work/clone"
 git clone --quiet "$repo_root" "$clone"
 git -C "$clone" checkout --quiet --detach "$commit"
