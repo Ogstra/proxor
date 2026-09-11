@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.Ogstra.Proxor</id>
+  <name>Proxor</name>
+  <summary>Proxy client for sing-box profiles</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <developer id="io.github.Ogstra">
+    <name>Ogstra</name>
+  </developer>
+  <launchable type="desktop-id">io.github.Ogstra.Proxor.desktop</launchable>
+  <description>
+    <p>Proxor manages sing-box proxy profiles, subscriptions, and routing.</p>
+    <p>This Flatpak uses network and display access only. TUN and host system proxy changes are unavailable in the Flatpak sandbox.</p>
+  </description>
+  <url type="homepage">https://github.com/Ogstra/proxor</url>
+  <url type="bugtracker">https://github.com/Ogstra/proxor/issues</url>
+  <content_rating type="oars-1.1"/>
+  <provides>
+    <id>io.github.Ogstra.Proxor</id>
+  </provides>
+</component>
