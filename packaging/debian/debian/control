@@ -1,0 +1,16 @@
+Source: proxor
+Section: net
+Priority: optional
+Maintainer: Proxor maintainers <maintainers@ogstra.github.io>
+Build-Depends: debhelper-compat (= 13), cmake, g++, golang-go, libqt6svg6-dev, libqt6widgets6, libyaml-cpp-dev, libzxing-dev, libprotobuf-dev, protobuf-compiler, pkg-config
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+
+Package: proxor
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Recommends: policykit-1, libcap2-bin
+Description: Qt proxy client for sing-box profiles
+ Proxor is a Qt-based client for managing sing-box proxy profiles,
+ subscriptions, and routing. TUN authorization remains an explicit action
+ performed by the user; installation does not grant network capabilities.
