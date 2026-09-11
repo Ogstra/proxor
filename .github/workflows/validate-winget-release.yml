@@ -1,0 +1,33 @@
+name: Validate published winget release
+
+on:
+  workflow_dispatch:
+    inputs:
+      previous_tag:
+        description: Previous public GitHub Release tag
+        required: true
+        type: string
+      release_tag:
+        description: Current public GitHub Release tag
+        required: true
+        type: string
+
+jobs:
+  validate-published-winget:
+    runs-on: windows-latest
+    environment: winget-publication
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Install and upgrade only public release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ./packaging/winget/test-published-winget.ps1 -PreviousTag '${{ inputs.previous_tag }}' -ReleaseTag '${{ inputs.release_tag }}' -Workspace "$env:RUNNER_TEMP/winget-publication"
+      - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        with:
+          name: winget-publication-report
+          path: ${{ runner.temp }}/winget-publication/winget-publication-report.json
+          if-no-files-found: error
