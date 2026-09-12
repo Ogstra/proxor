@@ -575,22 +575,25 @@ jobs:
           archive="source-input/proxor-$version.tar.gz"
           sha="$(sha256sum "$archive" | awk '{print $1}')"
           go_root="$(go env GOROOT)"
-          docker run --rm -v "$PWD:/checkout:ro" -v "$RUNNER_TEMP:/work" -v "$go_root:/opt/proxor-go:ro" archlinux:base bash -ceu '
-            export PATH="/opt/proxor-go/bin:$PATH"
-            pacman -Syu --noconfirm --needed base-devel cmake ninja go namcap git protobuf qt6-base qt6-svg yaml-cpp zxing-cpp
-            useradd -m builder
-            cp -a /checkout/packaging /work/packaging
-            mkdir /work/aur
-            chown -R builder:builder /work/packaging /work/aur
-            su - builder -c "export PATH=/opt/proxor-go/bin:\$PATH; go version; /work/packaging/arch/render-pkgbuild.sh --version '$version' --url file:///checkout/source-input/proxor-'$version'.tar.gz --sha256 '$sha' --output /work/aur"
-            su - builder -c "export PATH=/opt/proxor-go/bin:\$PATH; go version; /work/packaging/arch/tests/test-aur-package.sh /work/aur"
-            # .SRCINFO needs makepkg, which only exists in this container, so render the
-            # recipe that ships with the release here too. The release asset URL is
-            # derived from the requested tag and the archive validated above.
-            mkdir /work/aur-release
-            chown builder:builder /work/aur-release
-            su - builder -c "/work/packaging/arch/render-pkgbuild.sh --version '$version' --url 'https://github.com/Ogstra/proxor/releases/download/${{ github.event.inputs.tag }}/proxor-'$version'.tar.gz' --sha256 '$sha' --output /work/aur-release"
-          '
+          tag="${{ github.event.inputs.tag }}"
+          # su - resets the environment, so the values are substituted into the script
+          # here instead of being passed through as container variables.
+          cat > "$RUNNER_TEMP/render-recipe.sh" <<EOF
+          set -eu
+          export PATH="/opt/proxor-go/bin:\$PATH"
+          pacman -Syu --noconfirm --needed base-devel cmake ninja go namcap git protobuf qt6-base qt6-svg yaml-cpp zxing-cpp
+          useradd -m builder
+          cp -a /checkout/packaging /work/packaging
+          mkdir /work/aur /work/aur-release
+          chown -R builder:builder /work/packaging /work/aur /work/aur-release
+          su - builder -c 'export PATH=/opt/proxor-go/bin:\$PATH; go version; /work/packaging/arch/render-pkgbuild.sh --version $version --url file:///checkout/source-input/proxor-$version.tar.gz --sha256 $sha --output /work/aur'
+          su - builder -c 'export PATH=/opt/proxor-go/bin:\$PATH; go version; /work/packaging/arch/tests/test-aur-package.sh /work/aur'
+          # .SRCINFO needs makepkg, which only exists in this container, so render the
+          # recipe that ships with the release here too. Its URL is the release asset
+          # built from the archive validated above.
+          su - builder -c '/work/packaging/arch/render-pkgbuild.sh --version $version --url https://github.com/Ogstra/proxor/releases/download/$tag/proxor-$version.tar.gz --sha256 $sha --output /work/aur-release'
+          EOF
+          docker run --rm -v "$PWD:/checkout:ro" -v "$RUNNER_TEMP:/work" -v "$go_root:/opt/proxor-go:ro" archlinux:base bash /work/render-recipe.sh
       - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
         with:
           name: release-assets-arch
