@@ -423,6 +423,11 @@ jobs:
             --sha256 "$winget_sha" \
             --output deployment/winget-manifests
           winget validate --manifest deployment/winget-manifests || test "$?" -eq 40
+          # winget-pkgs validation resolves NestedInstallerFiles inside the archive, so a
+          # path that does not exist there fails there rather than here.
+          nested="$(sed -n 's/^ *- RelativeFilePath: *//p' deployment/winget-manifests/Ogstra.Proxor.installer.yaml)"
+          test -n "$nested"
+          unzip -Z1 "deployment/$version_standalone-winget-x64.zip" | tr '\\' '/' | grep -qxF "$nested"
       # Symbols are kept, not deleted. The previous workflow ran `rm -rf *.pdb` at this
       # point, which would have discarded exactly what makes a crash from a shipped build
       # diagnosable. See docs/Build_Windows.md.
