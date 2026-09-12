@@ -605,9 +605,9 @@ jobs:
       - name: Validate restricted source contract
         shell: bash
         run: |
-          bash packaging/flatpak/generate-go-sources.sh --check
-          bash packaging/flatpak/tests/test-source-closure.sh
-          bash packaging/flatpak/tests/test-flatpak-package.sh
+          bash -x packaging/flatpak/generate-go-sources.sh --check
+          bash -x packaging/flatpak/tests/test-source-closure.sh
+          bash -x packaging/flatpak/tests/test-flatpak-package.sh
       - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
         with:
           name: release-assets-flatpak
