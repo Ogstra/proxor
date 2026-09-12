@@ -16,8 +16,9 @@ on:
         description: "Publish: set to y to publish a release"
         required: false
       prerelease:
-        description: "Publish as a prerelease"
+        description: "Publish as a prerelease: set to n for a stable release"
         required: false
+        default: "y"
 
 env:
   # Keep in step with qtsdk/Qt used locally and with libs/download_proxor_qtsdk_win.sh
@@ -700,8 +701,10 @@ jobs:
           test "$TAG" = "v$version"
           mkdir -p release-stage
           packaging/release/prepare-release-assets.sh prepare-source-release --input release-input --version "$version" --output release-stage
+          # Releases are prereleases unless a stable one is asked for explicitly, so an
+          # empty or defaulted input never publishes a stable release by accident.
           args=()
-          if [ "$PRERELEASE" = y ]; then args+=(--prerelease); fi
+          if [ "$PRERELEASE" != n ]; then args+=(--prerelease); fi
           # The in-app changelog window renders this body, so it is authored against
           # docs/Release_Notes_Format.md rather than generated from commit subjects.
           notes="packaging/release/notes/$TAG.md"
@@ -710,6 +713,12 @@ jobs:
             gh release create "$TAG" "release-stage/proxor-$version.tar.gz" --target "$GITHUB_SHA" --title "$TAG" --notes-file "$notes" "${args[@]}"
           else
             gh release upload "$TAG" "release-stage/proxor-$version.tar.gz" --clobber
+            # A re-run must not leave a release the previous run marked differently.
+            if [ "$PRERELEASE" != n ]; then
+              gh release edit "$TAG" --prerelease
+            else
+              gh release edit "$TAG" --prerelease=false
+            fi
           fi
           source_url="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/$TAG" --jq '.assets[] | select(.name == "proxor-'"$version"'.tar.gz") | .browser_download_url')"
           test -n "$source_url"
