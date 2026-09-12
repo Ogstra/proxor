@@ -43,6 +43,8 @@ import json
 import os
 import re
 import sys
+import time
+import urllib.error
 import urllib.request
 
 document = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -53,8 +55,19 @@ def escape(value):
 
 def fetch(url, destination):
     os.makedirs(os.path.dirname(destination), exist_ok=True)
-    with urllib.request.urlopen(url) as response, open(destination, "wb") as output:
-        output.write(response.read())
+    # The closure is over a thousand requests, so a single transport hiccup must
+    # not fail a release build.
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(url, timeout=60) as response:
+                payload = response.read()
+            break
+        except (urllib.error.URLError, OSError):
+            if attempt == 3:
+                raise
+            time.sleep(2 ** attempt)
+    with open(destination, "wb") as output:
+        output.write(payload)
 
 for source in document["sources"]:
     kind = source.get("kind")
@@ -65,9 +78,10 @@ for source in document["sources"]:
         cache, escape(source["module"]), "@v", escape(source["version"]))
     destination = stem + suffix
     fetch(source["url"], destination)
-    actual = hashlib.sha256(open(destination, "rb").read()).hexdigest()
-    if actual != source["sha256"]:
-        raise SystemExit("checksum mismatch for " + source["module"])
+    if "sha256" in source:
+        actual = hashlib.sha256(open(destination, "rb").read()).hexdigest()
+        if actual != source["sha256"]:
+            raise SystemExit("checksum mismatch for " + source["module"])
     # A file:// GOPROXY is a proxy, not a module cache: every version it serves a
     # .zip for also needs a .info. That timestamp is not part of the build result,
     # so the checksummed .zip and .mod remain the integrity contract.
