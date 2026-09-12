@@ -6,4 +6,4 @@ version="$(basename "$archive" | sed -E 's/^proxor-([0-9]+\.[0-9]+\.[0-9]+)\.tar
 case "$version" in [0-9]*.[0-9]*.[0-9]*) ;; *) exit 1;; esac
 root="${RPMBUILD_ROOT:-$PWD/rpmbuild}"; rm -rf "$root"; mkdir -p "$root"/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
 cp "$archive" "$root/SOURCES/proxor-$version.tar.gz"; cp packaging/rpm/proxor.spec "$root/SPECS/"
-rpmbuild -ba "$root/SPECS/proxor.spec" --define "_topdir $root" --define "_sourcedir $root/SOURCES" --define "_specdir $root/SPECS" --define "_builddir $root/BUILD" --define "_rpmdir $root/RPMS" --define "version $version" --define "release 1"
+rpmbuild -ba "$root/SPECS/proxor.spec" --define "_topdir $root" --define "_sourcedir $root/SOURCES" --define "_specdir $root/SPECS" --define "_builddir $root/BUILD" --define "_rpmdir $root/RPMS" --define "proxor_version $version" --define "proxor_release 1"
