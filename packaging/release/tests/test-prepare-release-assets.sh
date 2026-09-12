@@ -11,7 +11,7 @@ url="https://github.com/Ogstra/proxor/releases/download/v1.2.3/proxor-1.2.3.tar.
 mkdir -p "$tmp/in/release-assets-arch"
 printf 'source=("proxor-1.2.3.tar.gz::%s")\nsha256sums=(%s)\n' "$url" "$sha" > "$tmp/in/release-assets-arch/PKGBUILD"
 printf '\tsource = proxor-1.2.3.tar.gz::%s\n\tsha256sums = %s\n' "$url" "$sha" > "$tmp/in/release-assets-arch/.SRCINFO"
-for asset in proxor-1.2.3-windows64.zip proxor-1.2.3-winget-x64.zip proxor-1.2.3.AppImage \
+for asset in proxor-1.2.3-windows64.zip proxor-1.2.3-winget-x64.zip proxor-1.2.3-symbols.zip proxor-1.2.3.AppImage \
   proxor-1.2.3.deb proxor-1.2.3.rpm proxor-1.2.3.flatpak; do
   mkdir -p "$tmp/in/$asset.d"; printf '%s' "$asset" > "$tmp/in/$asset.d/$asset"
 done
@@ -19,14 +19,18 @@ done
 for job in linux windows; do
   mkdir -p "$tmp/in/$job"; printf x > "$tmp/in/$job/artifacts.tgz"
 done
-# The RPM debug packages ship alongside the packages, like the Windows symbols archive.
+# Debug symbols and debug packages are build artifacts, not release downloads.
 mkdir -p "$tmp/in/rpms"
 for debug in proxor-debuginfo-1.2.3-1.fc44.x86_64.rpm proxor-debugsource-1.2.3-1.fc44.x86_64.rpm; do
   printf x > "$tmp/in/rpms/$debug"
 done
 "$script" prepare-final-assets --input "$tmp/in" --version 1.2.3 --output "$tmp/final" --public-source-url "$url"
 test -f "$tmp/final/proxor-1.2.3.flatpak"
-test -f "$tmp/final/proxor-debuginfo-1.2.3-1.fc44.x86_64.rpm"
+for excluded in proxor-debuginfo-1.2.3-1.fc44.x86_64.rpm proxor-debugsource-1.2.3-1.fc44.x86_64.rpm \
+  proxor-1.2.3-symbols.zip proxor-1.2.3.source-manifest; do
+  test ! -e "$tmp/final/$excluded"
+done
+test -f "$tmp/final/recipes/proxor-1.2.3.source-manifest"
 test ! -e "$tmp/final/artifacts.tgz"
 # Packaging recipes are staged for their package repositories, not for the release.
 test -f "$tmp/final/recipes/aur/PKGBUILD"
