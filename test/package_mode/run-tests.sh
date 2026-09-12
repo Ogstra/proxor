@@ -19,3 +19,8 @@ if [ "${RUNNER_OS:-}" = "Windows" ]; then
     ctest_args+=(--build-config Debug)
 fi
 ctest "${ctest_args[@]}"
+
+# The unit tests above prove the policy is correct; this grep-level contract
+# proves it is actually called from production code. It is shell-only and
+# portable, so it rides along with the unit tests on every runner.
+bash "$test_dir/test-policy-wiring.sh"
