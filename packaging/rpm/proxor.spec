@@ -10,6 +10,10 @@ URL:            https://github.com/Ogstra/proxor
 Source0:        proxor-%{version}.tar.gz
 BuildArch:       x86_64
 BuildRequires:   cmake ninja-build gcc-c++ golang qt6-qtbase-devel qt6-qtsvg-devel yaml-cpp-devel zxing-cpp-devel protobuf-devel
+# Qt Svg is reached through its image format and icon engine plugins, so the linker drops
+# the library as unneeded and no automatic dependency is generated for it. Without it the
+# icons do not render at all.
+Requires:        qt6-qtsvg
 
 %description
 Qt client for sing-box profiles. TUN authorization is explicitly initiated by
