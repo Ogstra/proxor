@@ -14,7 +14,9 @@ if [ "$phase" = prepare-source-release ]; then exit 0; fi
 case "$public_url" in "https://github.com/Ogstra/proxor/releases/download/"*/"proxor-$version.tar.gz") ;; *) echo 'public source URL must be the attached release asset' >&2; exit 1;; esac
 for required in '*-windows64.zip' '*-winget-x64.zip' '*.AppImage' '*.deb' '*.rpm' '*.flatpak'; do find "$input" -type f -name "$required" -print -quit | grep -q . || { echo "missing $required" >&2; exit 1; }; done
 ! find "$input" -type f \( -iname '*.msi' -o -iname '*.dmg' \) -print -quit | grep -q .
-assets() { find "$input" -type f \( -name '*.zip' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' -o -name '*.flatpak' \) ! -name '*.src.rpm'; }
+# Only what a user downloads and runs: debug symbols, debug packages and source RPMs
+# stay build artifacts, because a release list full of them hides the actual downloads.
+assets() { find "$input" -type f \( -name '*.zip' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' -o -name '*.flatpak' \) ! -name '*-symbols.zip' ! -name '*-debuginfo-*' ! -name '*-debugsource-*' ! -name '*.src.rpm'; }
 asset_names() { assets | while read -r asset; do basename "$asset"; done; }
 # Only the files that become release assets have to be unique: the build artifacts
 # also carry per-job intermediates that legitimately share a name.
@@ -32,6 +34,9 @@ pkgbuild="$(find "$input" -type f -name PKGBUILD -print -quit)"; srcinfo="$(find
 [ -n "$pkgbuild" ] && [ -n "$srcinfo" ] || { echo 'validated AUR recipe is required' >&2; exit 1; }
 for recipe in "$pkgbuild" "$srcinfo"; do grep -Fq "$public_url" "$recipe" && grep -Fq "$sha" "$recipe"; done
 mkdir -p "$recipes/aur"; cp "$pkgbuild" "$srcinfo" "$recipes/aur/"
+# The manifest records the submodule commits of the archive for packagers, so it travels
+# with the recipes rather than with the downloads.
+mv "$output/proxor-$version.source-manifest" "$recipes/"
 assets | while read -r asset; do cp "$asset" "$output/"; done
 test "$(find "$output" -type f \( -name '*.zip' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' -o -name '*.flatpak' \) | wc -l)" -eq "$(asset_names | wc -l)"
 (cd "$output" && find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 shasum -a 256 > SHA256SUMS && shasum -a 256 -c SHA256SUMS)

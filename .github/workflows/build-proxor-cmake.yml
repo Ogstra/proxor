@@ -702,7 +702,7 @@ jobs:
           test -n "$source_url"
           packaging/release/prepare-release-assets.sh prepare-final-assets --input release-input --version "$version" --output release-stage --public-source-url "$source_url"
           (cd release-stage && shasum -a 256 -c SHA256SUMS)
-          gh release upload "$TAG" release-stage/*.zip release-stage/*.AppImage release-stage/*.deb release-stage/*.rpm release-stage/*.flatpak release-stage/*.source-manifest release-stage/SHA256SUMS --clobber
+          gh release upload "$TAG" release-stage/*.zip release-stage/*.AppImage release-stage/*.deb release-stage/*.rpm release-stage/*.flatpak release-stage/SHA256SUMS --clobber
       - name: Keep the AUR and winget recipes for their package repositories
         uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
         with:
