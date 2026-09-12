@@ -46,6 +46,14 @@ cmake -S . -B build -GNinja -DQT_VERSION_MAJOR=6 -DCMAKE_BUILD_TYPE=Release \
 cmake --build build
 
 install -Dm755 build/proxor "$prefix/lib/proxor/proxor"
+# The embedded qt.conf resolves "Plugins = plugins" against the executable's
+# directory, which is what portable builds need. Satisfy it with the runtime's own
+# plugin directory instead of shipping a second copy of Qt.
+qt_plugins="$(qtpaths6 --query QT_INSTALL_PLUGINS 2>/dev/null \
+  || qtpaths --query QT_INSTALL_PLUGINS 2>/dev/null \
+  || qmake6 -query QT_INSTALL_PLUGINS)"
+test -d "$qt_plugins/platforms"
+ln -sfn "$qt_plugins" "$prefix/lib/proxor/plugins"
 install -Dm755 deployment/linux64/proxor_core "$prefix/lib/proxor/proxor_core"
 install -Dm755 packaging/flatpak/proxor-wrapper.sh "$prefix/bin/proxor"
 install -Dm644 assets/linux/io.github.Ogstra.Proxor.desktop "$prefix/share/applications/io.github.Ogstra.Proxor.desktop"
