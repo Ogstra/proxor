@@ -577,13 +577,19 @@ jobs:
             chown -R builder:builder /work/packaging /work/aur
             su - builder -c "export PATH=/opt/proxor-go/bin:\$PATH; go version; /work/packaging/arch/render-pkgbuild.sh --version '$version' --url file:///checkout/source-input/proxor-'$version'.tar.gz --sha256 '$sha' --output /work/aur"
             su - builder -c "export PATH=/opt/proxor-go/bin:\$PATH; go version; /work/packaging/arch/tests/test-aur-package.sh /work/aur"
+            # .SRCINFO needs makepkg, which only exists in this container, so render the
+            # recipe that ships with the release here too. The release asset URL is
+            # derived from the requested tag and the archive validated above.
+            mkdir /work/aur-release
+            chown builder:builder /work/aur-release
+            su - builder -c "/work/packaging/arch/render-pkgbuild.sh --version '$version' --url 'https://github.com/Ogstra/proxor/releases/download/${{ github.event.inputs.tag }}/proxor-'$version'.tar.gz' --sha256 '$sha' --output /work/aur-release"
           '
       - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
         with:
           name: release-assets-arch
           path: |
-            ${{ runner.temp }}/aur/PKGBUILD
-            ${{ runner.temp }}/aur/.SRCINFO
+            ${{ runner.temp }}/aur-release/PKGBUILD
+            ${{ runner.temp }}/aur-release/.SRCINFO
           if-no-files-found: error
 
   package-flatpak:
