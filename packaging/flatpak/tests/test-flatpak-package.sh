@@ -27,6 +27,7 @@ if [ "${PROXOR_FLATPAK_FULL_TEST:-0}" = 1 ]; then
   command -v flatpak-builder >/dev/null
   command -v flatpak >/dev/null
   command -v xvfb-run >/dev/null
+  bundle_output="${PROXOR_FLATPAK_BUNDLE_OUTPUT:-}"
   flatpak-builder-lint manifest "$manifest"
   work="$(mktemp -d)"
   trap 'rm -rf "$work"' EXIT
@@ -34,6 +35,10 @@ if [ "${PROXOR_FLATPAK_FULL_TEST:-0}" = 1 ]; then
   flatpak-builder --user --force-clean --disable-download "$work/offline" "$manifest"
   flatpak build-export "$work/repo" "$work/offline"
   flatpak build-bundle "$work/repo" "$work/io.github.Ogstra.Proxor.flatpak" io.github.Ogstra.Proxor
+  if [ -n "$bundle_output" ]; then
+    mkdir -p "$(dirname "$bundle_output")"
+    cp "$work/io.github.Ogstra.Proxor.flatpak" "$bundle_output"
+  fi
   flatpak install --user --noninteractive "$work/io.github.Ogstra.Proxor.flatpak"
   flatpak run --command=sh io.github.Ogstra.Proxor -ceu '
     test "$FLATPAK_ID" = io.github.Ogstra.Proxor

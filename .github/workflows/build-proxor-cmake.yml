@@ -587,9 +587,9 @@ jobs:
           if-no-files-found: error
 
   package-flatpak:
-    name: Validate restricted Flatpak inputs
+    name: Build and smoke restricted Flatpak package
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
-    needs: [stage-package-source]
+    needs: [stage-package-source, build-go]
     runs-on: ubuntu-latest
     permissions: {contents: read}
     steps:
@@ -602,18 +602,45 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-assets-source
+          path: source-input
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: Proxor-${{ github.sha }}-Common-public_res-public_res
+          path: public-res-input
+      - name: Install Flatpak build tools and runtime
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder xvfb
+          flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user --noninteractive flathub org.kde.Sdk//6.8 org.kde.Platform//6.8
+      - name: Prepare immutable Flatpak build inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\n' < VERSION.txt)"
+          test "${{ github.event.inputs.tag }}" = "v$version"
+          tar -xzf public-res-input/artifacts.tgz
+          bash packaging/flatpak/prepare-build-inputs.sh \
+            --source-archive "source-input/proxor-$version.tar.gz" \
+            --source-manifest "source-input/proxor-$version.source-manifest" \
+            --geodata deployment/public_res \
+            --output packaging/flatpak/.flatpak-input
       - name: Validate restricted source contract
         shell: bash
         run: |
           bash packaging/flatpak/generate-go-sources.sh --check
           bash packaging/flatpak/tests/test-source-closure.sh
-          bash packaging/flatpak/tests/test-flatpak-package.sh
+          PROXOR_FLATPAK_FULL_TEST=1 \
+          PROXOR_FLATPAK_BUNDLE_OUTPUT="$RUNNER_TEMP/proxor-$(tr -d '\n' < VERSION.txt).flatpak" \
+            bash packaging/flatpak/tests/test-flatpak-package.sh
       - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
         with:
           name: release-assets-flatpak
-          path: |
-            packaging/flatpak/io.github.Ogstra.Proxor.yml
-            packaging/flatpak/generated-go-sources.json
+          path: ${{ runner.temp }}/proxor-*.flatpak
           if-no-files-found: error
 
   publish-release:
@@ -645,9 +672,13 @@ jobs:
           packaging/release/prepare-release-assets.sh prepare-source-release --input release-input --version "$version" --output release-stage
           args=()
           if [ "$PRERELEASE" = y ]; then args+=(--prerelease); fi
-          gh release create "$TAG" "release-stage/proxor-$version.tar.gz" --title "Proxor $version" --generate-notes "${args[@]}"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" "release-stage/proxor-$version.tar.gz" --target "$GITHUB_SHA" --title "Proxor $version" --generate-notes "${args[@]}"
+          else
+            gh release upload "$TAG" "release-stage/proxor-$version.tar.gz" --clobber
+          fi
           source_url="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/$TAG" --jq '.assets[] | select(.name == "proxor-'"$version"'.tar.gz") | .browser_download_url')"
           test -n "$source_url"
           packaging/release/prepare-release-assets.sh prepare-final-assets --input release-input --version "$version" --output release-stage --public-source-url "$source_url"
           (cd release-stage && shasum -a 256 -c SHA256SUMS)
-          gh release upload "$TAG" release-stage/* release-stage/aur/* release-stage/winget-manifests/*
+          gh release upload "$TAG" release-stage/*.zip release-stage/*.AppImage release-stage/*.deb release-stage/*.rpm release-stage/*.flatpak release-stage/*.source-manifest release-stage/SHA256SUMS release-stage/aur/PKGBUILD release-stage/aur/.SRCINFO release-stage/winget-manifests/*.yaml --clobber
