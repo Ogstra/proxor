@@ -14,6 +14,9 @@ for script in packaging/flatpak/build-offline.sh packaging/flatpak/proxor-wrappe
   test "$(git -C "$root" ls-files -s "$script" | cut -d' ' -f1)" = 100755
 done
 grep -qx 'exec /app/lib/proxor/proxor "$@"' "$wrapper"
+# The embedded qt.conf hides the runtime's plugins, so the wrapper has to point Qt
+# back at them or the app cannot initialize a platform plugin.
+grep -Fq 'QT_QPA_PLATFORM_PLUGIN_PATH' "$wrapper"
 grep -qx 'app-id: io.github.Ogstra.Proxor' "$manifest"
 grep -qx 'runtime: org.kde.Platform' "$manifest"
 grep -qx 'runtime-version: "6.8"' "$manifest"
