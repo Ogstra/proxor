@@ -1,3 +1,4 @@
+# Maintainer: Proxor maintainers <maintainers@ogstra.github.io>
 pkgname=proxor
 pkgver=@VERSION@
 pkgrel=1
@@ -5,7 +6,7 @@ pkgdesc='Qt proxy client for sing-box profiles'
 arch=('x86_64')
 url='https://github.com/Ogstra/proxor'
 license=('GPL-3.0-or-later')
-depends=('qt6-base' 'qt6-svg' 'yaml-cpp' 'zxing-cpp' 'protobuf')
+depends=('qt6-base' 'qt6-svg' 'yaml-cpp' 'zxing-cpp' 'protobuf' 'hicolor-icon-theme')
 makedepends=('base-devel' 'cmake' 'ninja' 'go')
 source=("proxor-${pkgver}.tar.gz::@SOURCE_URL@")
 sha256sums=('@SHA256@')
