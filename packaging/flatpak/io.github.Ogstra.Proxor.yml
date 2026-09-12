@@ -10,6 +10,7 @@ finish-args:
   - --device=dri
   - --share=network
 cleanup:
+  - /bin/protoc*
   - /include
   - /lib/cmake
   - /lib/pkgconfig

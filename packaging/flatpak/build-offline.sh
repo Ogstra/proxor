@@ -28,9 +28,11 @@ export GOROOT="$toolchain"
 export GOPROXY="file://$inputs/go-cache/cache/download"
 export GOSUMDB=off
 # HOME is not writable in every flatpak-builder sandbox, so keep both Go caches
-# inside the build directory.
+# inside the build directory. -modcacherw keeps the extracted modules writable so
+# flatpak-builder can clean that directory afterwards.
 export GOMODCACHE="$build_root/.flatpak-go-modcache"
 export GOCACHE="$build_root/.flatpak-go-buildcache"
+export GOFLAGS="${GOFLAGS:+$GOFLAGS }-modcacherw"
 
 for asset in geoip.dat geosite.dat geoip.db geosite.db; do
   test -s "$inputs/geodata/$asset"
