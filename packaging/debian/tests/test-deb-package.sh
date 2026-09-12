@@ -38,9 +38,12 @@ docker run --rm -v "$package_dir:/packages:ro" "$image" bash -ceu '
   # The embedded qt.conf would otherwise leave Qt without a style, the SVG icon engine
   # and the TLS backend, so the wrapper has to hand it the system plugin directory.
   grep -q QT_PLUGIN_PATH /usr/bin/proxor
-  plugins="$(ls -d /usr/lib/*/qt6/plugins | head -n1)"
-  test -f "$plugins/iconengines/libqsvgicon.so"
-  test -f "$plugins/imageformats/libqsvg.so"
+  # The icons are SVG, so the reader plugins have to come with the dependencies. Their
+  # directory differs between distributions, hence the search and the listing on failure.
+  for plugin in libqsvgicon.so libqsvg.so; do
+    find /usr/lib/*/qt6/plugins /usr/lib/qt6/plugins -name "$plugin" 2>/dev/null | grep -q . || {
+      echo "missing Qt plugin $plugin"; find /usr/lib/*/qt6/plugins /usr/lib/qt6/plugins -name '*.so' 2>/dev/null | sort; exit 1; }
+  done
   set +e
   xvfb-run -a timeout 10s /usr/bin/proxor -many
   rc=$?
