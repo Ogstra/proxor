@@ -67,7 +67,7 @@ using ZXing::BarcodeFormat;
 using ZXing::ContentType;
 #endif
 
-#if __has_include("ZXing/ReaderOptions.h")
+#if __has_include("ZXing/Barcode.h")
 using DecodeHints = ZXing::ReaderOptions;
 using NativeResult = ZXing::Barcode;
 using NativeResults = ZXing::Barcodes;
