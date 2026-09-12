@@ -1,4 +1,5 @@
 #include "ProxorGui.hpp"
+#include "PackageMode.hpp"
 #include "fmt/Preset.hpp"
 
 #include <QFile>
@@ -537,18 +538,7 @@ namespace ProxorGui {
     }
 
     QString FindCoreAsset(const QString &name) {
-        QStringList search{};
-        search << PackageFilePath("config");
-        search << PackageRootPath();
-#ifdef Q_OS_LINUX
-        // AppImage binaries live in usr/bin while their shared assets live in usr/share.
-        search << QDir(PackageRootPath()).filePath("../share/proxor");
-#endif
-        search << "/usr/share/sing-geoip";
-        search << "/usr/share/sing-geosite";
-        search << "/usr/share/sing-box";
-        search << "/usr/lib/proxor";
-        search << "/usr/share/proxor";
+        const auto search = CoreAssetSearchPaths(CurrentPackageMode(), PackageRootPath());
         for (const auto &dir: search) {
             if (dir.isEmpty()) continue;
             QFileInfo asset(dir + "/" + name);
@@ -566,7 +556,14 @@ namespace ProxorGui {
         return fn;
     }
 
+    PackageMode CurrentPackageMode() {
+        return DetectPackageMode(PackageRootPath(), qEnvironmentVariable("FLATPAK_ID"));
+    }
+
     bool UseInternalTun() {
+#ifdef Q_OS_LINUX
+        if (IsFlatpak(CurrentPackageMode())) return false;
+#endif
 #ifdef Q_OS_LINUX
         // AppImage cannot add capabilities to its read-only core. It uses the
         // separate privileged compatibility process instead.

@@ -8,6 +8,7 @@
 #include "sub/GroupUpdater.hpp"
 #include "sys/ExternalProcess.hpp"
 #include "sys/WifiMonitor.hpp"
+#include "main/PackagePolicy.hpp"
 
 #include "ui/ThemeManager.hpp"
 #include "ui/Icon.hpp"
@@ -1821,6 +1822,15 @@ void MainWindow::on_menu_exit_triggered() {
     return;
 
 void MainWindow::proxor_set_spmode_system_proxy(bool enable, bool save) {
+    // A Flatpak sandbox cannot reach the host's proxy settings, so asking is a
+    // guaranteed failure dialog; refuse before even trying.
+    if (enable) {
+        const auto lifecycle = DecideFlatpakLifecycle(ProxorGui::CurrentPackageMode(), FlatpakLifecycleEntryPoint::MenuToggle);
+        if (!lifecycle.allowSystemProxy) {
+            MessageBoxWarning(software_name, tr("System Proxy is not available in a Flatpak sandbox."));
+            proxor_set_spmode_FAILED
+        }
+    }
     if (enable != ProxorGui::dataStore->spmode_system_proxy) {
         if (enable) {
             auto socks_port = ProxorGui::dataStore->inbound_socks_port;
@@ -1855,6 +1865,19 @@ void MainWindow::proxor_set_spmode_system_proxy(bool enable, bool save) {
 }
 
 void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
+    // A Flatpak sandbox has no TUN device, so asking is a guaranteed failure
+    // dialog; refuse before even trying. Distinguish the startup restore path
+    // from a manual toggle only for the wording the policy layer may use.
+    if (enable) {
+        const auto entryPoint = startup_tun_pending
+            ? FlatpakLifecycleEntryPoint::StartupRestore
+            : FlatpakLifecycleEntryPoint::MenuToggle;
+        const auto lifecycle = DecideFlatpakLifecycle(ProxorGui::CurrentPackageMode(), entryPoint);
+        if (!lifecycle.allowTun) {
+            MessageBoxWarning(software_name, tr("Tun mode is not available in a Flatpak sandbox."));
+            proxor_set_spmode_FAILED
+        }
+    }
     if (enable && startup_tun_failed) {
         startup_tun_failed = false;
         startup_tun_pending = true;
