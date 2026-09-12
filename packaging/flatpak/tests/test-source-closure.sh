@@ -36,11 +36,16 @@ source_archive = False
 requirements = 0
 for source in document["sources"]:
     assert source["type"] == ("file" if source.get("kind") == "go-module-requirements" else "archive")
-    if source.get("kind") == "go-module-requirements":
-        assert source["url"].endswith(".mod")
-        requirements += 1
     assert source["url"].startswith("https://")
     assert not re.search(r"/(?:main|master)(?:/|$)", source["url"])
+    if source.get("kind") == "go-module-requirements":
+        assert source["url"].endswith(".mod")
+        # go verifies every go.mod it reads against the checksum files shipped in
+        # the source archive, so these inputs are pinned by go.sum, not here.
+        assert source["verify"] == "go.sum"
+        assert "sha256" not in source
+        requirements += 1
+        continue
     if source.get("kind") == "proxor-recursive-source":
         assert source["sha256"] == "${PROXOR_SOURCE_SHA256}"
         assert source["manifest"] == "proxor-${VERSION}.source-manifest"

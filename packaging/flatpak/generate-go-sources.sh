@@ -21,8 +21,6 @@ import hashlib
 import json
 import os
 import subprocess
-import urllib.error
-import urllib.request
 
 root = os.environ["ROOT"]
 module_dirs = ("go/cmd/proxor_core", "go/cmd/updater", "go/grpc_server", "go/proxorlib")
@@ -46,6 +44,25 @@ for module_dir in module_dirs:
             continue
         modules[(item["Path"], item["Version"])] = item
 
+vendored = set()
+for module_dir in ("",) + module_dirs:
+    definition_path = os.path.join(
+        root, module_dir, "go.work" if module_dir == "" else "go.mod")
+    if not os.path.exists(definition_path):
+        continue
+    with open(definition_path, encoding="utf-8") as definition:
+        for line in definition:
+            fields = line.split("//", 1)[0].split()
+            if fields[:1] == ["replace"]:
+                fields = fields[1:]
+            if "=>" not in fields:
+                continue
+            target = fields[fields.index("=>") + 1]
+            # A module replaced by a directory lives in the source tree; a module
+            # replaced by another module version still comes from the proxy.
+            if target.startswith((".", "/")):
+                vendored.add(fields[0])
+
 # Minimal version selection reads the .mod of every version the checksum database
 # locked, not only of the versions that end up linked in, so the offline proxy has
 # to serve all of them. go.work.sum covers the workspace build, the per-module
@@ -63,16 +80,10 @@ for sum_file in ("go.work.sum",) + tuple(d + "/go.sum" for d in module_dirs):
 def escape(value):
     return "".join("!" + char.lower() if "A" <= char <= "Z" else char for char in value)
 
-for path, version in sorted(graph):
-    url = f"https://proxy.golang.org/{escape(path)}/@v/{escape(version)}.mod"
-    try:
-        with urllib.request.urlopen(url) as response:
-            graph[(path, version)] = hashlib.sha256(response.read()).hexdigest()
-    except urllib.error.HTTPError as error:
-        # A locked version the proxy does not serve cannot be part of an offline
-        # build either: a replace directive resolves it from the source tree.
-        if error.code != 404:
-            raise
+for path, version in tuple(graph):
+    # A version resolved from the source tree is neither served nor needed by the
+    # proxy, and a directory replacement has no version on the proxy at all.
+    if path in vendored:
         del graph[(path, version)]
 
 sources = [{
@@ -95,10 +106,13 @@ for path, version in sorted(modules):
     })
 for path, version in sorted(graph):
     sources.append({
+        # go.sum and go.work.sum ship inside the verified source archive and Go
+        # checks every go.mod it reads against them, so these inputs carry the
+        # checksum-database hash instead of a second one recorded here.
         "kind": "go-module-requirements", "type": "file",
         "module": path, "version": version,
         "url": f"https://proxy.golang.org/{escape(path)}/@v/{escape(version)}.mod",
-        "sha256": graph[(path, version)],
+        "verify": "go.sum",
     })
 
 document = {
