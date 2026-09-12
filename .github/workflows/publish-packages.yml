@@ -1,0 +1,152 @@
+name: Publish package channels
+
+# Pushes the recipes of an existing GitHub Release to the AUR and to
+# microsoft/winget-pkgs. Everything is derived from the published assets, so a run can be
+# repeated and the only manual parts are the one-time account setup in
+# packaging/PUBLISHING.md.
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Public GitHub Release tag to publish (for example v1.6.5)
+        required: true
+        type: string
+      channels:
+        description: Which channels to publish
+        required: true
+        default: both
+        type: choice
+        options: [both, aur, winget]
+      dry_run:
+        description: Render and validate without pushing
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  aur:
+    name: Publish the AUR recipe
+    if: inputs.channels == 'both' || inputs.channels == 'aur'
+    runs-on: ubuntu-latest
+    environment: aur-publication
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Render and validate the recipe against the published archive
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          work="$RUNNER_TEMP/aur"
+          mkdir -p "$work"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern "proxor-$version.tar.gz" --pattern SHA256SUMS --dir "$work"
+          (cd "$work" && sha256sum -c SHA256SUMS --ignore-missing)
+          sha="$(sha256sum "$work/proxor-$version.tar.gz" | awk '{print $1}')"
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/proxor-$version.tar.gz"
+          # makepkg and namcap only exist in the Arch image, and the recipe is validated by
+          # building it from the published archive exactly as a user's helper would.
+          cat > "$work/publish.sh" <<EOF
+          set -eu
+          pacman -Syu --noconfirm --needed base-devel cmake ninja go namcap git openssh protobuf qt6-base qt6-svg yaml-cpp zxing-cpp hicolor-icon-theme
+          useradd -m builder
+          cp -a /checkout/packaging /work/packaging
+          mkdir -p /work/recipe
+          chown -R builder:builder /work/packaging /work/recipe
+          su - builder -c '/work/packaging/arch/render-pkgbuild.sh --version $version --url $url --sha256 $sha --output /work/recipe'
+          su - builder -c '/work/packaging/arch/tests/test-aur-package.sh /work/recipe'
+          EOF
+          docker run --rm -v "$PWD:/checkout:ro" -v "$work:/work" archlinux:base bash /work/publish.sh
+          test -s "$work/recipe/PKGBUILD" && test -s "$work/recipe/.SRCINFO"
+      - name: Push the recipe to the AUR
+        if: ${{ !inputs.dry_run }}
+        shell: bash
+        env:
+          TAG: ${{ inputs.release_tag }}
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$AUR_SSH_PRIVATE_KEY"
+          work="$RUNNER_TEMP/aur"
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > "$HOME/.ssh/aur"
+          chmod 600 "$HOME/.ssh/aur"
+          # The host keys are pinned in the repository, so a changed AUR host fails the push
+          # instead of being trusted on first use.
+          install -m 600 packaging/arch/aur-known-hosts "$HOME/.ssh/known_hosts"
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/aur -o IdentitiesOnly=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts -o StrictHostKeyChecking=yes"
+          git clone ssh://aur@aur.archlinux.org/proxor.git "$work/aur-repo"
+          cp "$work/recipe/PKGBUILD" "$work/recipe/.SRCINFO" "$work/aur-repo/"
+          cd "$work/aur-repo"
+          git config user.name 'Proxor release automation'
+          git config user.email 'maintainers@ogstra.github.io'
+          if git diff --quiet --exit-code; then
+            echo "the AUR already carries this recipe"
+            exit 0
+          fi
+          git add PKGBUILD .SRCINFO
+          git commit -m "proxor ${TAG#v}-1"
+          git push origin HEAD:master
+      - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        with:
+          name: aur-recipe-${{ inputs.release_tag }}
+          path: ${{ runner.temp }}/aur/recipe
+          include-hidden-files: true
+          if-no-files-found: error
+
+  winget:
+    name: Submit the winget manifests
+    if: inputs.channels == 'both' || inputs.channels == 'winget'
+    runs-on: windows-latest
+    environment: winget-publication
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Render the manifests from the published archive
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          work="$RUNNER_TEMP/winget"
+          mkdir -p "$work"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern "proxor-$version-winget-x64.zip" --pattern SHA256SUMS --dir "$work"
+          (cd "$work" && sha256sum -c SHA256SUMS --ignore-missing)
+          sha="$(sha256sum "$work/proxor-$version-winget-x64.zip" | awk '{print $1}')"
+          bash packaging/winget/render-manifest.sh --version "$version" \
+            --url "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/proxor-$version-winget-x64.zip" \
+            --sha256 "$sha" --output "$work/manifests"
+      - name: Validate the manifests
+        shell: pwsh
+        run: |
+          winget validate --manifest "$env:RUNNER_TEMP/winget/manifests"
+          if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 40) { exit $LASTEXITCODE }
+      - name: Open the pull request against microsoft/winget-pkgs
+        if: ${{ !inputs.dry_run }}
+        shell: pwsh
+        env:
+          WINGET_PKGS_TOKEN: ${{ secrets.WINGET_PKGS_TOKEN }}
+          TAG: ${{ inputs.release_tag }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINGET_PKGS_TOKEN)) { throw 'WINGET_PKGS_TOKEN is required' }
+          # wingetcreate forks microsoft/winget-pkgs under the token's account and opens the
+          # pull request from the manifests rendered above.
+          winget install --id Microsoft.WingetCreate --exact --source winget `
+            --accept-package-agreements --accept-source-agreements --disable-interactivity
+          if ($LASTEXITCODE -ne 0) { throw "installing wingetcreate failed with $LASTEXITCODE" }
+          $version = $env:TAG.TrimStart('v')
+          wingetcreate submit --token $env:WINGET_PKGS_TOKEN `
+            --prtitle "Ogstra.Proxor version $version" "$env:RUNNER_TEMP/winget/manifests"
+          if ($LASTEXITCODE -ne 0) { throw "wingetcreate submit failed with $LASTEXITCODE" }
+      - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        with:
+          name: winget-manifests-${{ inputs.release_tag }}
+          path: ${{ runner.temp }}/winget/manifests
+          if-no-files-found: error
