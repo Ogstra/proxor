@@ -17,6 +17,8 @@ grep -qx 'exec /app/lib/proxor/proxor "$@"' "$wrapper"
 # The embedded qt.conf hides the runtime's plugins, so the wrapper has to point Qt
 # back at them or the app cannot initialize a platform plugin.
 grep -Fq 'QT_QPA_PLATFORM_PLUGIN_PATH' "$wrapper"
+grep -Fq 'ln -sfn "$qt_plugins" "$prefix/lib/proxor/plugins"' \
+  "$root/packaging/flatpak/build-offline.sh"
 grep -qx 'app-id: io.github.Ogstra.Proxor' "$manifest"
 grep -qx 'runtime: org.kde.Platform' "$manifest"
 grep -qx 'runtime-version: "6.8"' "$manifest"
