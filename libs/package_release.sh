@@ -68,5 +68,9 @@ if command -v zip >/dev/null 2>&1; then
 else
   PACKAGE_ROOT_WIN="$(to_windows_path "$PACKAGE_ROOT")"
   OUTPUT_ZIP_WIN="$(to_windows_path "$OUTPUT_ZIP_ABS")"
-  powershell.exe -NoProfile -Command "Compress-Archive -Path '$PACKAGE_ROOT_WIN\\*' -DestinationPath '$OUTPUT_ZIP_WIN' -Force"
+  # Compress-Archive wrote entry names with backslash separators and, because it was given
+  # the directory's contents, dropped the proxor/ root that the `zip` branch above keeps.
+  # ZipFile writes spec-compliant forward slashes and keeps the base directory, so both
+  # branches produce the same archive.
+  powershell.exe -NoProfile -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::CreateFromDirectory('$PACKAGE_ROOT_WIN', '$OUTPUT_ZIP_WIN', [System.IO.Compression.CompressionLevel]::Optimal, \$true)"
 fi

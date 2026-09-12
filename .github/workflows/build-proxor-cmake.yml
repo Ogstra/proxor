@@ -427,7 +427,12 @@ jobs:
           # path that does not exist there fails there rather than here.
           nested="$(sed -n 's/^ *- RelativeFilePath: *//p' deployment/winget-manifests/Ogstra.Proxor.installer.yaml)"
           test -n "$nested"
-          unzip -Z1 "deployment/$version_standalone-winget-x64.zip" | tr '\\' '/' | grep -qxF "$nested"
+          unzip -Z1 "deployment/$version_standalone-winget-x64.zip" | grep -qxF "$nested"
+          # A ZIP stores paths with forward slashes. Compress-Archive used to write
+          # backslashes, which makes every directory collapse into a file name.
+          for archive in "deployment/$version_standalone-windows64.zip" "deployment/$version_standalone-winget-x64.zip"; do
+            ! unzip -Z1 "$archive" | grep -q '\\'
+          done
       # Symbols are kept, not deleted. The previous workflow ran `rm -rf *.pdb` at this
       # point, which would have discarded exactly what makes a crash from a shipped build
       # diagnosable. See docs/Build_Windows.md.
