@@ -35,6 +35,12 @@ docker run --rm -v "$package_dir:/packages:ro" "$image" bash -ceu '
   ! printf "%s\n" "$control" | grep -Eqi "setcap|cap_net_admin"
   apt-get install -y "$deb"
   desktop-file-validate /usr/share/applications/proxor.desktop
+  # The embedded qt.conf would otherwise leave Qt without a style, the SVG icon engine
+  # and the TLS backend, so the wrapper has to hand it the system plugin directory.
+  grep -q QT_PLUGIN_PATH /usr/bin/proxor
+  plugins="$(ls -d /usr/lib/*/qt6/plugins | head -n1)"
+  test -f "$plugins/iconengines/libqsvgicon.so"
+  test -f "$plugins/imageformats/libqsvg.so"
   set +e
   xvfb-run -a timeout 10s /usr/bin/proxor -many
   rc=$?

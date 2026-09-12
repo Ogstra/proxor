@@ -16,5 +16,9 @@ docker run --rm -v "$dir:/packages:ro" -v "$config:/rpmlint/proxor.rpmlint.toml:
   for p in /usr/bin/proxor /usr/lib/proxor/proxor /usr/lib/proxor/proxor_core /usr/share/proxor/geoip.dat /usr/share/proxor/geosite.dat /usr/share/proxor/geoip.db /usr/share/proxor/geosite.db /usr/share/applications/proxor.desktop /usr/share/icons/hicolor/256x256/apps/proxor.png; do rpm -qpl "$rpm" | grep -qx "$p"; done
   ! rpm -qpl "$rpm" | grep -Eqi "AppDir|linuxdeploy|updater|plugins/|qt[0-9]"; ! rpm -qp --scripts "$rpm" | grep -Eqi "setcap|cap_net_admin"
   dnf -y install "$rpm"; desktop-file-validate /usr/share/applications/proxor.desktop
+  grep -q QT_PLUGIN_PATH /usr/bin/proxor
+  plugins="$(ls -d /usr/lib64/qt6/plugins | head -n1)"
+  test -f "$plugins/iconengines/libqsvgicon.so"
+  test -f "$plugins/imageformats/libqsvg.so"
   set +e; xvfb-run -a timeout 10s /usr/bin/proxor -many; rc=$?; set -e; test "$rc" = 0 -o "$rc" = 124
 ' bash "$name"
