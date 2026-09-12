@@ -1860,6 +1860,15 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
         startup_tun_pending = true;
         startup_tun_authorized = false;
     }
+    // Turning Tun off means there is no tunnel left to wait for, so startup work that was
+    // held back by a failed authorization -- the subscription update after an update
+    // restart, for one -- can finally run.
+    if (!enable && startup_tun_failed && startup_network_work) {
+        startup_tun_failed = false;
+        MW_show_log(tr("Tun mode turned off; running the startup work that was waiting for it."));
+        auto startupWork = std::move(startup_network_work);
+        startupWork();
+    }
     if (enable != ProxorGui::dataStore->spmode_vpn) {
         if (enable) {
             if (ProxorGui::UseInternalTun()) {
@@ -3374,7 +3383,10 @@ void MainWindow::failStartupTunAuthorization() {
     startup_tun_pending = false;
     startup_tun_authorized = false;
     startup_tun_failed = true;
-    MW_show_log(tr("Tun authorization failed; automatic startup network work remains disabled."));
+    // startup_network_work is deliberately left in place: the work is not cancelled, only
+    // held, so enabling Tun later -- or turning the mode off -- still runs it instead of
+    // sending those requests outside the tunnel the user asked for.
+    MW_show_log(tr("Tun authorization failed; startup network work waits until Tun is available."));
 }
 
 bool MainWindow::StopVPNProcess(bool unconditional) {
