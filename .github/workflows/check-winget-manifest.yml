@@ -1,0 +1,66 @@
+name: Check winget manifest
+
+# winget-pkgs reports manifest failures without the underlying message, so this renders the
+# manifests for a published release and prints what winget itself says about them.
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Public GitHub Release tag to check (for example v1.6.5)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Render the manifests from the published archive
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          work="$RUNNER_TEMP/winget"
+          mkdir -p "$work"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern "proxor-$version-winget-x64.zip" --pattern SHA256SUMS --dir "$work"
+          (cd "$work" && sha256sum -c SHA256SUMS --ignore-missing)
+          sha="$(sha256sum "$work/proxor-$version-winget-x64.zip" | awk '{print $1}')"
+          bash packaging/winget/render-manifest.sh --version "$version" \
+            --url "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/proxor-$version-winget-x64.zip" \
+            --sha256 "$sha" --output "$work/manifests"
+          for manifest in "$work"/manifests/*.yaml; do printf '===== %s\n' "$manifest"; cat "$manifest"; done
+          unzip -Z1 "$work/proxor-$version-winget-x64.zip"
+      - name: Validate and install from the manifest
+        shell: pwsh
+        run: |
+          $manifests = "$env:RUNNER_TEMP/winget/manifests"
+          winget --version
+          winget validate --manifest $manifests
+          "validate exit: $LASTEXITCODE"
+          # The same resolution winget-pkgs performs: download the archive and run the
+          # nested portable file the manifest points at.
+          winget install --manifest $manifests --accept-package-agreements `
+            --accept-source-agreements --disable-interactivity --verbose-logs
+          "install exit: $LASTEXITCODE"
+          winget list Ogstra.Proxor
+      - name: Publish the winget logs
+        if: always()
+        shell: pwsh
+        run: |
+          $logs = "$env:LOCALAPPDATA/Packages/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe/LocalState/DiagOutputDir"
+          if (Test-Path $logs) { Copy-Item $logs "$env:RUNNER_TEMP/winget-logs" -Recurse }
+      - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+        if: always()
+        with:
+          name: winget-check-${{ inputs.release_tag }}
+          path: |
+            ${{ runner.temp }}/winget/manifests
+            ${{ runner.temp }}/winget-logs
+          if-no-files-found: warn
