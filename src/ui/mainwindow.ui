@@ -557,6 +557,7 @@
     </widget>
     <addaction name="menu_add_from_input"/>
     <addaction name="menu_add_from_clipboard"/>
+    <addaction name="menu_scan_qr"/>
     <addaction name="menu_add_subscription"/>
     <addaction name="separator"/>
     <addaction name="menu_select_all"/>
@@ -654,6 +655,11 @@
    </property>
    <property name="shortcut">
     <string notr="true">Ctrl+V</string>
+   </property>
+  </action>
+  <action name="menu_scan_qr">
+   <property name="text">
+    <string>Add from QR Code on Screen</string>
    </property>
   </action>
   <action name="menu_delete">
