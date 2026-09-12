@@ -19,18 +19,23 @@ done
 for job in linux windows; do
   mkdir -p "$tmp/in/$job"; printf x > "$tmp/in/$job/artifacts.tgz"
 done
-# RPM debug by-products are not release assets and must not trip the duplicate check.
+# The RPM debug packages ship alongside the packages, like the Windows symbols archive.
 mkdir -p "$tmp/in/rpms"
 for debug in proxor-debuginfo-1.2.3-1.fc44.x86_64.rpm proxor-debugsource-1.2.3-1.fc44.x86_64.rpm; do
   printf x > "$tmp/in/rpms/$debug"
 done
 "$script" prepare-final-assets --input "$tmp/in" --version 1.2.3 --output "$tmp/final" --public-source-url "$url"
 test -f "$tmp/final/proxor-1.2.3.flatpak"
+test -f "$tmp/final/proxor-debuginfo-1.2.3-1.fc44.x86_64.rpm"
 test ! -e "$tmp/final/artifacts.tgz"
-test ! -e "$tmp/final/proxor-debuginfo-1.2.3-1.fc44.x86_64.rpm"
-# GitHub renames a dotfile asset to default.SRCINFO.
-test -f "$tmp/final/aur/proxor-1.2.3.SRCINFO"
-test ! -e "$tmp/final/aur/.SRCINFO"
+# Packaging recipes are staged for their package repositories, not for the release.
+test -f "$tmp/final/recipes/aur/PKGBUILD"
+test -f "$tmp/final/recipes/aur/.SRCINFO"
+test -f "$tmp/final/recipes/winget-manifests/Ogstra.Proxor.yaml"
+test ! -e "$tmp/final/aur"
+test ! -e "$tmp/final/winget-manifests"
+grep -q 'proxor-1.2.3.flatpak' "$tmp/final/SHA256SUMS"
+! grep -q recipes "$tmp/final/SHA256SUMS"
 
 # Two release assets with the same name would silently overwrite each other.
 mkdir -p "$tmp/in/duplicate"; printf y > "$tmp/in/duplicate/proxor-1.2.3.deb"
