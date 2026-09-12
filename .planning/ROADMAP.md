@@ -88,6 +88,7 @@ See: [`.planning/milestones/v2.1-ROADMAP.md`](.planning/milestones/v2.1-ROADMAP.
 
 - [ ] **Phase 02: Cross-Platform Package Distribution** — Windows portable ZIP + winget; Debian/Ubuntu `.deb`, Fedora RPM, source AUR, and restricted Flatpak (standalone delivery track)
 - [ ] **Phase 46: Hybrid SSID On-Demand** — Auto-connect on matching SSID, preserve manual control on non-matching SSIDs, and use sing-box Wi-Fi awareness only where it fits
+- [ ] **Phase 47: Linux Update Channels** — Detect the install channel and route updating to whoever owns the files, with a real self-update only where the app does
 
 ---
 
@@ -201,9 +202,30 @@ Plans:
 Plans:
 - [ ] 46-01 — Hybrid supervisor architecture, explicit profile selection, and sing-box-aware rule injection
 
+### Phase 47: Linux Update Channels
+**Goal**: Every install channel either updates itself correctly or tells the user the one command that does, and the app never closes itself for an updater that cannot run
+**Depends on**: Phase 02 (the packages whose channels this detects)
+**Requirements**: LUC-01, LUC-02, LUC-03, LUC-04, LUC-05, LUC-06, LUC-07
+**Success Criteria** (what must be TRUE):
+  1. The running install reports its channel -- deb, rpm, arch, AppImage, Flatpak, winget or portable -- from a marker the package carries or an environment variable its runtime sets, never from guessing a path prefix
+  2. A package-managed install offers no self-update and instead shows the command that updates it, with the release page one click away
+  3. The app never sets an exit reason it cannot honour: when the updater binary is absent or the install directory is not writable, it stays open and explains why
+  4. An AppImage updates itself by replacing the file `$APPIMAGE` points at, and falls back to leaving the download in place when that file is not writable
+  5. Anything downloaded before being applied is verified against the `SHA256SUMS` published with the release
+  6. A winget-managed install is never overwritten in place, so the version winget reports stays the version on disk
+  7. The update check itself keeps working on every channel, because knowing a version exists is independent of being able to apply it
+**Plans**: 5 plans in 4 waves
+
+Plans:
+- [x] 47-01-PLAN.md — Land the owner's policy wiring, then refuse any exit reason the app cannot honour (wave 1)
+- [ ] 47-02-PLAN.md — Channel detection from markers and per-channel update guidance in the dialog (wave 2)
+- [ ] 47-03-PLAN.md — Core reports assets per channel and verifies downloads against SHA256SUMS (wave 3)
+- [ ] 47-05-PLAN.md — Channel marker in the deb, rpm and Arch packages (wave 3, parallel with 47-03)
+- [ ] 47-04-PLAN.md — AppImage replaces and relaunches its own file (wave 4)
+
 ---
 
-*Last updated: 2026-04-16 — Phase 46 hybrid SSID on-demand added locally*
+*Last updated: 2026-09-12 — Phase 47 broken into 5 plans across 4 waves*
 
 ---
 
@@ -213,7 +235,7 @@ Plans:
 
 **Goal:** Dedicated class that renders proxy/node details as formatted HTML for the info panel, replacing ad-hoc string concatenation. Includes theme-aware styling and structured sections for server, protocol, and routing metadata.
 **Requirements:** TBD
-**Plans:** 0 plans
+**Plans:** 1/5 plans executed
 
 Plans:
 - [ ] TBD (promote with /gsd:review-backlog when ready)
@@ -272,4 +294,3 @@ Plans:
 Plans:
 - [x] 01-01 - Debian 12 AppImage CI smoke test and Linux release documentation
 
----
