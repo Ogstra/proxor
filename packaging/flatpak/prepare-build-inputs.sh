@@ -47,25 +47,32 @@ import urllib.request
 
 document = json.load(open(sys.argv[1], encoding="utf-8"))
 cache = sys.argv[2]
-for source in document["sources"]:
-    if source.get("kind") != "go-module":
-        continue
-    path = re.sub(r"[A-Z]", lambda match: "!" + match.group(0).lower(), source["module"])
-    version = re.sub(r"[A-Z]", lambda match: "!" + match.group(0).lower(), source["version"])
-    destination = os.path.join(cache, path, "@v", version + ".zip")
+
+def escape(value):
+    return re.sub(r"[A-Z]", lambda match: "!" + match.group(0).lower(), value)
+
+def fetch(url, destination):
     os.makedirs(os.path.dirname(destination), exist_ok=True)
-    with urllib.request.urlopen(source["url"]) as response, open(destination, "wb") as archive:
-        archive.write(response.read())
+    with urllib.request.urlopen(url) as response, open(destination, "wb") as output:
+        output.write(response.read())
+
+for source in document["sources"]:
+    kind = source.get("kind")
+    if kind not in ("go-module", "go-module-requirements"):
+        continue
+    suffix = ".zip" if kind == "go-module" else ".mod"
+    stem = os.path.join(
+        cache, escape(source["module"]), "@v", escape(source["version"]))
+    destination = stem + suffix
+    fetch(source["url"], destination)
     actual = hashlib.sha256(open(destination, "rb").read()).hexdigest()
     if actual != source["sha256"]:
         raise SystemExit("checksum mismatch for " + source["module"])
-    # A file:// GOPROXY is a proxy, not a module cache: the offline build also
-    # resolves .info and .mod for every pinned version. go.sum still verifies the
-    # .mod content, and the .zip is pinned by the checksum above.
-    for suffix in (".info", ".mod"):
-        metadata = source["url"][: -len(".zip")] + suffix
-        with urllib.request.urlopen(metadata) as response:
-            open(destination[: -len(".zip")] + suffix, "wb").write(response.read())
+    # A file:// GOPROXY is a proxy, not a module cache: every version it serves a
+    # .zip for also needs a .info. That timestamp is not part of the build result,
+    # so the checksummed .zip and .mod remain the integrity contract.
+    if kind == "go-module":
+        fetch(source["url"][: -len(".zip")] + ".info", stem + ".info")
 PY
 
 rm -rf "$output"
