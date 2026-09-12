@@ -1731,6 +1731,15 @@ void MainWindow::on_commitDataRequest() {
 }
 
 void MainWindow::onUpdateStaged() {
+    // The updater is deliberately absent from the native Linux packages, and
+    // the package tests assert its absence, so its presence is a runtime
+    // fact and not an invariant: check before promising a restart into it.
+    const auto launch = DecideUpdaterLaunch(ProxorGui::ProbeUpdaterLaunch());
+    if (!launch.canLaunch) {
+        MessageBoxWarning(software_name, tr("%1 The app will stay open.").arg(launch.reason));
+        MW_show_log(tr("Update downloaded, but it cannot be installed: %1").arg(launch.reason));
+        return;
+    }
     update_staged = true;
     tray->showMessage(
         tr("Proxor"),
@@ -1746,7 +1755,12 @@ void MainWindow::onUpdateStaged() {
 void MainWindow::on_menu_exit_triggered() {
     if (mu_exit.tryLock()) {
         if (update_staged && exit_reason == 0) {
-            exit_reason = 1;
+            // Re-check: the updater binary or install directory could have
+            // changed since onUpdateStaged ran, and promising a restart the
+            // app cannot honour is exactly the bug this gate exists to avoid.
+            if (DecideUpdaterLaunch(ProxorGui::ProbeUpdaterLaunch()).canLaunch) {
+                exit_reason = 1;
+            }
         }
         ProxorGui::dataStore->prepare_exit = true;
         //
@@ -1776,12 +1790,12 @@ void MainWindow::on_menu_exit_triggered() {
     //
     MF_release_runguard();
     if (exit_reason == 1) {
-        QDir::setCurrent(ProxorGui::PackageRootPath());
-#ifdef Q_OS_WIN
-        QProcess::startDetached(ProxorGui::PackageExecutablePath("updater"), QStringList{});
-#else
-        QProcess::startDetached("./updater", QStringList{});
-#endif
+        // Final check before spawning: the updater is a runtime fact, not an
+        // invariant, so don't quit on a promise of a restart that won't happen.
+        if (DecideUpdaterLaunch(ProxorGui::ProbeUpdaterLaunch()).canLaunch) {
+            QDir::setCurrent(ProxorGui::PackageRootPath());
+            QProcess::startDetached(ProxorGui::PackageExecutablePath("updater"), QStringList{});
+        }
     } else if (exit_reason == 2 || exit_reason == 3) {
         QDir::setCurrent(ProxorGui::PackageRootPath());
 

@@ -10,6 +10,7 @@ private slots:
     void wingetSuppressesEverySelfUpdateStep();
     void flatpakDisablesEveryPrivilegedLifecycleEntryPoint();
     void flatpakSearchesItsSharedDataFirst();
+    void updaterLaunchIsRefusedForEveryUnmetCondition();
 };
 
 void PackagePolicyTest::wingetSuppressesEverySelfUpdateStep() {
@@ -57,6 +58,29 @@ void PackagePolicyTest::flatpakSearchesItsSharedDataFirst() {
     QVERIFY(!paths.isEmpty());
     QCOMPARE(paths.first(), QStringLiteral("/app/share/proxor"));
     QVERIFY(paths.contains(QStringLiteral("/usr/share/proxor")));
+}
+
+void PackagePolicyTest::updaterLaunchIsRefusedForEveryUnmetCondition() {
+    {
+        const auto decision = DecideUpdaterLaunch({false, false, false});
+        QVERIFY(!decision.canLaunch);
+        QCOMPARE(decision.reason, QStringLiteral("The updater is not part of this installation."));
+    }
+    {
+        const auto decision = DecideUpdaterLaunch({true, false, true});
+        QVERIFY(!decision.canLaunch);
+        QCOMPARE(decision.reason, QStringLiteral("The updater in this installation is not executable."));
+    }
+    {
+        const auto decision = DecideUpdaterLaunch({true, true, false});
+        QVERIFY(!decision.canLaunch);
+        QCOMPARE(decision.reason, QStringLiteral("The installation directory is not writable."));
+    }
+    {
+        const auto decision = DecideUpdaterLaunch({true, true, true});
+        QVERIFY(decision.canLaunch);
+        QVERIFY(decision.reason.isEmpty());
+    }
 }
 
 QTEST_MAIN(PackagePolicyTest)
