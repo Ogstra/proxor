@@ -342,6 +342,13 @@ jobs:
           target: desktop
           arch: ${{ runner.os == 'Windows' && 'win64_msvc2019_64' || 'linux_gcc_64' }}
           cache: true
+      - name: Verify release notes and asset staging
+        # The staging fixture renders the AUR and winget inputs with POSIX tools.
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          bash packaging/release/tests/test-release-notes.sh
+          bash packaging/release/tests/test-prepare-release-assets.sh
       - name: Run package policy fixture
         shell: bash
         run: test/package_mode/run-tests.sh
@@ -679,8 +686,12 @@ jobs:
           packaging/release/prepare-release-assets.sh prepare-source-release --input release-input --version "$version" --output release-stage
           args=()
           if [ "$PRERELEASE" = y ]; then args+=(--prerelease); fi
+          # The in-app changelog window renders this body, so it is authored against
+          # docs/Release_Notes_Format.md rather than generated from commit subjects.
+          notes="packaging/release/notes/$TAG.md"
+          test -s "$notes"
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" "release-stage/proxor-$version.tar.gz" --target "$GITHUB_SHA" --title "Proxor $version" --generate-notes "${args[@]}"
+            gh release create "$TAG" "release-stage/proxor-$version.tar.gz" --target "$GITHUB_SHA" --title "$TAG" --notes-file "$notes" "${args[@]}"
           else
             gh release upload "$TAG" "release-stage/proxor-$version.tar.gz" --clobber
           fi
