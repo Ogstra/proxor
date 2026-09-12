@@ -2,12 +2,9 @@
 set -euo pipefail
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
-for anchor in CheckUpdate StartVPNProcess SetSystemProxy FindCoreAsset; do
-    if ! grep -Rqs "$anchor" "$repo_root/src"; then
-        printf 'missing production anchor: %s\n' "$anchor" >&2
-        exit 1
-    fi
-done
-
-printf '%s\n' 'package policy is not wired into production entry points yet' >&2
-exit 1
+grep -q 'DecidePackageUpdate' "$repo_root/src/ui/mainwindow_grpc.cpp"
+grep -q 'allowUpdaterLaunch' "$repo_root/src/ui/mainwindow_grpc.cpp"
+grep -q 'DecideFlatpakLifecycle' "$repo_root/src/ui/mainwindow.cpp"
+grep -q 'StartVPNProcess' "$repo_root/src/ui/mainwindow.cpp"
+grep -q 'CoreAssetSearchPaths' "$repo_root/src/main/ProxorGui.cpp"
+grep -q 'PackageMode.cpp' "$repo_root/CMakeLists.txt"

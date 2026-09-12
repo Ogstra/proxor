@@ -5,6 +5,7 @@
 #include "db/ConfigBuilder.hpp"
 #include "db/traffic/TrafficLooper.hpp"
 #include "rpc/gRPC.h"
+#include "main/PackagePolicy.hpp"
 #include "ui/widget/MessageBoxTimer.h"
 
 #include <QTimer>
@@ -625,6 +626,18 @@ void MainWindow::CheckUpdate(bool silent) {
     // on new thread...
 #ifndef NKR_NO_GRPC
 
+    const auto packageUpdate = DecidePackageUpdate(ProxorGui::CurrentPackageMode());
+    if (!packageUpdate.allowCheck) {
+        if (!silent) {
+            runOnUiThread([=] {
+                MessageBoxInfo(QObject::tr("Update"),
+                               QObject::tr("This installation is managed externally. Update it with: %1")
+                                   .arg(packageUpdate.guidance));
+            });
+        }
+        return;
+    }
+
     if (startup_tun_pending || startup_tun_failed) return;
 
     // The core may not have finished starting up yet. The client may not exist,
@@ -665,7 +678,7 @@ void MainWindow::CheckUpdate(bool silent) {
     }
 
     runOnUiThread([=] {
-        auto allow_updater = !ProxorGui::dataStore->flag_use_appdata;
+        auto allow_updater = !ProxorGui::dataStore->flag_use_appdata && packageUpdate.allowUpdaterLaunch;
         auto notePreRelease = response.is_pre_release() ? QObject::tr("Prerelease") : QObject::tr("Release");
         auto releasePageUrl = QUrl(response.release_url().c_str());
         QString releaseNote = response.release_note().c_str();
@@ -682,7 +695,7 @@ void MainWindow::CheckUpdate(bool silent) {
             this);
 
         connect(dlg, &QDialog::accepted, this, [=] {
-            if (dlg->chosenAction() == DialogUpdateAvailable::Download && allow_updater) {
+            if (dlg->chosenAction() == DialogUpdateAvailable::Download && allow_updater && packageUpdate.allowDownload) {
                 updateProgressDialog = new UpdateProgressDialog(response.assets_name().c_str(), this);
                 connect(updateProgressDialog, &UpdateProgressDialog::downloadComplete, this, &MainWindow::onUpdateStaged);
                 updateProgressDialog->show();
