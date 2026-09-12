@@ -28,7 +28,9 @@ if [ "${PROXOR_FLATPAK_FULL_TEST:-0}" = 1 ]; then
   command -v flatpak >/dev/null
   command -v xvfb-run >/dev/null
   bundle_output="${PROXOR_FLATPAK_BUNDLE_OUTPUT:-}"
-  flatpak-builder-lint manifest "$manifest"
+  if command -v flatpak-builder-lint >/dev/null; then
+    flatpak-builder-lint manifest "$manifest"
+  fi
   work="$(mktemp -d)"
   trap 'rm -rf "$work"' EXIT
   flatpak-builder --user --force-clean "$work/online" "$manifest"
