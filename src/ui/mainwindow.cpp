@@ -8,6 +8,7 @@
 #include "sub/GroupUpdater.hpp"
 #include "sys/ExternalProcess.hpp"
 #include "sys/WifiMonitor.hpp"
+#include "main/PackagePolicy.hpp"
 
 #include "ui/ThemeManager.hpp"
 #include "ui/Icon.hpp"
@@ -82,6 +83,8 @@
 #include <QSysInfo>
 #include <QPushButton>
 
+#include <algorithm>
+
 namespace {
 // Qt::SingleShotConnection retires the connection on the FIRST emission of the signal,
 // whether or not the slot did anything useful. reachabilityChanged fires for every
@@ -108,6 +111,19 @@ QString projectRepoSlug() {
 
 QUrl projectUrl(const QString &path = QString()) {
     return QUrl(QStringLiteral("https://github.com/%1%2").arg(projectRepoSlug(), path));
+}
+
+QString formatConnectionDuration(qint64 elapsedMilliseconds) {
+    const auto elapsedMinutes = std::max<qint64>(0, elapsedMilliseconds / 60000);
+    const auto days = elapsedMinutes / (24 * 60);
+    const auto hours = (elapsedMinutes / 60) % 24;
+    const auto minutes = elapsedMinutes % 60;
+
+    QStringList parts;
+    if (days > 0) parts << QString::number(days) + "d";
+    if (hours > 0 || days > 0) parts << QString::number(hours) + "h";
+    parts << QString::number(minutes) + "m";
+    return parts.join(" ");
 }
 
 QString versionInfoText() {
@@ -420,6 +436,22 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         ProxorGui::dataStore->Save();
     }
     ui->setupUi(this);
+    const auto flatpakStartupPolicy = DecideFlatpakLifecycle(
+        ProxorGui::CurrentPackageMode(), FlatpakLifecycleEntryPoint::StartupRestore);
+    if (!flatpakStartupPolicy.allowTun || !flatpakStartupPolicy.allowSystemProxy) {
+        ProxorGui::dataStore->spmode_vpn = false;
+        ProxorGui::dataStore->spmode_system_proxy = false;
+        ProxorGui::dataStore->remember_spmode.removeAll("vpn");
+        ProxorGui::dataStore->remember_spmode.removeAll("system_proxy");
+        ProxorGui::dataStore->flag_restart_tun_on = false;
+        ProxorGui::dataStore->Save();
+        ui->checkBox_VPN->setChecked(false);
+        ui->checkBox_SystemProxy->setChecked(false);
+        ui->checkBox_VPN->setEnabled(false);
+        ui->checkBox_SystemProxy->setEnabled(false);
+        ui->menu_spmode_vpn->setEnabled(false);
+        ui->menu_spmode_system_proxy->setEnabled(false);
+    }
     themeManager->ApplyTheme(ProxorGui::dataStore->theme);
     for (auto *tabs: {ui->tabWidget, ui->down_tab}) {
         tabs->tabBar()->setUsesScrollButtons(false);
@@ -901,6 +933,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         proxor_set_spmode_vpn(false);
     });
     connect(ui->menu_qr, &QAction::triggered, this, [=]() { display_qr_link(false); });
+#ifdef NKR_NO_ZXING
+    // on_menu_scan_qr_triggered needs the barcode reader this build does not link.
+    ui->menu_scan_qr->setVisible(false);
+#endif
     connect(ui->menu_tcp_ping, &QAction::triggered, this, [=]() { speedtest_current_group(0, false); });
     connect(ui->menu_url_test, &QAction::triggered, this, [=]() { speedtest_current_group(1, false); });
     connect(ui->menu_full_test, &QAction::triggered, this, [=]() { speedtest_current_group(2, false); });
@@ -1710,6 +1746,7 @@ void MainWindow::on_commitDataRequest() {
 }
 
 void MainWindow::onUpdateStaged() {
+    if (!DecidePackageUpdate(ProxorGui::CurrentPackageMode()).allowApply) return;
     update_staged = true;
     tray->showMessage(
         tr("Proxor"),
@@ -1729,8 +1766,17 @@ void MainWindow::on_menu_exit_triggered() {
         }
         ProxorGui::dataStore->prepare_exit = true;
         //
-        proxor_set_spmode_system_proxy(false, false);
-        proxor_set_spmode_vpn(false, false);
+        const auto cleanupPolicy = DecideFlatpakLifecycle(
+            ProxorGui::CurrentPackageMode(), FlatpakLifecycleEntryPoint::CleanupRestore);
+        if (cleanupPolicy.allowSystemProxy && cleanupPolicy.allowTun) {
+            proxor_set_spmode_system_proxy(false, false);
+            proxor_set_spmode_vpn(false, false);
+        } else {
+            ProxorGui::dataStore->spmode_system_proxy = false;
+            ProxorGui::dataStore->spmode_vpn = false;
+            ProxorGui::dataStore->remember_spmode.removeAll("system_proxy");
+            ProxorGui::dataStore->remember_spmode.removeAll("vpn");
+        }
         if (ProxorGui::dataStore->spmode_vpn) {
             mu_exit.unlock(); // retry
             return;
@@ -1754,7 +1800,7 @@ void MainWindow::on_menu_exit_triggered() {
     }
     //
     MF_release_runguard();
-    if (exit_reason == 1) {
+    if (exit_reason == 1 && DecidePackageUpdate(ProxorGui::CurrentPackageMode()).allowUpdaterLaunch) {
         QDir::setCurrent(ProxorGui::PackageRootPath());
 #ifdef Q_OS_WIN
         QProcess::startDetached(ProxorGui::PackageExecutablePath("updater"), QStringList{});
@@ -1801,6 +1847,18 @@ void MainWindow::on_menu_exit_triggered() {
     return;
 
 void MainWindow::proxor_set_spmode_system_proxy(bool enable, bool save) {
+    const auto flatpakPolicy = DecideFlatpakLifecycle(
+        ProxorGui::CurrentPackageMode(), FlatpakLifecycleEntryPoint::MenuToggle);
+    if (!flatpakPolicy.allowSystemProxy) {
+        ProxorGui::dataStore->spmode_system_proxy = false;
+        ProxorGui::dataStore->remember_spmode.removeAll("system_proxy");
+        if (save) ProxorGui::dataStore->Save();
+        if (enable) {
+            MessageBoxInfo(software_name, tr("Flatpak cannot change the host system proxy. Use the application's proxy ports from the sandbox instead."));
+        }
+        refresh_status();
+        return;
+    }
     if (enable != ProxorGui::dataStore->spmode_system_proxy) {
         if (enable) {
             auto socks_port = ProxorGui::dataStore->inbound_socks_port;
@@ -1835,6 +1893,18 @@ void MainWindow::proxor_set_spmode_system_proxy(bool enable, bool save) {
 }
 
 void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
+    const auto flatpakPolicy = DecideFlatpakLifecycle(
+        ProxorGui::CurrentPackageMode(), FlatpakLifecycleEntryPoint::MenuToggle);
+    if (!flatpakPolicy.allowTun) {
+        ProxorGui::dataStore->spmode_vpn = false;
+        ProxorGui::dataStore->remember_spmode.removeAll("vpn");
+        if (save) ProxorGui::dataStore->Save();
+        if (enable) {
+            MessageBoxInfo(software_name, tr("Flatpak cannot create a host TUN interface. Use the application's proxy ports from the sandbox instead."));
+        }
+        refresh_status();
+        return;
+    }
     if (enable && startup_tun_failed) {
         startup_tun_failed = false;
         startup_tun_pending = true;
@@ -2034,7 +2104,13 @@ void MainWindow::refresh_status(const QString &traffic_update) {
         if (!ProxorGui::dataStore->active_routing.isEmpty() && ProxorGui::dataStore->active_routing != "Default") {
             tt << "[" + ProxorGui::dataStore->active_routing + "]";
         }
-        if (running != nullptr) tt << running->bean->DisplayTypeAndName() + "@" + group_name;
+        if (running != nullptr) {
+            auto profileText = running->bean->DisplayTypeAndName() + "@" + group_name;
+            if (isTray && connectionElapsedTimer.isValid()) {
+                profileText += QString::fromUtf8(" • ") + formatConnectionDuration(connectionElapsedTimer.elapsed());
+            }
+            tt << profileText;
+        }
         return tt.join(isTray ? "\n" : " ");
     };
 
@@ -3217,6 +3293,9 @@ void MainWindow::HotkeyEvent(const QString &key) {}
 // VPN Launcher
 
 bool MainWindow::StartVPNProcess() {
+    if (!DecideFlatpakLifecycle(ProxorGui::CurrentPackageMode(), FlatpakLifecycleEntryPoint::MenuToggle).allowTun) {
+        return false;
+    }
     //
     if (vpn_pid != 0) {
         return true;
