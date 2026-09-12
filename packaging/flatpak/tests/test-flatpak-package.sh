@@ -19,7 +19,8 @@ grep -Fqx '  - --share=network' "$manifest"
 test "$(grep -c '^  - --' "$manifest")" -eq 5
 ! grep -Eq -- '--device=all|--filesystem=host|--socket=system-bus|--talk-name=|pkexec|setcap|curl|go[[:space:]]+mod[[:space:]]+download' "$manifest" "$wrapper" "$root/packaging/flatpak/build-offline.sh"
 grep -Fq 'generated-go-sources.json' "$manifest"
-grep -Fq '/app/share/proxor/geoip.dat' "$root/packaging/flatpak/build-offline.sh"
+grep -Fq '"$prefix/share/proxor/$asset"' "$root/packaging/flatpak/build-offline.sh"
+grep -Fq 'build-offline.sh "$PWD" /app' "$manifest"
 grep -Fq 'FLATPAK_ID=io.github.Ogstra.Proxor' "$manifest"
 
 if [ "${PROXOR_FLATPAK_FULL_TEST:-0}" = 1 ]; then
