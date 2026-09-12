@@ -9,7 +9,49 @@ finish-args:
   - --socket=fallback-x11
   - --device=dri
   - --share=network
+cleanup:
+  - /include
+  - /lib/cmake
+  - /lib/pkgconfig
+  - /lib/*.a
+  - /share/doc
 modules:
+  # org.kde.Sdk carries neither protobuf, yaml-cpp nor zxing-cpp, and the native
+  # dependency script fetches them at build time. These are the same pinned
+  # versions, resolved from immutable archives instead.
+  - name: zxing-cpp
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DBUILD_SHARED_LIBS=OFF
+      - -DBUILD_EXAMPLES=OFF
+      - -DBUILD_BLACKBOX_TESTS=OFF
+    sources:
+      - type: archive
+        url: https://github.com/nu-book/zxing-cpp/archive/refs/tags/v2.0.0.tar.gz
+        sha256: 12b76b7005c30d34265fc20356d340da179b0b4d43d2c1b35bcca86776069f76
+  - name: yaml-cpp
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DBUILD_SHARED_LIBS=OFF
+      - -DYAML_CPP_BUILD_TESTS=OFF
+      - -DYAML_CPP_BUILD_TOOLS=OFF
+    sources:
+      - type: archive
+        url: https://github.com/jbeder/yaml-cpp/archive/refs/tags/yaml-cpp-0.7.0.tar.gz
+        sha256: 43e6a9fcb146ad871515f0d0873947e5d497a1c9c60c58cb102a97b47208b7c3
+  - name: protobuf
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DBUILD_SHARED_LIBS=OFF
+      - -Dprotobuf_BUILD_TESTS=OFF
+      - -Dprotobuf_ABSL_PROVIDER=module
+    sources:
+      - type: archive
+        url: https://github.com/protocolbuffers/protobuf/releases/download/v21.4/protobuf-all-21.4.tar.gz
+        sha256: 6c5e1b0788afba4569aeebb2cfe205cb154aa01deacaba0cd26442f3b761a836
   - name: proxor
     buildsystem: simple
     build-commands:

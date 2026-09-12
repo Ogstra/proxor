@@ -36,7 +36,11 @@ for asset in geoip.dat geosite.dat geoip.db geosite.db; do
   test -s "$inputs/geodata/$asset"
 done
 GOOS=linux GOARCH=amd64 ./libs/build_go.sh
-cmake -S . -B build -GNinja -DQT_VERSION_MAJOR=6 -DCMAKE_BUILD_TYPE=Release -DNKR_PACKAGE=ON
+# The dependency modules of this manifest installed protobuf, yaml-cpp and
+# zxing-cpp into the app prefix, so point the build at that instead of the
+# network-fetched libs/deps tree.
+cmake -S . -B build -GNinja -DQT_VERSION_MAJOR=6 -DCMAKE_BUILD_TYPE=Release \
+  -DNKR_PACKAGE=ON -DNKR_LIBS="$prefix"
 cmake --build build
 
 install -Dm755 build/proxor "$prefix/lib/proxor/proxor"
