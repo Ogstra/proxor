@@ -83,6 +83,13 @@
 #include <QPushButton>
 
 namespace {
+// When the tunnel is the active mode, every test leaves through it, so a test that runs
+// while the core is still installing routes reports the whole list as unavailable. The
+// moment Tun was last switched on lives here rather than in the class because the tests
+// only need to know how long the routes have had to settle.
+qint64 g_tun_enabled_ms = 0;
+constexpr qint64 kTunSettleMs = 6000;
+
 // Qt::SingleShotConnection retires the connection on the FIRST emission of the signal,
 // whether or not the slot did anything useful. reachabilityChanged fires for every
 // topology change -- notably when the TUN adapter comes up -- so a slot that filters for
@@ -1117,7 +1124,16 @@ void MainWindow::run_subscription_ping_on_open(int attempts) {
     constexpr int maxAttempts = 90;
     if (attempts > maxAttempts) return;
 
-    if (UI_subscription_updates_running() || !ProxorGui::dataStore->core_running) {
+    // Tun carries the tests, and the core installs its routes after it answers on gRPC, so
+    // a started profile and a settled tunnel are both required. Without this the list came
+    // back entirely unavailable on every platform, because the probes left before the
+    // tunnel could carry them.
+    const bool tunSelected = ProxorGui::dataStore->spmode_vpn;
+    const bool tunSettled = g_tun_enabled_ms > 0 &&
+                            QDateTime::currentMSecsSinceEpoch() - g_tun_enabled_ms >= kTunSettleMs;
+    const bool waitingForTun = tunSelected && (ProxorGui::dataStore->started_id < 0 || !tunSettled);
+
+    if (UI_subscription_updates_running() || !ProxorGui::dataStore->core_running || waitingForTun) {
         setTimeout([this, attempts] { run_subscription_ping_on_open(attempts + 1); }, this, 1000);
         return;
     }
@@ -1931,6 +1947,7 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
     }
 
     ProxorGui::dataStore->spmode_vpn = enable;
+    g_tun_enabled_ms = enable ? QDateTime::currentMSecsSinceEpoch() : 0;
     refresh_status();
 
     if (enable && startup_tun_pending && ProxorGui::UseInternalTun()) {
