@@ -26,7 +26,6 @@ export GOTOOLCHAIN=local
 export GOROOT="$toolchain"
 
 export GOPROXY="file://$inputs/go-cache/cache/download"
-export GOFLAGS="${GOFLAGS:+$GOFLAGS }-mod=mod"
 export GOSUMDB=off
 # HOME is not writable in every flatpak-builder sandbox, so keep both Go caches
 # inside the build directory.
