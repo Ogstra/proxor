@@ -8,7 +8,7 @@ Installers:
     InstallerUrl: @URL@
     InstallerSha256: @SHA256@
     NestedInstallerFiles:
-      - RelativeFilePath: proxor.exe
+      - RelativeFilePath: proxor/proxor.exe
         PortableCommandAlias: proxor
 ManifestType: installer
 ManifestVersion: 1.12.0
