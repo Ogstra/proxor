@@ -413,9 +413,13 @@ jobs:
           test -s deployment/windows64/config/runtime/plugins/platforms/qwindows.dll
           bash ./libs/package_release.sh "deployment/windows64" "deployment/$version_standalone-windows64.zip"
           bash ./libs/package_winget.sh "deployment/windows64" "deployment/$version_standalone-winget-x64.zip"
-          unzip -Z1 "deployment/$version_standalone-windows64.zip" | grep -Eqi 'proxor\.exe'
-          ! unzip -Z1 "deployment/$version_standalone-windows64.zip" | grep -Eqi 'package-manager[\\/]+winget'
-          unzip -Z1 "deployment/$version_standalone-winget-x64.zip" | grep -Eqi 'config[\\/]+package-manager[\\/]+winget'
+          # grep -q closes the pipe and unzip dies of SIGPIPE, which pipefail reports as a
+          # failure, so each archive is listed once into a variable and matched from there.
+          release_entries="$(unzip -Z1 "deployment/$version_standalone-windows64.zip")"
+          winget_entries="$(unzip -Z1 "deployment/$version_standalone-winget-x64.zip")"
+          grep -Eqi 'proxor\.exe' <<<"$release_entries"
+          ! grep -Eqi 'package-manager[\\/]+winget' <<<"$release_entries"
+          grep -Eqi 'config[\\/]+package-manager[\\/]+winget' <<<"$winget_entries"
           winget_sha="$(sha256sum "deployment/$version_standalone-winget-x64.zip" | awk '{print $1}')"
           bash packaging/winget/render-manifest.sh \
             --version "$release_version" \
@@ -427,12 +431,11 @@ jobs:
           # path that does not exist there fails there rather than here.
           nested="$(sed -n 's/^ *- RelativeFilePath: *//p' deployment/winget-manifests/Ogstra.Proxor.installer.yaml)"
           test -n "$nested"
-          unzip -Z1 "deployment/$version_standalone-winget-x64.zip" | grep -qxF "$nested"
+          grep -qxF "$nested" <<<"$winget_entries"
           # A ZIP stores paths with forward slashes. Compress-Archive used to write
           # backslashes, which makes every directory collapse into a file name.
-          for archive in "deployment/$version_standalone-windows64.zip" "deployment/$version_standalone-winget-x64.zip"; do
-            ! unzip -Z1 "$archive" | grep -q '\\'
-          done
+          ! grep -q '\\' <<<"$release_entries"
+          ! grep -q '\\' <<<"$winget_entries"
       # Symbols are kept, not deleted. The previous workflow ran `rm -rf *.pdb` at this
       # point, which would have discarded exactly what makes a crash from a shipped build
       # diagnosable. See docs/Build_Windows.md.
