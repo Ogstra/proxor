@@ -702,4 +702,4 @@ jobs:
           test -n "$source_url"
           packaging/release/prepare-release-assets.sh prepare-final-assets --input release-input --version "$version" --output release-stage --public-source-url "$source_url"
           (cd release-stage && shasum -a 256 -c SHA256SUMS)
-          gh release upload "$TAG" release-stage/*.zip release-stage/*.AppImage release-stage/*.deb release-stage/*.rpm release-stage/*.flatpak release-stage/*.source-manifest release-stage/SHA256SUMS release-stage/aur/PKGBUILD release-stage/aur/.SRCINFO release-stage/winget-manifests/*.yaml --clobber
+          gh release upload "$TAG" release-stage/*.zip release-stage/*.AppImage release-stage/*.deb release-stage/*.rpm release-stage/*.flatpak release-stage/*.source-manifest release-stage/SHA256SUMS release-stage/aur/PKGBUILD release-stage/aur/*.SRCINFO release-stage/winget-manifests/*.yaml --clobber
