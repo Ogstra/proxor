@@ -350,6 +350,11 @@ jobs:
         run: |
           bash packaging/release/tests/test-release-notes.sh
           bash packaging/release/tests/test-prepare-release-assets.sh
+      - name: Verify native root staging
+        # Guards the shared deb/rpm/arch staging helper; needs POSIX tools.
+        if: runner.os == 'Linux'
+        shell: bash
+        run: bash packaging/linux/tests/test-stage-native-root.sh
       - name: Run package policy fixture
         shell: bash
         run: test/package_mode/run-tests.sh
