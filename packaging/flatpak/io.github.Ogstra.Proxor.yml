@@ -22,7 +22,10 @@ modules:
         path: generated-go-sources.json
       - type: file
         path: .flatpak-input/proxor-source.tar.gz
+        dest: .flatpak-input
       - type: dir
         path: .flatpak-input/geodata
+        dest: .flatpak-input/geodata
       - type: dir
         path: .flatpak-input/go-cache
+        dest: .flatpak-input/go-cache
