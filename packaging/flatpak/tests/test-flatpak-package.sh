@@ -7,6 +7,12 @@ wrapper="$root/packaging/flatpak/proxor-wrapper.sh"
 
 test -f "$manifest"
 test -x "$wrapper"
+# The release tarball carries git's recorded modes, so a script that is only
+# executable in the working tree still fails inside flatpak-builder.
+for script in packaging/flatpak/build-offline.sh packaging/flatpak/proxor-wrapper.sh libs/build_go.sh; do
+  test -x "$root/$script"
+  test "$(git -C "$root" ls-files -s "$script" | cut -d' ' -f1)" = 100755
+done
 grep -qx 'exec /app/lib/proxor/proxor "$@"' "$wrapper"
 grep -qx 'app-id: io.github.Ogstra.Proxor' "$manifest"
 grep -qx 'runtime: org.kde.Platform' "$manifest"
@@ -25,6 +31,16 @@ grep -Fqx '        dest: .flatpak-input/go-cache' "$manifest"
 grep -Fq '"$prefix/share/proxor/$asset"' "$root/packaging/flatpak/build-offline.sh"
 grep -Fq 'build-offline.sh "$PWD" /app' "$manifest"
 grep -Fq 'FLATPAK_ID=io.github.Ogstra.Proxor' "$manifest"
+
+# The runtime has no Go: the toolchain is pinned by checksum and the offline build
+# resolves modules from the staged proxy only, never from a toolchain download.
+go_version="$(sed -n 's/^ *GO_VERSION: *"\{0,1\}\([^"]*\)"\{0,1\} *$/\1/p' "$root/.github/workflows/build-proxor-cmake.yml" | head -n1)"
+test -n "$go_version"
+grep -Fqx "        url: https://go.dev/dl/go$go_version.linux-amd64.tar.gz" "$manifest"
+grep -Eq '^        sha256: [0-9a-f]{64}$' "$manifest"
+grep -Fqx '        dest: .flatpak-go-toolchain' "$manifest"
+grep -Fq 'export GOTOOLCHAIN=local' "$root/packaging/flatpak/build-offline.sh"
+grep -Fq 'export GOPROXY="file://$inputs/go-cache/cache/download"' "$root/packaging/flatpak/build-offline.sh"
 
 if [ "${PROXOR_FLATPAK_FULL_TEST:-0}" = 1 ]; then
   command -v flatpak-builder >/dev/null
