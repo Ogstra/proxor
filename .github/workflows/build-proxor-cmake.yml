@@ -581,7 +581,9 @@ jobs:
       - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
         with:
           name: release-assets-arch
-          path: ${{ runner.temp }}/aur
+          path: |
+            ${{ runner.temp }}/aur/PKGBUILD
+            ${{ runner.temp }}/aur/.SRCINFO
           if-no-files-found: error
 
   package-flatpak:

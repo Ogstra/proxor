@@ -78,7 +78,10 @@ with open(os.environ["OUTPUT"], "w", encoding="utf-8") as result:
 PY
 
 if "$check"; then
-  cmp "$generated" "$output"
+  if ! cmp -s "$generated" "$output"; then
+    diff -u "$output" "$generated" >&2 || true
+    exit 1
+  fi
 else
   mv "$generated" "$output"
   trap - EXIT
