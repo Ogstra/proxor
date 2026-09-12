@@ -411,12 +411,14 @@ void ThemeManager::ApplyTheme(const QString &theme, bool force) {
     // setPalette keeps setStyle from resetting it to the style's standard palette.
     if (lowerTheme == "system") {
         qApp->setStyleSheet("");
-#ifdef Q_OS_LINUX
-        // Some Linux platform plugins report ColorScheme::Unknown even when GTK/KDE
-        // is dark. Apply the resolved system palette before the native style polishes.
-        qApp->setPalette(paletteForMode(QString()));
-#else
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
+        // The native style reads the OS light/dark setting itself.
         qApp->setPalette(QPalette());
+#else
+        // Platform plugins report ColorScheme::Unknown even when GTK/KDE is dark, so the
+        // palette is resolved here: an explicitly requested mode wins, and without one the
+        // system preference is detected. It has to be set before the style polishes.
+        qApp->setPalette(paletteForMode(requestedMode));
 #endif
         qApp->setStyle(this->system_style_name);
     } else if (lowerTheme == "fusion") {

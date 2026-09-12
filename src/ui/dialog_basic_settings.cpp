@@ -31,19 +31,22 @@
 #include <QTimer>
 
 namespace {
-// The light/dark mode follows the system setting, which only Qt's Windows styles
-// report. Elsewhere the switch repainted part of the window with the old palette, so
-// the row is not offered at all and the dark themes are picked by name instead.
-#ifdef Q_OS_WIN
-constexpr bool kThemeModeSupported = true;
+// On Windows the native style resolves light and dark from the OS setting itself, so the
+// System theme has no mode to choose and the row is greyed out there. Every other platform
+// reports that setting unreliably, so the mode stays selectable and Proxor applies the
+// palette it asks for.
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
+constexpr bool kSystemThemeFollowsOsMode = true;
 #else
-constexpr bool kThemeModeSupported = false;
+constexpr bool kSystemThemeFollowsOsMode = false;
 #endif
 
 int ThemeModeIndexForTheme(const QString &themeName) {
-    if (themeManager->NormalizeTheme(themeName) == QStringLiteral("System")) return 0;
+    // The suffix is read first: "System|Dark" carries a mode even though it normalizes to
+    // the System theme.
     if (themeName.endsWith(QStringLiteral("|Light"), Qt::CaseInsensitive)) return 1;
     if (themeName.endsWith(QStringLiteral("|Dark"), Qt::CaseInsensitive)) return 2;
+    if (themeManager->NormalizeTheme(themeName) == QStringLiteral("System")) return 0;
     if (themeName.endsWith(QStringLiteral("|System"), Qt::CaseInsensitive)) return 0;
     const auto normalized = themeManager->NormalizeTheme(themeName);
     if (normalized == QStringLiteral("FusionLight")) return 1;
@@ -72,24 +75,25 @@ QString ResolveThemeSelection(const QString &comboTheme, int modeIndex) {
         return QStringLiteral("Fusion");
     }
     if (comboTheme == QStringLiteral("System")) {
+        if (kSystemThemeFollowsOsMode) return QStringLiteral("System");
+        if (modeIndex == 1) return QStringLiteral("System|Light");
+        if (modeIndex == 2) return QStringLiteral("System|Dark");
         return QStringLiteral("System");
     }
     if (comboTheme == QStringLiteral("QDarkStyle") || comboTheme == QStringLiteral("FusionArcDark")) {
         return comboTheme;
     }
-    // Without a mode row there is no mode to record, and a bare name keeps the stored
-    // theme readable by any build.
-    if (!kThemeModeSupported) return comboTheme;
     if (modeIndex == 1) return comboTheme + QStringLiteral("|Light");
     if (modeIndex == 2) return comboTheme + QStringLiteral("|Dark");
     return comboTheme + QStringLiteral("|System");
 }
 
 void RefreshThemeModeOptions(QComboBox *themeCombo, QComboBox *modeCombo) {
-    if (!kThemeModeSupported) return;
     const auto themeKey = themeCombo->currentData().toString();
-    const bool systemModeOnly = themeKey.compare(QStringLiteral("System"), Qt::CaseInsensitive) == 0 ||
-                                themeKey.compare(QStringLiteral("Windows"), Qt::CaseInsensitive) == 0;
+    // These follow the OS setting only where the OS reports it to the native style.
+    const bool systemModeOnly = kSystemThemeFollowsOsMode &&
+                                (themeKey.compare(QStringLiteral("System"), Qt::CaseInsensitive) == 0 ||
+                                 themeKey.compare(QStringLiteral("Windows"), Qt::CaseInsensitive) == 0);
     const bool darkModeOnly = themeKey.compare(QStringLiteral("QDarkStyle"), Qt::CaseInsensitive) == 0 ||
                               themeKey.compare(QStringLiteral("FusionArcDark"), Qt::CaseInsensitive) == 0;
 
@@ -328,33 +332,15 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
         ui->theme->setCurrentIndex(currentThemeIndex);
     }
     ui->theme_mode->setCurrentIndex(ThemeModeIndexForTheme(storedTheme));
-    if (kThemeModeSupported) {
-        RefreshThemeModeOptions(ui->theme, ui->theme_mode);
-        // Re-run once shown so the disabled combo repaints greyed (the construction
-        // -time call runs before the widget is visible, so its repaint is a no-op).
-        QTimer::singleShot(0, this, [this] { RefreshThemeModeOptions(ui->theme, ui->theme_mode); });
-    } else {
-        ui->label_theme_mode->hide();
-        ui->theme_mode->hide();
-        // A configuration written on Windows, or by an older build, can still carry a
-        // mode. Fall back to the theme it was a mode of.
-        const auto normalized = themeManager->NormalizeTheme(storedTheme);
-        const bool carriesMode = storedTheme.contains(QLatin1Char('|')) ||
-                                 normalized == QStringLiteral("FusionLight") ||
-                                 normalized == QStringLiteral("FusionDark");
-        if (carriesMode) {
-            const auto baseTheme = ThemeComboKeyForTheme(storedTheme);
-            themeManager->ApplyTheme(baseTheme);
-            ProxorGui::dataStore->theme = baseTheme;
-            ProxorGui::dataStore->Save();
-        }
-    }
+    RefreshThemeModeOptions(ui->theme, ui->theme_mode);
+    // Re-run once shown so the disabled combo repaints greyed (the construction
+    // -time call runs before the widget is visible, so its repaint is a no-op).
+    QTimer::singleShot(0, this, [this] { RefreshThemeModeOptions(ui->theme, ui->theme_mode); });
 
     connect(ui->theme, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int index) {
         const auto comboThemeName = ui->theme->itemData(index).toString();
         RefreshThemeModeOptions(ui->theme, ui->theme_mode);
-        const auto themeName = ResolveThemeSelection(
-            comboThemeName, kThemeModeSupported ? ui->theme_mode->currentIndex() : 0);
+        const auto themeName = ResolveThemeSelection(comboThemeName, ui->theme_mode->currentIndex());
         if (themeName.isEmpty()) return;
         const QSignalBlocker blocker(ui->theme_mode);
         ui->theme_mode->setCurrentIndex(ThemeModeIndexForTheme(themeName));
