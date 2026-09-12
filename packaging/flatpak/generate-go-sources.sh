@@ -21,13 +21,19 @@ import hashlib
 import json
 import os
 import subprocess
+import urllib.error
+import urllib.request
 
 root = os.environ["ROOT"]
+module_dirs = ("go/cmd/proxor_core", "go/cmd/updater", "go/grpc_server", "go/proxorlib")
+offline_env = {**os.environ, "GOWORK": "off"}
+
 modules = {}
-for module_dir in ("go/cmd/proxor_core", "go/cmd/updater", "go/grpc_server", "go/proxorlib"):
+graph = {}
+for module_dir in module_dirs:
+    cwd = os.path.join(root, module_dir)
     raw = subprocess.check_output(
-        ["go", "mod", "download", "-json", "all"], cwd=os.path.join(root, module_dir),
-        env={**os.environ, "GOWORK": "off"}, text=True)
+        ["go", "mod", "download", "-json", "all"], cwd=cwd, env=offline_env, text=True)
     decoder = json.JSONDecoder()
     pos = 0
     while pos < len(raw):
@@ -40,8 +46,34 @@ for module_dir in ("go/cmd/proxor_core", "go/cmd/updater", "go/grpc_server", "go
             continue
         modules[(item["Path"], item["Version"])] = item
 
+# Minimal version selection reads the .mod of every version the checksum database
+# locked, not only of the versions that end up linked in, so the offline proxy has
+# to serve all of them. go.work.sum covers the workspace build, the per-module
+# go.sum files cover a single-module build of the same sources.
+for sum_file in ("go.work.sum",) + tuple(d + "/go.sum" for d in module_dirs):
+    path_name = os.path.join(root, sum_file)
+    if not os.path.exists(path_name):
+        continue
+    with open(path_name, encoding="utf-8") as checksums:
+        for line in checksums:
+            fields = line.split()
+            if len(fields) == 3 and fields[1].endswith("/go.mod"):
+                graph[(fields[0], fields[1][: -len("/go.mod")])] = None
+
 def escape(value):
     return "".join("!" + char.lower() if "A" <= char <= "Z" else char for char in value)
+
+for path, version in sorted(graph):
+    url = f"https://proxy.golang.org/{escape(path)}/@v/{escape(version)}.mod"
+    try:
+        with urllib.request.urlopen(url) as response:
+            graph[(path, version)] = hashlib.sha256(response.read()).hexdigest()
+    except urllib.error.HTTPError as error:
+        # A locked version the proxy does not serve cannot be part of an offline
+        # build either: a replace directive resolves it from the source tree.
+        if error.code != 404:
+            raise
+        del graph[(path, version)]
 
 sources = [{
     "kind": "proxor-recursive-source",
@@ -60,6 +92,13 @@ for path, version in sorted(modules):
         "module": path, "version": version,
         "url": f"https://proxy.golang.org/{escape(path)}/@v/{escape(version)}.zip",
         "sha256": sha256,
+    })
+for path, version in sorted(graph):
+    sources.append({
+        "kind": "go-module-requirements", "type": "file",
+        "module": path, "version": version,
+        "url": f"https://proxy.golang.org/{escape(path)}/@v/{escape(version)}.mod",
+        "sha256": graph[(path, version)],
     })
 
 document = {

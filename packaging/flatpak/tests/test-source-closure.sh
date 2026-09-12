@@ -33,8 +33,12 @@ assert re.fullmatch(r"[0-9a-f]{64}", document["generator"]["sha256"])
 assert document["sources"], "source closure is empty"
 
 source_archive = False
+requirements = 0
 for source in document["sources"]:
-    assert source["type"] == "archive"
+    assert source["type"] == ("file" if source.get("kind") == "go-module-requirements" else "archive")
+    if source.get("kind") == "go-module-requirements":
+        assert source["url"].endswith(".mod")
+        requirements += 1
     assert source["url"].startswith("https://")
     assert not re.search(r"/(?:main|master)(?:/|$)", source["url"])
     if source.get("kind") == "proxor-recursive-source":
@@ -48,4 +52,5 @@ for source in document["sources"]:
         assert re.fullmatch(r"[0-9a-f]{64}", source["sha256"])
 
 assert source_archive, "the recursive Plan 12 source archive is required"
+assert requirements, "offline minimal version selection needs the .mod closure"
 PY
