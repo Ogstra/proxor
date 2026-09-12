@@ -1,8 +1,8 @@
 Name:           proxor
 Version:        %{?version}%{!?version:0}
-# The build platform appends its own dist tag, so spelling %{?dist} out here produced
-# names like proxor-1.6.5-1.fc44.fc44.x86_64.rpm.
-Release:        %{?release}%{!?release:1}
+# %{?dist} expanded to the distribution twice in the build image, producing names like
+# proxor-1.6.5-1.fc44.fc44.x86_64.rpm, so the tag is composed from the release itself.
+Release:        %{?release}%{!?release:1}%{?fedora:.fc%{fedora}}
 Summary:        Qt proxy client for sing-box profiles
 License:        GPL-3.0-or-later
 URL:            https://github.com/Ogstra/proxor
