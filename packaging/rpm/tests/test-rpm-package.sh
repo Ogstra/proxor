@@ -2,6 +2,10 @@
 set -euo pipefail
 [ "$#" = 1 ] || { echo "Usage: $0 <proxor*.rpm>" >&2; exit 2; }
 rpm="$1"; [ -f "$rpm" ] || exit 1
+# A release tag repeated in the file name, as in 1.6.5-1.fc44.fc44, means the spec and
+# the platform both appended the dist tag.
+basename "$rpm" | grep -Eq '^proxor-[0-9]+\.[0-9]+\.[0-9]+-[0-9]+\.fc[0-9]+\.x86_64\.rpm$' || {
+  echo "unexpected release tag in $(basename "$rpm")" >&2; exit 1; }
 image="fedora@sha256:43b29f65a41eb9c35e1cd5323e3bdf3b655c2357a9f4f1ff2f9c2798e5045d80"
 dir="$(CDPATH= cd -- "$(dirname "$rpm")" && pwd)"; name="$(basename "$rpm")"
 config="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)/proxor.rpmlint.toml"
