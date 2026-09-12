@@ -29,3 +29,10 @@ modules:
       - type: dir
         path: .flatpak-input/go-cache
         dest: .flatpak-input/go-cache
+      # org.kde.Sdk ships no Go, so the pinned release toolchain is an immutable
+      # checksum-verified input like every other source in this manifest.
+      - type: archive
+        url: https://go.dev/dl/go1.26.1.linux-amd64.tar.gz
+        sha256: 031f088e5d955bab8657ede27ad4e3bc5b7c1ba281f05f245bcc304f327c987a
+        strip-components: 1
+        dest: .flatpak-go-toolchain

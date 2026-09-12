@@ -6,14 +6,35 @@ source_root="$1"
 prefix="$2"
 cd "$source_root"
 
+# prepare-build-inputs.sh stages .flatpak-input beside the source archive, so the
+# directory sits one level above the extracted source root inside flatpak-builder.
+build_root="$PWD"
+test -d "$build_root/.flatpak-input" || build_root="$(CDPATH= cd -- "$PWD/.." && pwd)"
+inputs="$build_root/.flatpak-input"
+test -d "$inputs"
+
 # The CI renderer materializes the checksum-verified generated-go-sources.json
 # archives in this cache before flatpak-builder executes this script.
-test -d .flatpak-go-cache/cache/download
-export GOPROXY="file://$PWD/.flatpak-go-cache"
+test -d "$inputs/go-cache/cache/download"
+
+# The runtime has no Go, so use the toolchain the manifest pinned by checksum and
+# forbid any toolchain switch: the build sandbox has no network.
+toolchain="$build_root/.flatpak-go-toolchain"
+test -x "$toolchain/bin/go"
+export PATH="$toolchain/bin:$PATH"
+export GOTOOLCHAIN=local
+export GOROOT="$toolchain"
+
+export GOPROXY="file://$inputs/go-cache/cache/download"
+export GOFLAGS="${GOFLAGS:+$GOFLAGS }-mod=mod"
 export GOSUMDB=off
+# HOME is not writable in every flatpak-builder sandbox, so keep both Go caches
+# inside the build directory.
+export GOMODCACHE="$build_root/.flatpak-go-modcache"
+export GOCACHE="$build_root/.flatpak-go-buildcache"
 
 for asset in geoip.dat geosite.dat geoip.db geosite.db; do
-  test -s ".flatpak-input/geodata/$asset"
+  test -s "$inputs/geodata/$asset"
 done
 GOOS=linux GOARCH=amd64 ./libs/build_go.sh
 cmake -S . -B build -GNinja -DQT_VERSION_MAJOR=6 -DCMAKE_BUILD_TYPE=Release -DNKR_PACKAGE=ON
@@ -26,5 +47,5 @@ install -Dm644 assets/linux/io.github.Ogstra.Proxor.desktop "$prefix/share/appli
 install -Dm644 assets/linux/io.github.Ogstra.Proxor.metainfo.xml "$prefix/share/metainfo/io.github.Ogstra.Proxor.metainfo.xml"
 install -Dm644 assets/res/public/proxor.png "$prefix/share/icons/hicolor/256x256/apps/io.github.Ogstra.Proxor.png"
 for asset in geoip.dat geosite.dat geoip.db geosite.db; do
-  install -Dm644 ".flatpak-input/geodata/$asset" "$prefix/share/proxor/$asset"
+  install -Dm644 "$inputs/geodata/$asset" "$prefix/share/proxor/$asset"
 done

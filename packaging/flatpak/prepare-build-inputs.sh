@@ -59,6 +59,13 @@ for source in document["sources"]:
     actual = hashlib.sha256(open(destination, "rb").read()).hexdigest()
     if actual != source["sha256"]:
         raise SystemExit("checksum mismatch for " + source["module"])
+    # A file:// GOPROXY is a proxy, not a module cache: the offline build also
+    # resolves .info and .mod for every pinned version. go.sum still verifies the
+    # .mod content, and the .zip is pinned by the checksum above.
+    for suffix in (".info", ".mod"):
+        metadata = source["url"][: -len(".zip")] + suffix
+        with urllib.request.urlopen(metadata) as response:
+            open(destination[: -len(".zip")] + suffix, "wb").write(response.read())
 PY
 
 rm -rf "$output"
