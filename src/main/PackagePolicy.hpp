@@ -26,3 +26,16 @@ struct FlatpakLifecycleDecision {
 
 PackageUpdateDecision DecidePackageUpdate(PackageMode mode);
 FlatpakLifecycleDecision DecideFlatpakLifecycle(PackageMode mode, FlatpakLifecycleEntryPoint entryPoint);
+
+struct UpdaterLaunchProbe {
+    bool updaterExists;
+    bool updaterIsExecutable;
+    bool installDirWritable;
+};
+
+struct UpdaterLaunchDecision {
+    bool canLaunch;
+    QString reason;
+};
+
+UpdaterLaunchDecision DecideUpdaterLaunch(const UpdaterLaunchProbe &probe);

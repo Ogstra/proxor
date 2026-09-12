@@ -560,6 +560,15 @@ namespace ProxorGui {
         return DetectPackageMode(PackageRootPath(), qEnvironmentVariable("FLATPAK_ID"));
     }
 
+    UpdaterLaunchProbe ProbeUpdaterLaunch() {
+        QFileInfo updater(PackageExecutablePath("updater"));
+        return {
+            updater.exists(),
+            updater.isExecutable(),
+            QFileInfo(PackageRootPath()).isWritable(),
+        };
+    }
+
     bool UseInternalTun() {
 #ifdef Q_OS_LINUX
         if (IsFlatpak(CurrentPackageMode())) return false;

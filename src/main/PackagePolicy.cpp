@@ -16,3 +16,16 @@ FlatpakLifecycleDecision DecideFlatpakLifecycle(PackageMode mode, FlatpakLifecyc
     }
     return {true, true, true};
 }
+
+UpdaterLaunchDecision DecideUpdaterLaunch(const UpdaterLaunchProbe &probe) {
+    if (!probe.updaterExists) {
+        return {false, QStringLiteral("The updater is not part of this installation.")};
+    }
+    if (!probe.updaterIsExecutable) {
+        return {false, QStringLiteral("The updater in this installation is not executable.")};
+    }
+    if (!probe.installDirWritable) {
+        return {false, QStringLiteral("The installation directory is not writable.")};
+    }
+    return {true, {}};
+}
