@@ -68,7 +68,7 @@ document = {
     "generator": {
         "name": "go module proxy archive closure",
         "revision": "go-1.26-workspace",
-        "sha256": hashlib.sha256(open(os.path.join(root, "go.work"), "rb").read()).hexdigest(),
+        "sha256": hashlib.sha256(open(os.path.join(root, "go.work"), "rb").read().replace(b"\r\n", b"\n")).hexdigest(),
     },
     "sources": sources,
 }

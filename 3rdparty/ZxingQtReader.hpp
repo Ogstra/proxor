@@ -67,7 +67,15 @@ using ZXing::BarcodeFormat;
 using ZXing::ContentType;
 #endif
 
+#if __has_include("ZXing/ReaderOptions.h")
+using DecodeHints = ZXing::ReaderOptions;
+using NativeResult = ZXing::Barcode;
+using NativeResults = ZXing::Barcodes;
+#else
 using ZXing::DecodeHints;
+using NativeResult = ZXing::Result;
+using NativeResults = ZXing::Results;
+#endif
 using ZXing::Binarizer;
 using ZXing::BarcodeFormats;
 
@@ -95,7 +103,7 @@ public:
 	using Base::Base;
 };
 
-class Result : private ZXing::Result
+class Result : private NativeResult
 {
 	Q_GADGET
 
@@ -114,19 +122,19 @@ class Result : private ZXing::Result
 public:
 	Result() = default; // required for qmetatype machinery
 
-	explicit Result(ZXing::Result&& r) : ZXing::Result(std::move(r)) {
-		_text = QString::fromStdString(ZXing::Result::text());
-		_bytes = QByteArray(reinterpret_cast<const char*>(ZXing::Result::bytes().data()), Size(ZXing::Result::bytes()));
-		auto& pos = ZXing::Result::position();
+	explicit Result(NativeResult&& r) : NativeResult(std::move(r)) {
+		_text = QString::fromStdString(NativeResult::text());
+		_bytes = QByteArray(reinterpret_cast<const char*>(NativeResult::bytes().data()), NativeResult::bytes().size());
+		auto& pos = NativeResult::position();
 		auto qp = [&pos](int i) { return QPoint(pos[i].x, pos[i].y); };
 		_position = {qp(0), qp(1), qp(2), qp(3)};
 	}
 
-	using ZXing::Result::isValid;
+	using NativeResult::isValid;
 
-	BarcodeFormat format() const { return static_cast<BarcodeFormat>(ZXing::Result::format()); }
-	ContentType contentType() const { return static_cast<ContentType>(ZXing::Result::contentType()); }
-	QString formatName() const { return QString::fromStdString(ZXing::ToString(ZXing::Result::format())); }
+	BarcodeFormat format() const { return static_cast<BarcodeFormat>(NativeResult::format()); }
+	ContentType contentType() const { return static_cast<ContentType>(NativeResult::contentType()); }
+	QString formatName() const { return QString::fromStdString(ZXing::ToString(NativeResult::format())); }
 	const QString& text() const { return _text; }
 	const QByteArray& bytes() const { return _bytes; }
 	const Position& position() const { return _position; }
@@ -136,7 +144,7 @@ public:
 	Q_PROPERTY(int runTime MEMBER runTime)
 };
 
-inline QList<Result> QListResults(ZXing::Results&& zxres)
+inline QList<Result> QListResults(NativeResults&& zxres)
 {
 	QList<Result> res;
 	for (auto&& r : zxres)
