@@ -352,14 +352,29 @@ namespace ProxorGui {
         QSettings hwReg("HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography", QSettings::NativeFormat);
         return hwReg.value("MachineGuid").toString();
 #else
-        return {};
+        // /etc/machine-id on Linux and the platform UUID on macOS: stable for the
+        // installation and readable without privileges.
+        return QString::fromLatin1(QSysInfo::machineUniqueId());
 #endif
     }
 
     QString DataStore::GetDeviceModel() const {
-        if (!ua_include_computer) return {};
-        const auto computer = QString::fromLocal8Bit(qgetenv("COMPUTERNAME"));
-        const auto user = QString::fromLocal8Bit(qgetenv("USERNAME"));
+        // COMPUTERNAME and USERNAME are Windows environment names, so every other platform
+        // reported neither. Each part also honours its own setting: the username switch had
+        // no effect at all before, because both parts were gated on the computer one.
+        QString computer;
+        if (ua_include_computer) {
+            computer = QString::fromLocal8Bit(qgetenv("COMPUTERNAME"));
+            if (computer.isEmpty()) computer = QSysInfo::machineHostName();
+        }
+        QString user;
+        if (ua_include_username) {
+            for (const char *variable: {"USERNAME", "USER", "LOGNAME"}) {
+                user = QString::fromLocal8Bit(qgetenv(variable));
+                if (!user.isEmpty()) break;
+            }
+        }
+        if (computer.isEmpty()) return user;
         return user.isEmpty() ? computer : computer + "/" + user;
     }
 
