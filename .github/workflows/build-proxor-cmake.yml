@@ -614,7 +614,8 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder xvfb
+          # flatpak-builder splits debug info with eu-strip from elfutils.
+          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder xvfb elfutils
           flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak install --user --noninteractive flathub org.kde.Sdk//6.8 org.kde.Platform//6.8
       - name: Prepare immutable Flatpak build inputs
