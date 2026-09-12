@@ -575,8 +575,8 @@ jobs:
             cp -a /checkout/packaging /work/packaging
             mkdir /work/aur
             chown -R builder:builder /work/packaging /work/aur
-            su - builder -c "/work/packaging/arch/render-pkgbuild.sh --version '$version' --url file:///checkout/source-input/proxor-'$version'.tar.gz --sha256 '$sha' --output /work/aur"
-            su - builder -c "/work/packaging/arch/tests/test-aur-package.sh /work/aur"
+            su - builder -c "export PATH=/opt/proxor-go/bin:\$PATH; go version; /work/packaging/arch/render-pkgbuild.sh --version '$version' --url file:///checkout/source-input/proxor-'$version'.tar.gz --sha256 '$sha' --output /work/aur"
+            su - builder -c "export PATH=/opt/proxor-go/bin:\$PATH; go version; /work/packaging/arch/tests/test-aur-package.sh /work/aur"
           '
       - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
         with:
@@ -595,6 +595,11 @@ jobs:
         with:
           ref: ${{ github.sha }}
           submodules: recursive
+      - name: Install release Go toolchain
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
       - name: Validate restricted source contract
         shell: bash
         run: |
