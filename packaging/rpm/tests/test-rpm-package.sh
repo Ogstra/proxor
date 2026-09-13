@@ -13,9 +13,11 @@ config="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)/proxor.rpmlint.toml"
 docker run --rm -v "$dir:/packages:ro" -v "$config:/rpmlint/proxor.rpmlint.toml:ro" "$image" bash -ceu '
   dnf -y install rpm-build rpmlint desktop-file-utils xorg-x11-server-Xvfb xauth
   rpm=/packages/$1; rpm -qpl "$rpm"; rpm -qpR "$rpm"; rpm -qp --scripts "$rpm"; rpmlint --config /rpmlint/proxor.rpmlint.toml "$rpm"
-  for p in /usr/bin/proxor /usr/lib/proxor/proxor /usr/lib/proxor/proxor_core /usr/share/proxor/geoip.dat /usr/share/proxor/geosite.dat /usr/share/proxor/geoip.db /usr/share/proxor/geosite.db /usr/share/applications/proxor.desktop /usr/share/icons/hicolor/256x256/apps/proxor.png; do rpm -qpl "$rpm" | grep -qx "$p"; done
+  for p in /usr/bin/proxor /usr/lib/proxor/proxor /usr/lib/proxor/proxor_core /usr/share/proxor/geoip.dat /usr/share/proxor/geosite.dat /usr/share/proxor/geoip.db /usr/share/proxor/geosite.db /usr/share/proxor/package-channel /usr/share/applications/proxor.desktop /usr/share/icons/hicolor/256x256/apps/proxor.png; do rpm -qpl "$rpm" | grep -qx "$p"; done
   ! rpm -qpl "$rpm" | grep -Eqi "AppDir|linuxdeploy|updater|plugins/|qt[0-9]"; ! rpm -qp --scripts "$rpm" | grep -Eqi "setcap|cap_net_admin"
-  dnf -y install "$rpm"; desktop-file-validate /usr/share/applications/proxor.desktop
+  dnf -y install "$rpm"
+  grep -qx rpm /usr/share/proxor/package-channel
+  desktop-file-validate /usr/share/applications/proxor.desktop
   grep -q QT_PLUGIN_PATH /usr/bin/proxor
   # The icons are SVG, so the reader plugins have to come with the dependencies. Their
   # directory differs between distributions, hence the search and the listing on failure.
@@ -24,4 +26,10 @@ docker run --rm -v "$dir:/packages:ro" -v "$config:/rpmlint/proxor.rpmlint.toml:
       echo "missing Qt plugin $plugin"; find /usr/lib64/qt6/plugins /usr/lib/qt6/plugins -name '*.so' 2>/dev/null | sort; exit 1; }
   done
   set +e; xvfb-run -a timeout 10s /usr/bin/proxor -many; rc=$?; set -e; test "$rc" = 0 -o "$rc" = 124
+  # The launch legitimately ends in a 124 timeout; the startup log line is written
+  # during init regardless, so the channel assertion must not depend on the exit code.
+  log_dir="$HOME/.config/proxor/config/logs"
+  log="$(ls -t "$log_dir"/proxor-*.log 2>/dev/null | head -n1)"
+  [ -n "$log" ]
+  grep -q "Install channel: rpm" "$log"
 ' bash "$name"
