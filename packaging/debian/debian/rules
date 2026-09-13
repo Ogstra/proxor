@@ -16,7 +16,8 @@ override_dh_auto_install:
 	DESTDIR="$(CURDIR)/debian/proxor" ./packaging/linux/stage-native-root.sh \
 		--gui "$(CURDIR)/build/proxor" \
 		--core "$(CURDIR)/deployment/linux64/proxor_core" \
-		--geodata "$(CURDIR)/deployment/public_res"
+		--geodata "$(CURDIR)/deployment/public_res" \
+		--channel deb
 	install -D -m 0644 assets/linux/proxor.desktop "$(CURDIR)/debian/proxor/usr/share/applications/proxor.desktop"
 	install -D -m 0644 assets/res/public/proxor.png "$(CURDIR)/debian/proxor/usr/share/icons/hicolor/256x256/apps/proxor.png"
 
