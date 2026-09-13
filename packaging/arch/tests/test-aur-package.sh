@@ -8,4 +8,10 @@ grep -Eq '^# Maintainer: .+ <.+>$' "$root/PKGBUILD"; grep -q 'hicolor-icon-theme
 makepkg --syncdeps --cleanbuild --noconfirm -D "$root"; namcap "$root/PKGBUILD" "$root"/*.pkg.tar.*
 # This test neither installs nor launches the package, so package content -- not the
 # installed app's log -- is as far as the channel marker can be verified here.
-bsdtar -xOf "$root"/*.pkg.tar.* usr/share/proxor/package-channel | grep -qx arch
+# makepkg also writes a proxor-debug package, so the archive is named explicitly rather
+# than globbed, and the content is compared without a pipe: grep -q would close it and
+# bsdtar would die of SIGPIPE, which pipefail reports as a failure.
+pkg="$(ls "$root"/proxor-[0-9]*.pkg.tar.* | grep -v -- '-debug-' | head -n1)"
+test -n "$pkg"
+channel="$(bsdtar -xOf "$pkg" usr/share/proxor/package-channel)"
+test "$channel" = arch

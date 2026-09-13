@@ -54,6 +54,12 @@ docker run --rm -v "$package_dir:/packages:ro" "$image" bash -ceu '
   # during init regardless, so the channel assertion must not depend on the exit code.
   log_dir="$HOME/.config/proxor/config/logs"
   log="$(ls -t "$log_dir"/proxor-*.log 2>/dev/null | head -n1)"
-  [ -n "$log" ]
-  grep -q "Install channel: deb" "$log"
+  if [ -z "$log" ]; then
+    echo "no startup log under $log_dir"
+    ls -la "$HOME/.config/proxor" "$HOME/.config/proxor/config" 2>&1 | head -30
+    find "$HOME" / -maxdepth 6 -name 'proxor-*.log' 2>/dev/null | head
+    exit 1
+  fi
+  grep -q "Install channel: deb" "$log" || {
+    echo "no channel line in $log"; cat "$log"; exit 1; }
 ' bash "$package_name"
