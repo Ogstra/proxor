@@ -432,6 +432,7 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
 
         runOnUiThread([=] {
             start_pending = false;
+            if (!connectionElapsedTimer.isValid()) connectionElapsedTimer.start();
             refresh_status();
             refresh_proxy_list(ent->id);
             if (ProxorGui::dataStore->spmode_vpn && !ProxorGui::UseInternalTun() && vpn_pid == 0) {
@@ -626,15 +627,12 @@ void MainWindow::CheckUpdate(bool silent) {
     // on new thread...
 #ifndef NKR_NO_GRPC
 
-    const auto packageUpdate = DecidePackageUpdate(ProxorGui::CurrentPackageMode());
+    const auto mode = ProxorGui::CurrentPackageMode();
+    const auto packageUpdate = DecidePackageUpdate(mode);
+    // No channel disables the version check today -- success criterion 7 is that it stays
+    // enabled everywhere -- but a future channel could opt out here without touching the
+    // rest of this function.
     if (!packageUpdate.allowCheck) {
-        if (!silent) {
-            runOnUiThread([=] {
-                MessageBoxInfo(QObject::tr("Update"),
-                               QObject::tr("This installation is managed externally. Update it with: %1")
-                                   .arg(packageUpdate.guidance));
-            });
-        }
         return;
     }
 
@@ -678,11 +676,17 @@ void MainWindow::CheckUpdate(bool silent) {
     }
 
     runOnUiThread([=] {
-        auto allow_updater = !ProxorGui::dataStore->flag_use_appdata && packageUpdate.allowUpdaterLaunch;
+        // flag_use_appdata is forced on for an AppImage because it runs from a read-only
+        // FUSE mount, which says nothing about whether the user's .AppImage file itself
+        // can be replaced -- so the AppImage is the one exception to the appdata gate.
+        auto allowSelfUpdate = packageUpdate.allowDownload &&
+            (mode == PackageMode::AppImage || !ProxorGui::dataStore->flag_use_appdata);
         auto notePreRelease = response.is_pre_release() ? QObject::tr("Prerelease") : QObject::tr("Release");
         auto releasePageUrl = QUrl(response.release_url().c_str());
         QString releaseNote = response.release_note().c_str();
-        if (!allow_updater) {
+        const auto assetName = QString::fromUtf8(response.assets_name().c_str());
+        const auto guidance = UpdateGuidanceText(mode, assetName);
+        if (!allowSelfUpdate && guidance.isEmpty()) {
             releaseNote += QObject::tr("\n\n*Automatic installation is disabled in appdata mode.*");
         }
 
@@ -691,11 +695,12 @@ void MainWindow::CheckUpdate(bool silent) {
             response.assets_name().c_str(),
             notePreRelease,
             releaseNote,
-            allow_updater,
-            this);
+            allowSelfUpdate,
+            this,
+            guidance);
 
         connect(dlg, &QDialog::accepted, this, [=] {
-            if (dlg->chosenAction() == DialogUpdateAvailable::Download && allow_updater && packageUpdate.allowDownload) {
+            if (dlg->chosenAction() == DialogUpdateAvailable::Download && allowSelfUpdate && packageUpdate.allowDownload) {
                 updateProgressDialog = new UpdateProgressDialog(response.assets_name().c_str(), this);
                 connect(updateProgressDialog, &UpdateProgressDialog::downloadComplete, this, &MainWindow::onUpdateStaged);
                 updateProgressDialog->show();

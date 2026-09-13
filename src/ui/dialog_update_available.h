@@ -17,7 +17,8 @@ public:
         const QString &channel,
         const QString &releaseNote,
         bool allowUpdater,
-        QWidget *parent = nullptr);
+        QWidget *parent = nullptr,
+        const QString &managedGuidance = {});
 
     ~DialogUpdateAvailable() override;
 

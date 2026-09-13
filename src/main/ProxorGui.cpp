@@ -557,7 +557,27 @@ namespace ProxorGui {
     }
 
     PackageMode CurrentPackageMode() {
-        return DetectPackageMode(PackageRootPath(), qEnvironmentVariable("FLATPAK_ID"));
+        // Nothing can change the install channel while the process runs, and this is
+        // called from FindCoreAsset on every asset lookup -- cache it once.
+        static const PackageMode mode = [] {
+            QString appImagePath;
+            QString nativeChannelMarkerPath;
+#ifdef Q_OS_LINUX
+            appImagePath = qEnvironmentVariable("APPIMAGE");
+            // The first form keeps a relocated prefix working; the second is the FHS
+            // default that the deb/rpm/arch packages actually install to.
+            const auto relocatedMarker =
+                QDir(PackageRootPath()).filePath(QStringLiteral("../share/proxor/package-channel"));
+            if (QFileInfo(relocatedMarker).isFile()) {
+                nativeChannelMarkerPath = relocatedMarker;
+            } else {
+                nativeChannelMarkerPath = QStringLiteral("/usr/share/proxor/package-channel");
+            }
+#endif
+            return DetectPackageMode(PackageRootPath(), qEnvironmentVariable("FLATPAK_ID"),
+                                      appImagePath, nativeChannelMarkerPath);
+        }();
+        return mode;
     }
 
     UpdaterLaunchProbe ProbeUpdaterLaunch() {
