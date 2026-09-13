@@ -614,8 +614,14 @@ type UpdateReq struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Action          UpdateAction           `protobuf:"varint,1,opt,name=action,proto3,enum=libcore.UpdateAction" json:"action,omitempty"`
 	CheckPreRelease bool                   `protobuf:"varint,2,opt,name=check_pre_release,json=checkPreRelease,proto3" json:"check_pre_release,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The channel the GUI detected (PackageModeName: "deb", "rpm", "arch",
+	// "appimage", "portable", "winget", "flatpak", "unknown-package-manager").
+	// Explicit on the wire because the core is a child process whose environment
+	// is not an architectural contract; an empty value falls back to GOOS/GOARCH
+	// resolution so an older GUI against a newer core still works.
+	Channel       string `protobuf:"bytes,3,opt,name=channel,proto3" json:"channel,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UpdateReq) Reset() {
@@ -660,6 +666,13 @@ func (x *UpdateReq) GetCheckPreRelease() bool {
 		return x.CheckPreRelease
 	}
 	return false
+}
+
+func (x *UpdateReq) GetChannel() string {
+	if x != nil {
+		return x.Channel
+	}
+	return ""
 }
 
 type UpdateResp struct {
@@ -856,10 +869,11 @@ const file_libcore_proto_rawDesc = "" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x12\x16\n" +
 	"\x06direct\x18\x02 \x01(\tR\x06direct\"*\n" +
 	"\x0eQueryStatsResp\x12\x18\n" +
-	"\atraffic\x18\x01 \x01(\x03R\atraffic\"f\n" +
+	"\atraffic\x18\x01 \x01(\x03R\atraffic\"\x80\x01\n" +
 	"\tUpdateReq\x12-\n" +
 	"\x06action\x18\x01 \x01(\x0e2\x15.libcore.UpdateActionR\x06action\x12*\n" +
-	"\x11check_pre_release\x18\x02 \x01(\bR\x0fcheckPreRelease\"\xd1\x02\n" +
+	"\x11check_pre_release\x18\x02 \x01(\bR\x0fcheckPreRelease\x12\x18\n" +
+	"\achannel\x18\x03 \x01(\tR\achannel\"\xd1\x02\n" +
 	"\n" +
 	"UpdateResp\x12\x14\n" +
 	"\x05error\x18\x01 \x01(\tR\x05error\x12\x1f\n" +
@@ -874,11 +888,13 @@ const file_libcore_proto_rawDesc = "" +
 	"\x11progress_received\x18\b \x01(\x03R\x10progressReceived\x12+\n" +
 	"\x11progress_complete\x18\t \x01(\bR\x10progressComplete\"S\n" +
 	"\x13ListConnectionsResp\x12<\n" +
-	"\x1aconnection_statistics_json\x18\x01 \x01(\tR\x18connectionStatisticsJson*2\n" +
+	"\x1aconnection_statistics_json\x18\x01 \x01(\tR\x18connectionStatisticsJson*N\n" +
 	"\bTestMode\x12\v\n" +
 	"\aTcpPing\x10\x00\x12\v\n" +
 	"\aUrlTest\x10\x01\x12\f\n" +
-	"\bFullTest\x10\x02*:\n" +
+	"\bFullTest\x10\x02\x12\f\n" +
+	"\bIcmpPing\x10\x03\x12\f\n" +
+	"\bHeadPing\x10\x04*:\n" +
 	"\fUpdateAction\x12\t\n" +
 	"\x05Check\x10\x00\x12\f\n" +
 	"\bDownload\x10\x01\x12\x11\n" +

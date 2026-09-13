@@ -654,6 +654,7 @@ void MainWindow::CheckUpdate(bool silent) {
     libcore::UpdateReq request;
     request.set_action(libcore::UpdateAction::Check);
     request.set_check_pre_release(ProxorGui::dataStore->check_include_pre);
+    request.set_channel(PackageModeName(mode).toStdString());
     auto response = ProxorGui_rpc::defaultClient->Update(&ok, request);
     if (!ok) return;
 
