@@ -349,6 +349,123 @@ func TestDownloadDestinationRejectsAFile(t *testing.T) {
 	}
 }
 
+// Inline fixture copied from the real v1.6.7 SHA256SUMS shape: GNU coreutils style,
+// hash, two spaces, then the name with a leading "./", one asset per line.
+const v167Sums = "c4de65072e34783fa1244c85a6e2e677c65110b7e51fe403483392111327e51b  ./proxor-1.6.7-linux64.AppImage\n" +
+	"293d7ab1512b8cf1fe1781ecb0530c4db71059e07640421b490546bc083d6b9f  ./proxor_1.6.7-1_amd64.deb\n"
+
+func TestChecksumForAssetFindsHashWithLeadingDotSlash(t *testing.T) {
+	got, err := checksumForAsset(v167Sums, "proxor-1.6.7-linux64.AppImage")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "c4de65072e34783fa1244c85a6e2e677c65110b7e51fe403483392111327e51b"
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestChecksumForAssetMatchesOnBaseNameOnly(t *testing.T) {
+	// A browser_download_url-shaped wanted name must never leak into the lookup key.
+	got, err := checksumForAsset(v167Sums, "https://github.com/Ogstra/proxor/releases/download/v1.6.7/proxor-1.6.7-linux64.AppImage")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "c4de65072e34783fa1244c85a6e2e677c65110b7e51fe403483392111327e51b"
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestChecksumForAssetToleratesBareNameBinaryMarkerBlankLinesAndCR(t *testing.T) {
+	sums := "\r\n" +
+		"deadbeef00000000000000000000000000000000000000000000000000beef proxor-1.6.7-linux64.AppImage\r\n" +
+		"\n" +
+		"cafebabe00000000000000000000000000000000000000000000000000babe *proxor_1.6.7-1_amd64.deb\r\n"
+	got, err := checksumForAsset(sums, "proxor-1.6.7-linux64.AppImage")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "deadbeef00000000000000000000000000000000000000000000000000beef" {
+		t.Fatalf("unexpected digest: %q", got)
+	}
+	got, err = checksumForAsset(sums, "proxor_1.6.7-1_amd64.deb")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "cafebabe00000000000000000000000000000000000000000000000000babe" {
+		t.Fatalf("unexpected digest: %q", got)
+	}
+}
+
+func TestChecksumForAssetFailsClosedWhenAssetIsAbsent(t *testing.T) {
+	got, err := checksumForAsset(v167Sums, "proxor-1.6.7.flatpak")
+	if err == nil {
+		t.Fatal("expected an error, got none")
+	}
+	if got != "" {
+		t.Fatalf("expected an empty digest on error, got %q", got)
+	}
+}
+
+func TestChecksumForAssetFailsClosedOnAmbiguousDuplicate(t *testing.T) {
+	sums := "aaaa  ./proxor-1.6.7-linux64.AppImage\n" +
+		"bbbb  ./proxor-1.6.7-linux64.AppImage\n"
+	_, err := checksumForAsset(sums, "proxor-1.6.7-linux64.AppImage")
+	if err == nil {
+		t.Fatal("expected an error for two different hashes on the same asset")
+	}
+}
+
+func TestChecksumForAssetAllowsDuplicateIdenticalLines(t *testing.T) {
+	sums := "aaaa  ./proxor-1.6.7-linux64.AppImage\n" +
+		"aaaa  ./proxor-1.6.7-linux64.AppImage\n"
+	got, err := checksumForAsset(sums, "proxor-1.6.7-linux64.AppImage")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "aaaa" {
+		t.Fatalf("got %q, want %q", got, "aaaa")
+	}
+}
+
+func TestVerifyAssetChecksumPassesOnMatch(t *testing.T) {
+	err := verifyAssetChecksum(v167Sums, "proxor-1.6.7-linux64.AppImage",
+		"C4DE65072E34783FA1244C85A6E2E677C65110B7E51FE403483392111327E51B")
+	if err != nil {
+		t.Fatalf("expected a case-insensitive match, got %v", err)
+	}
+}
+
+// A download whose computed digest differs from the published one must fail -- this is
+// the mismatch path: a deliberately corrupted asset cannot be produced against a
+// published release, so this comparison is what proves it, not a live download.
+func TestVerifyAssetChecksumFailsOnMismatch(t *testing.T) {
+	err := verifyAssetChecksum(v167Sums, "proxor-1.6.7-linux64.AppImage",
+		"00000000000000000000000000000000000000000000000000000000000000")
+	if err == nil {
+		t.Fatal("expected an error for a digest mismatch")
+	}
+}
+
+func TestVerifyAssetChecksumFailsWhenAssetHasNoEntry(t *testing.T) {
+	err := verifyAssetChecksum(v167Sums, "proxor-1.6.7.flatpak", "anything")
+	if err == nil {
+		t.Fatal("expected an error when the wanted asset has no SHA256SUMS line")
+	}
+}
+
+// A release that publishes no SHA256SUMS asset at all must fail the download rather
+// than apply it unverified -- verifyAssetChecksum is never even reached in that case
+// (see the Download case's own updateChecksumsURL == "" check), but an empty sums body
+// is the degenerate form of "nothing to verify against" and must still fail closed.
+func TestVerifyAssetChecksumFailsOnEmptySums(t *testing.T) {
+	err := verifyAssetChecksum("", "proxor-1.6.7-linux64.AppImage", "anything")
+	if err == nil {
+		t.Fatal("expected an error for an empty SHA256SUMS body")
+	}
+}
+
 func TestUpdateRepoConstants(t *testing.T) {
 	if updateRepoName != "proxor" {
 		t.Fatalf("updateRepoName = %q, want %q", updateRepoName, "proxor")
