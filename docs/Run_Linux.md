@@ -18,6 +18,20 @@ separate privileged compatibility core, which requires PolicyKit (`pkexec`), `ip
 System Proxy integration is supported on GNOME-family desktops and KDE Plasma. Other desktop
 environments must configure their proxy manually or use Tun mode.
 
+## Update ownership per channel
+
+The AppImage owns its own file, so it is the one Linux channel that updates itself in place:
+it downloads the new `.AppImage` beside the running one, verifies it against the release's
+`SHA256SUMS`, and replaces the file `$APPIMAGE` points at with an atomic same-directory
+rename before relaunching into it. If that file or its directory is not writable, the
+download is kept and the app tells you exactly where, and stays open rather than leaving you
+with a closed app and no running version.
+
+Every native package names its own update command instead: `.deb` and RPM name the release
+asset to install, AUR names the selected AUR helper, and the GitHub Flatpak bundle names
+`flatpak update`. None of them overwrite themselves in place, since their files belong to a
+package manager that expects to be the one to replace them.
+
 ## Native packages and Flatpak
 
 Native `.deb`, RPM, and AUR installations use the system Qt/runtime dependencies and retain the
