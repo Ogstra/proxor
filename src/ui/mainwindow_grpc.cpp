@@ -432,7 +432,6 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
 
         runOnUiThread([=] {
             start_pending = false;
-            if (!connectionElapsedTimer.isValid()) connectionElapsedTimer.start();
             refresh_status();
             refresh_proxy_list(ent->id);
             if (ProxorGui::dataStore->spmode_vpn && !ProxorGui::UseInternalTun() && vpn_pid == 0) {
