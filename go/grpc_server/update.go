@@ -2,12 +2,15 @@ package grpc_server
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"grpc_server/gen"
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -40,8 +43,9 @@ type githubRelease struct {
 }
 
 var (
-	updateDownloadURL string
-	updateAssetName   string
+	updateDownloadURL  string
+	updateAssetName    string
+	updateChecksumsURL string
 )
 
 type downloadProgress struct {
@@ -358,6 +362,59 @@ func downloadDestination(downloadDir, assetName string) (string, error) {
 	return filepath.Join(downloadDir, filepath.Base(assetName)), nil
 }
 
+// checksumForAsset finds the published SHA-256 digest for assetName in sums, the raw
+// contents of a release's SHA256SUMS asset. prepare-release-assets.sh generates that file
+// with `shasum -a 256` from inside the output directory, which is why matching on
+// path.Base (stripping both a confirmed "./" prefix and any directory component the
+// wanted name might carry) is correct and matching on a full browser_download_url would
+// silently never match. Fails closed: an absent or ambiguous entry is an error, never an
+// empty string, because the caller must treat an unverifiable download as a failed one.
+func checksumForAsset(sums, assetName string) (string, error) {
+	wanted := path.Base(assetName)
+	var found string
+
+	for _, line := range strings.Split(sums, "\n") {
+		line = strings.TrimRight(line, "\r")
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		digest := fields[0]
+		name := strings.TrimPrefix(fields[1], "*")
+		if path.Base(name) != wanted {
+			continue
+		}
+		if found != "" && !strings.EqualFold(found, digest) {
+			return "", fmt.Errorf("SHA256SUMS lists %q twice with different hashes", wanted)
+		}
+		found = digest
+	}
+
+	if found == "" {
+		return "", fmt.Errorf("SHA256SUMS has no entry for %q", wanted)
+	}
+	return found, nil
+}
+
+// verifyAssetChecksum is the single chokepoint a downloaded asset must pass before it is
+// ever kept under its final name. A deliberately corrupted asset cannot be produced
+// against a published release, so this comparison -- not a live download -- is what
+// proves the mismatch path: fail closed on a missing/ambiguous SHA256SUMS entry
+// (checksumForAsset) and on a digest that does not match, case-insensitively.
+func verifyAssetChecksum(sums, assetName, gotDigestHex string) error {
+	wantDigestHex, err := checksumForAsset(sums, assetName)
+	if err != nil {
+		return err
+	}
+	if !strings.EqualFold(wantDigestHex, gotDigestHex) {
+		return fmt.Errorf("downloaded %q does not match its published SHA-256", assetName)
+	}
+	return nil
+}
+
 func githubError(resp *http.Response) string {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
 	message := strings.TrimSpace(string(body))
@@ -416,6 +473,7 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 		if selection == updateSelectionCurrent {
 			updateDownloadURL = ""
 			updateAssetName = ""
+			updateChecksumsURL = ""
 			return ret, nil
 		}
 		if selection == updateSelectionNoCompatible || release == nil || asset == nil {
@@ -428,6 +486,18 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 		// download_dir that request names -- not here -- so a stale Check result
 		// can never be reused against a directory a different request chose.
 		updateAssetName = asset.Name
+
+		// Downloads are only ever kept when they match the release's own published
+		// SHA256SUMS entry for this exact asset name. An empty URL here means the
+		// release published none, which Download must treat as a failure, not a
+		// skip -- the asset name alone is never trusted.
+		updateChecksumsURL = ""
+		for _, a := range release.Assets {
+			if a.Name == "SHA256SUMS" {
+				updateChecksumsURL = a.BrowserDownloadURL
+				break
+			}
+		}
 
 		ret.AssetsName = asset.Name
 		ret.DownloadUrl = asset.BrowserDownloadURL
@@ -481,16 +551,10 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 		dlProgress = downloadProgress{totalBytes: resp.ContentLength}
 		dlProgressMu.Unlock()
 
-		pw := &progressWriter{w: file, mu: &dlProgressMu, progress: &dlProgress}
-		if _, err = io.Copy(pw, resp.Body); err != nil {
-			dlProgressMu.Lock()
-			dlProgress.err = err.Error()
-			dlProgressMu.Unlock()
-			ret.Error = err.Error()
-			os.Remove(partPath)
-			return ret, nil
-		}
-		if err = file.Sync(); err != nil {
+		// fail records the error on both the polled progress and the immediate
+		// response, then removes the partial file: an unverifiable or incomplete
+		// download is a failed download, never a kept one.
+		fail := func(err error) (*gen.UpdateResp, error) {
 			dlProgressMu.Lock()
 			dlProgress.err = err.Error()
 			dlProgressMu.Unlock()
@@ -499,13 +563,46 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 			return ret, nil
 		}
 
+		// The digest is computed while streaming rather than by re-reading the file,
+		// so progress reporting (progressWriter) is untouched by verification.
+		hasher := sha256.New()
+		pw := &progressWriter{w: io.MultiWriter(file, hasher), mu: &dlProgressMu, progress: &dlProgress}
+		if _, err = io.Copy(pw, resp.Body); err != nil {
+			return fail(err)
+		}
+		if err = file.Sync(); err != nil {
+			return fail(err)
+		}
+
+		if updateChecksumsURL == "" {
+			return fail(fmt.Errorf("the release published no SHA256SUMS asset; refusing to apply an unverifiable download"))
+		}
+
+		sumsReq, err := http.NewRequestWithContext(ctx, http.MethodGet, updateChecksumsURL, nil)
+		if err != nil {
+			return fail(err)
+		}
+		sumsReq.Header.Set("User-Agent", updateUserAgentPrefix+proxor_common.Version_proxor)
+
+		sumsResp, err := client.Do(sumsReq)
+		if err != nil {
+			return fail(err)
+		}
+		sumsBody, err := io.ReadAll(io.LimitReader(sumsResp.Body, 1<<20))
+		sumsResp.Body.Close()
+		if err != nil {
+			return fail(err)
+		}
+		if sumsResp.StatusCode < 200 || sumsResp.StatusCode >= 300 {
+			return fail(fmt.Errorf("failed to fetch SHA256SUMS: status %d", sumsResp.StatusCode))
+		}
+
+		if err = verifyAssetChecksum(string(sumsBody), updateAssetName, hex.EncodeToString(hasher.Sum(nil))); err != nil {
+			return fail(err)
+		}
+
 		if err = os.Rename(partPath, destination); err != nil {
-			dlProgressMu.Lock()
-			dlProgress.err = err.Error()
-			dlProgressMu.Unlock()
-			ret.Error = err.Error()
-			os.Remove(partPath)
-			return ret, nil
+			return fail(err)
 		}
 
 		dlProgressMu.Lock()
