@@ -28,12 +28,14 @@ docker run --rm -v "$dir:/packages:ro" -v "$config:/rpmlint/proxor.rpmlint.toml:
   set +e; xvfb-run -a timeout 10s /usr/bin/proxor -many; rc=$?; set -e; test "$rc" = 0 -o "$rc" = 124
   # The launch legitimately ends in a 124 timeout; the startup log line is written
   # during init regardless, so the channel assertion must not depend on the exit code.
-  log_dir="$HOME/.config/proxor/config/logs"
-  log="$(ls -t "$log_dir"/proxor-*.log 2>/dev/null | head -n1)"
+  # The app keeps its configuration beside the executable while that prefix is writable and
+  # falls back to the application data directory of the user when it is not. This container
+  # runs as root, so the prefix is writable here while a real install takes the other path.
+  # Accept either. No apostrophes in here: this whole script body is single-quoted.
+  log="$(ls -t /usr/lib/proxor/config/logs/proxor-*.log "$HOME"/.config/proxor/config/logs/proxor-*.log 2>/dev/null | head -n1)"
   if [ -z "$log" ]; then
-    echo "no startup log under $log_dir"
-    ls -la "$HOME/.config/proxor" "$HOME/.config/proxor/config" 2>&1 | head -30
-    find "$HOME" / -maxdepth 6 -name 'proxor-*.log' 2>/dev/null | head
+    echo "no startup log beside the executable or under $HOME/.config/proxor"
+    find / -maxdepth 6 -name 'proxor-*.log' 2>/dev/null | head
     exit 1
   fi
   grep -q "Install channel: rpm" "$log" || {
