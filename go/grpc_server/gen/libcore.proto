@@ -88,6 +88,12 @@ message UpdateReq {
   // is not an architectural contract; an empty value falls back to GOOS/GOARCH
   // resolution so an older GUI against a newer core still works.
   string channel = 3;
+  // Where Download should write the asset. Empty keeps today's behaviour:
+  // "../update-package.zip"/".tar.gz" beside the install. The AppImage channel is
+  // the reason this field exists: the core's working directory is inside the
+  // read-only FUSE mount, so that destination is unwritable there, and the new
+  // file must land beside the current .AppImage instead.
+  string download_dir = 4;
 }
 
 message UpdateResp {

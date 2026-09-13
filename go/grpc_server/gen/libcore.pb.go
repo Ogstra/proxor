@@ -619,7 +619,13 @@ type UpdateReq struct {
 	// Explicit on the wire because the core is a child process whose environment
 	// is not an architectural contract; an empty value falls back to GOOS/GOARCH
 	// resolution so an older GUI against a newer core still works.
-	Channel       string `protobuf:"bytes,3,opt,name=channel,proto3" json:"channel,omitempty"`
+	Channel string `protobuf:"bytes,3,opt,name=channel,proto3" json:"channel,omitempty"`
+	// Where Download should write the asset. Empty keeps today's behaviour:
+	// "../update-package.zip"/".tar.gz" beside the install. The AppImage channel is
+	// the reason this field exists: the core's working directory is inside the
+	// read-only FUSE mount, so that destination is unwritable there, and the new
+	// file must land beside the current .AppImage instead.
+	DownloadDir   string `protobuf:"bytes,4,opt,name=download_dir,json=downloadDir,proto3" json:"download_dir,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -671,6 +677,13 @@ func (x *UpdateReq) GetCheckPreRelease() bool {
 func (x *UpdateReq) GetChannel() string {
 	if x != nil {
 		return x.Channel
+	}
+	return ""
+}
+
+func (x *UpdateReq) GetDownloadDir() string {
+	if x != nil {
+		return x.DownloadDir
 	}
 	return ""
 }
@@ -869,11 +882,12 @@ const file_libcore_proto_rawDesc = "" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x12\x16\n" +
 	"\x06direct\x18\x02 \x01(\tR\x06direct\"*\n" +
 	"\x0eQueryStatsResp\x12\x18\n" +
-	"\atraffic\x18\x01 \x01(\x03R\atraffic\"\x80\x01\n" +
+	"\atraffic\x18\x01 \x01(\x03R\atraffic\"\xa3\x01\n" +
 	"\tUpdateReq\x12-\n" +
 	"\x06action\x18\x01 \x01(\x0e2\x15.libcore.UpdateActionR\x06action\x12*\n" +
 	"\x11check_pre_release\x18\x02 \x01(\bR\x0fcheckPreRelease\x12\x18\n" +
-	"\achannel\x18\x03 \x01(\tR\achannel\"\xd1\x02\n" +
+	"\achannel\x18\x03 \x01(\tR\achannel\x12!\n" +
+	"\fdownload_dir\x18\x04 \x01(\tR\vdownloadDir\"\xd1\x02\n" +
 	"\n" +
 	"UpdateResp\x12\x14\n" +
 	"\x05error\x18\x01 \x01(\tR\x05error\x12\x1f\n" +

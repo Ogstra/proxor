@@ -1,6 +1,8 @@
 package grpc_server
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -295,6 +297,55 @@ func TestMatchingReleaseAssetAllowsNewPrereleaseWhenEnabled(t *testing.T) {
 	}
 	if release.TagName != "proxor-1.6-beta-2" || asset.Name != "proxor-1.6-beta-2-windows64.zip" {
 		t.Fatalf("unexpected prerelease candidate: release=%v asset=%v", release.TagName, asset.Name)
+	}
+}
+
+func TestDownloadDestinationEmptyDirKeepsExistingBehaviour(t *testing.T) {
+	got, err := downloadDestination("", "proxor-1.6.7-linux64.AppImage")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := downloadedArchivePath("proxor-1.6.7-linux64.AppImage")
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestDownloadDestinationUsesChosenDirectory(t *testing.T) {
+	dir := t.TempDir()
+	got, err := downloadDestination(dir, "proxor-1.6.7-linux64.AppImage")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := filepath.Join(dir, "proxor-1.6.7-linux64.AppImage")
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestDownloadDestinationRejectsMissingDirectory(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "does-not-exist")
+	_, err := downloadDestination(missing, "proxor-1.6.7-linux64.AppImage")
+	if err == nil {
+		t.Fatal("expected an error naming the missing directory")
+	}
+	if !strings.Contains(err.Error(), missing) {
+		t.Fatalf("error %q does not name the directory %q", err.Error(), missing)
+	}
+}
+
+func TestDownloadDestinationRejectsAFile(t *testing.T) {
+	dir := t.TempDir()
+	notADir := filepath.Join(dir, "not-a-dir")
+	if err := os.WriteFile(notADir, []byte("x"), 0644); err != nil {
+		t.Fatalf("failed to create fixture file: %v", err)
+	}
+	_, err := downloadDestination(notADir, "proxor-1.6.7-linux64.AppImage")
+	if err == nil {
+		t.Fatal("expected an error naming the non-directory path")
+	}
+	if !strings.Contains(err.Error(), notADir) {
+		t.Fatalf("error %q does not name the path %q", err.Error(), notADir)
 	}
 }
 
