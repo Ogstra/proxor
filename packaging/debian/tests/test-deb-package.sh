@@ -26,7 +26,7 @@ docker run --rm -v "$package_dir:/packages:ro" "$image" bash -ceu '
   contents="$(dpkg-deb --contents "$deb")"
   for path in usr/bin/proxor usr/lib/proxor/proxor usr/lib/proxor/proxor_core \
       usr/share/proxor/geoip.dat usr/share/proxor/geosite.dat \
-      usr/share/proxor/geoip.db usr/share/proxor/geosite.db \
+      usr/share/proxor/geoip.db usr/share/proxor/geosite.db usr/share/proxor/package-channel \
       usr/share/applications/proxor.desktop usr/share/icons/hicolor/256x256/apps/proxor.png; do
     printf "%s\n" "$contents" | grep -Eq "[[:space:]]\./$path$"
   done
@@ -34,6 +34,7 @@ docker run --rm -v "$package_dir:/packages:ro" "$image" bash -ceu '
   control="$(dpkg-deb --control "$deb" /tmp/proxor-control; cat /tmp/proxor-control/postinst 2>/dev/null || true)"
   ! printf "%s\n" "$control" | grep -Eqi "setcap|cap_net_admin"
   apt-get install -y "$deb"
+  grep -qx deb /usr/share/proxor/package-channel
   desktop-file-validate /usr/share/applications/proxor.desktop
   # The embedded qt.conf would otherwise leave Qt without a style, the SVG icon engine
   # and the TLS backend, so the wrapper has to hand it the system plugin directory.
@@ -49,4 +50,10 @@ docker run --rm -v "$package_dir:/packages:ro" "$image" bash -ceu '
   rc=$?
   set -e
   test "$rc" -eq 0 -o "$rc" -eq 124
+  # The launch legitimately ends in a 124 timeout; the startup log line is written
+  # during init regardless, so the channel assertion must not depend on the exit code.
+  log_dir="$HOME/.config/proxor/config/logs"
+  log="$(ls -t "$log_dir"/proxor-*.log 2>/dev/null | head -n1)"
+  [ -n "$log" ]
+  grep -q "Install channel: deb" "$log"
 ' bash "$package_name"
