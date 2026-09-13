@@ -7,15 +7,22 @@ class PackagePolicyTest final : public QObject {
     Q_OBJECT
 
 private slots:
-    void wingetSuppressesEverySelfUpdateStep();
+    void wingetAllowsCheckAndSuppressesEverySelfUpdateStep();
     void flatpakDisablesEveryPrivilegedLifecycleEntryPoint();
     void flatpakSearchesItsSharedDataFirst();
+    void debStillReachesUsrShareProxor();
     void updaterLaunchIsRefusedForEveryUnmetCondition();
+    void allowCheckIsTrueForEveryMode();
+    void managedChannelsDisableDownloadApplyAndUpdaterLaunch();
+    void appImageAllowsDownloadAndApplyButNotUpdaterLaunch();
+    void updateGuidanceTextComposesDebCommandWithAssetName();
+    void updateGuidanceTextFallsBackToReleasePageWordingWithoutAssetName();
+    void updateGuidanceTextIsEmptyForPortableAndAppImage();
 };
 
-void PackagePolicyTest::wingetSuppressesEverySelfUpdateStep() {
+void PackagePolicyTest::wingetAllowsCheckAndSuppressesEverySelfUpdateStep() {
     const auto decision = DecidePackageUpdate(PackageMode::Winget);
-    QVERIFY(!decision.allowCheck);
+    QVERIFY(decision.allowCheck);
     QVERIFY(!decision.allowDownload);
     QVERIFY(!decision.allowApply);
     QVERIFY(!decision.allowUpdaterLaunch);
@@ -25,7 +32,6 @@ void PackagePolicyTest::wingetSuppressesEverySelfUpdateStep() {
     const auto dispatch = [&updateDispatcherCalls](bool allowed) {
         if (allowed) ++updateDispatcherCalls;
     };
-    dispatch(decision.allowCheck);
     dispatch(decision.allowDownload);
     dispatch(decision.allowApply);
     dispatch(decision.allowUpdaterLaunch);
@@ -60,6 +66,11 @@ void PackagePolicyTest::flatpakSearchesItsSharedDataFirst() {
     QVERIFY(paths.contains(QStringLiteral("/usr/share/proxor")));
 }
 
+void PackagePolicyTest::debStillReachesUsrShareProxor() {
+    const auto paths = CoreAssetSearchPaths(PackageMode::Deb, "/usr/lib/proxor");
+    QVERIFY(paths.contains(QStringLiteral("/usr/share/proxor")));
+}
+
 void PackagePolicyTest::updaterLaunchIsRefusedForEveryUnmetCondition() {
     {
         const auto decision = DecideUpdaterLaunch({false, false, false});
@@ -81,6 +92,53 @@ void PackagePolicyTest::updaterLaunchIsRefusedForEveryUnmetCondition() {
         QVERIFY(decision.canLaunch);
         QVERIFY(decision.reason.isEmpty());
     }
+}
+
+void PackagePolicyTest::allowCheckIsTrueForEveryMode() {
+    const PackageMode modes[] = {
+        PackageMode::NativeOrPortable, PackageMode::Winget, PackageMode::Flatpak,
+        PackageMode::AppImage,         PackageMode::Deb,    PackageMode::Rpm,
+        PackageMode::Arch,             PackageMode::NativeUnknownManager,
+    };
+    for (const auto mode : modes) {
+        QVERIFY(DecidePackageUpdate(mode).allowCheck);
+    }
+}
+
+void PackagePolicyTest::managedChannelsDisableDownloadApplyAndUpdaterLaunch() {
+    const PackageMode modes[] = {
+        PackageMode::Winget, PackageMode::Flatpak,     PackageMode::Deb,
+        PackageMode::Rpm,    PackageMode::Arch,        PackageMode::NativeUnknownManager,
+    };
+    for (const auto mode : modes) {
+        const auto decision = DecidePackageUpdate(mode);
+        QVERIFY(!decision.allowDownload);
+        QVERIFY(!decision.allowApply);
+        QVERIFY(!decision.allowUpdaterLaunch);
+    }
+}
+
+void PackagePolicyTest::appImageAllowsDownloadAndApplyButNotUpdaterLaunch() {
+    const auto decision = DecidePackageUpdate(PackageMode::AppImage);
+    QVERIFY(decision.allowDownload);
+    QVERIFY(decision.allowApply);
+    QVERIFY(!decision.allowUpdaterLaunch);
+}
+
+void PackagePolicyTest::updateGuidanceTextComposesDebCommandWithAssetName() {
+    QCOMPARE(UpdateGuidanceText(PackageMode::Deb, QStringLiteral("proxor_1.6.7-1_amd64.deb")),
+             QStringLiteral("sudo apt install ./proxor_1.6.7-1_amd64.deb"));
+}
+
+void PackagePolicyTest::updateGuidanceTextFallsBackToReleasePageWordingWithoutAssetName() {
+    const auto text = UpdateGuidanceText(PackageMode::Deb, {});
+    QVERIFY(!text.isEmpty());
+    QVERIFY(!text.contains(QStringLiteral("%1")));
+}
+
+void PackagePolicyTest::updateGuidanceTextIsEmptyForPortableAndAppImage() {
+    QVERIFY(UpdateGuidanceText(PackageMode::NativeOrPortable, {}).isEmpty());
+    QVERIFY(UpdateGuidanceText(PackageMode::AppImage, QStringLiteral("proxor-1.6.7-linux64.AppImage")).isEmpty());
 }
 
 QTEST_MAIN(PackagePolicyTest)
