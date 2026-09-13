@@ -18,6 +18,7 @@ private slots:
     void updateGuidanceTextComposesDebCommandWithAssetName();
     void updateGuidanceTextFallsBackToReleasePageWordingWithoutAssetName();
     void updateGuidanceTextIsEmptyForPortableAndAppImage();
+    void appImageApplyIsRefusedForEveryUnmetConditionInOrder();
 };
 
 void PackagePolicyTest::wingetAllowsCheckAndSuppressesEverySelfUpdateStep() {
@@ -139,6 +140,35 @@ void PackagePolicyTest::updateGuidanceTextFallsBackToReleasePageWordingWithoutAs
 void PackagePolicyTest::updateGuidanceTextIsEmptyForPortableAndAppImage() {
     QVERIFY(UpdateGuidanceText(PackageMode::NativeOrPortable, {}).isEmpty());
     QVERIFY(UpdateGuidanceText(PackageMode::AppImage, QStringLiteral("proxor-1.6.7-linux64.AppImage")).isEmpty());
+}
+
+void PackagePolicyTest::appImageApplyIsRefusedForEveryUnmetConditionInOrder() {
+    {
+        const auto decision = DecideAppImageApply({false, false, false, false});
+        QVERIFY(!decision.replaceTarget);
+        QCOMPARE(decision.reason,
+                 QStringLiteral("The path of the running AppImage is not known, so it cannot be replaced."));
+    }
+    {
+        const auto decision = DecideAppImageApply({true, false, false, false});
+        QVERIFY(!decision.replaceTarget);
+        QCOMPARE(decision.reason, QStringLiteral("The downloaded update is missing."));
+    }
+    {
+        const auto decision = DecideAppImageApply({true, true, false, true});
+        QVERIFY(!decision.replaceTarget);
+        QCOMPARE(decision.reason, QStringLiteral("The directory holding the AppImage is not writable."));
+    }
+    {
+        const auto decision = DecideAppImageApply({true, true, true, false});
+        QVERIFY(!decision.replaceTarget);
+        QCOMPARE(decision.reason, QStringLiteral("The AppImage file is not writable."));
+    }
+    {
+        const auto decision = DecideAppImageApply({true, true, true, true});
+        QVERIFY(decision.replaceTarget);
+        QVERIFY(decision.reason.isEmpty());
+    }
 }
 
 QTEST_MAIN(PackagePolicyTest)

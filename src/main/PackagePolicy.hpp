@@ -45,3 +45,23 @@ struct UpdaterLaunchDecision {
 };
 
 UpdaterLaunchDecision DecideUpdaterLaunch(const UpdaterLaunchProbe &probe);
+
+struct AppImageApplyProbe {
+    bool appImagePathKnown;
+    bool stagedFileExists;
+    bool targetDirWritable;
+    bool targetFileWritable;
+};
+
+struct AppImageApplyDecision {
+    bool replaceTarget;
+    QString reason;
+};
+
+// Pure replace-or-keep decision for the AppImage self-update. targetFileWritable is
+// checked even though POSIX rename(2) only needs the containing directory to be
+// writable: refusing to overwrite an AppImage the user cannot write to (a root-owned
+// image sitting in a user-writable directory, for instance) is the conservative
+// reading of the locked decision, and avoids silently replacing a file that is not
+// the user's to replace.
+AppImageApplyDecision DecideAppImageApply(const AppImageApplyProbe &probe);
