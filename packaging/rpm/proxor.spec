@@ -29,7 +29,7 @@ GOOS=linux GOARCH=amd64 ./libs/build_go.sh
 %cmake_build
 
 %install
-DESTDIR="%{buildroot}" ./packaging/linux/stage-native-root.sh --gui redhat-linux-build/proxor --core deployment/linux64/proxor_core --geodata deployment/public_res
+DESTDIR="%{buildroot}" ./packaging/linux/stage-native-root.sh --gui redhat-linux-build/proxor --core deployment/linux64/proxor_core --geodata deployment/public_res --channel rpm
 install -Dpm0644 assets/linux/proxor.desktop %{buildroot}%{_datadir}/applications/proxor.desktop
 install -Dpm0644 assets/res/public/proxor.png %{buildroot}%{_datadir}/icons/hicolor/256x256/apps/proxor.png
 
@@ -41,6 +41,7 @@ install -Dpm0644 assets/res/public/proxor.png %{buildroot}%{_datadir}/icons/hico
 %{_datadir}/proxor/geosite.dat
 %{_datadir}/proxor/geoip.db
 %{_datadir}/proxor/geosite.db
+%{_datadir}/proxor/package-channel
 %{_datadir}/applications/proxor.desktop
 %{_datadir}/icons/hicolor/256x256/apps/proxor.png
 
