@@ -67,3 +67,19 @@ UpdaterLaunchDecision DecideUpdaterLaunch(const UpdaterLaunchProbe &probe) {
     }
     return {true, {}};
 }
+
+AppImageApplyDecision DecideAppImageApply(const AppImageApplyProbe &probe) {
+    if (!probe.appImagePathKnown) {
+        return {false, QStringLiteral("The path of the running AppImage is not known, so it cannot be replaced.")};
+    }
+    if (!probe.stagedFileExists) {
+        return {false, QStringLiteral("The downloaded update is missing.")};
+    }
+    if (!probe.targetDirWritable) {
+        return {false, QStringLiteral("The directory holding the AppImage is not writable.")};
+    }
+    if (!probe.targetFileWritable) {
+        return {false, QStringLiteral("The AppImage file is not writable.")};
+    }
+    return {true, {}};
+}
