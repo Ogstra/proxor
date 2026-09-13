@@ -15,6 +15,7 @@
 #include <QDesktopServices>
 #include <QMessageBox>
 #include <QDialogButtonBox>
+#include <QFileInfo>
 #include "dialog_update_available.h"
 
 // ext core
@@ -710,6 +711,15 @@ void MainWindow::CheckUpdate(bool silent) {
                     bool ok2;
                     libcore::UpdateReq request2;
                     request2.set_action(libcore::UpdateAction::Download);
+                    // Empty everywhere except AppImage, which preserves today's
+                    // beside-the-install behaviour for Windows portable. The AppImage's
+                    // core process runs from inside the read-only FUSE mount, so the
+                    // download has to land beside $APPIMAGE instead -- the one directory
+                    // this channel is guaranteed to be able to write into.
+                    if (mode == PackageMode::AppImage) {
+                        const QFileInfo appImageInfo(qEnvironmentVariable("APPIMAGE"));
+                        request2.set_download_dir(appImageInfo.absolutePath().toStdString());
+                    }
                     auto response2 = ProxorGui_rpc::defaultClient->Update(&ok2, request2);
                     if (!ok2) return;
 

@@ -41,7 +41,7 @@ type githubRelease struct {
 
 var (
 	updateDownloadURL string
-	updatePackagePath string
+	updateAssetName   string
 )
 
 type downloadProgress struct {
@@ -328,6 +328,36 @@ func downloadedArchivePath(assetName string) string {
 	}
 }
 
+// downloadDestination returns the final path Download should write assetName to. An
+// empty downloadDir defers to today's behaviour, downloadedArchivePath, beside the
+// install. A non-empty downloadDir is the caller's choice -- the AppImage channel is
+// the reason this exists, since the core's own working directory sits inside a
+// read-only FUSE mount and can never be the right answer for that channel -- and is
+// validated as an existing, writable directory before it is trusted.
+func downloadDestination(downloadDir, assetName string) (string, error) {
+	if downloadDir == "" {
+		return downloadedArchivePath(assetName), nil
+	}
+
+	info, err := os.Stat(downloadDir)
+	if err != nil {
+		return "", fmt.Errorf("download directory %q is not usable: %w", downloadDir, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("download directory %q is not a directory", downloadDir)
+	}
+
+	probe, err := os.CreateTemp(downloadDir, ".proxor-update-write-check-*")
+	if err != nil {
+		return "", fmt.Errorf("download directory %q is not writable: %w", downloadDir, err)
+	}
+	probeName := probe.Name()
+	probe.Close()
+	os.Remove(probeName)
+
+	return filepath.Join(downloadDir, filepath.Base(assetName)), nil
+}
+
 func githubError(resp *http.Response) string {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
 	message := strings.TrimSpace(string(body))
@@ -385,7 +415,7 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 		release, asset, selection := matchingReleaseAsset(releases, proxor_common.Version_proxor, suffixes, in.CheckPreRelease)
 		if selection == updateSelectionCurrent {
 			updateDownloadURL = ""
-			updatePackagePath = ""
+			updateAssetName = ""
 			return ret, nil
 		}
 		if selection == updateSelectionNoCompatible || release == nil || asset == nil {
@@ -394,7 +424,10 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 		}
 
 		updateDownloadURL = asset.BrowserDownloadURL
-		updatePackagePath = downloadedArchivePath(asset.Name)
+		// The destination is resolved later, at Download time, from whatever
+		// download_dir that request names -- not here -- so a stale Check result
+		// can never be reused against a directory a different request chose.
+		updateAssetName = asset.Name
 
 		ret.AssetsName = asset.Name
 		ret.DownloadUrl = asset.BrowserDownloadURL
@@ -404,10 +437,20 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 		return ret, nil
 
 	case gen.UpdateAction_Download:
-		if updateDownloadURL == "" || updatePackagePath == "" {
+		if updateDownloadURL == "" || updateAssetName == "" {
 			ret.Error = "No update package is queued for download."
 			return ret, nil
 		}
+
+		destination, err := downloadDestination(in.DownloadDir, updateAssetName)
+		if err != nil {
+			ret.Error = err.Error()
+			return ret, nil
+		}
+		// Write under a .part name and only rename into the final name once the
+		// content is verified: a half-written file must never be visible under a
+		// name the GUI will treat as a finished update.
+		partPath := destination + ".part"
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, updateDownloadURL, nil)
 		if err != nil {
@@ -427,7 +470,7 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 			return ret, nil
 		}
 
-		file, err := os.OpenFile(updatePackagePath, os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0644)
+		file, err := os.OpenFile(partPath, os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0644)
 		if err != nil {
 			ret.Error = err.Error()
 			return ret, nil
@@ -444,6 +487,7 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 			dlProgress.err = err.Error()
 			dlProgressMu.Unlock()
 			ret.Error = err.Error()
+			os.Remove(partPath)
 			return ret, nil
 		}
 		if err = file.Sync(); err != nil {
@@ -451,6 +495,16 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 			dlProgress.err = err.Error()
 			dlProgressMu.Unlock()
 			ret.Error = err.Error()
+			os.Remove(partPath)
+			return ret, nil
+		}
+
+		if err = os.Rename(partPath, destination); err != nil {
+			dlProgressMu.Lock()
+			dlProgress.err = err.Error()
+			dlProgressMu.Unlock()
+			ret.Error = err.Error()
+			os.Remove(partPath)
 			return ret, nil
 		}
 
