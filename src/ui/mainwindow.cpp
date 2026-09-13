@@ -38,6 +38,8 @@
 #include "sys/linux/LinuxCap.h"
 #endif
 #include <unistd.h>
+#include <cerrno>
+#include <cstdio>
 #endif
 
 #include <QClipboard>
@@ -1731,6 +1733,49 @@ void MainWindow::on_commitDataRequest() {
 }
 
 void MainWindow::onUpdateStaged() {
+#ifdef Q_OS_LINUX
+    // The AppImage owns its own file and replaces it directly -- it must never reach
+    // the DecideUpdaterLaunch gate below, since that path only ever leads to the
+    // archive-only ./updater, which is not shipped and could not apply a raw
+    // .AppImage even if it were.
+    if (ProxorGui::CurrentPackageMode() == PackageMode::AppImage) {
+        const auto appImagePath = qEnvironmentVariable("APPIMAGE");
+        const auto stagedPath = QDir(QFileInfo(appImagePath).absolutePath()).filePath(staged_asset_name);
+
+        AppImageApplyProbe probe{};
+        probe.appImagePathKnown = !appImagePath.isEmpty();
+        probe.stagedFileExists = QFileInfo::exists(stagedPath);
+        probe.targetDirWritable = QFileInfo(QFileInfo(appImagePath).absolutePath()).isWritable();
+        probe.targetFileWritable = QFileInfo(appImagePath).isWritable();
+
+        const auto decision = DecideAppImageApply(probe);
+        if (!decision.replaceTarget) {
+            MessageBoxInfo(software_name, tr("%1 The download was kept at: %2").arg(decision.reason, stagedPath));
+            MW_show_log(tr("AppImage update not applied: %1 Download kept at %2").arg(decision.reason, stagedPath));
+            return;
+        }
+
+        QFile::setPermissions(stagedPath, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner |
+                                               QFile::ReadGroup | QFile::ExeGroup |
+                                               QFile::ReadOther | QFile::ExeOther);
+        // std::rename, not QFile::rename: QFile::rename refuses an existing destination,
+        // which would force a remove-then-rename window with no working AppImage at all.
+        // rename(2) within one directory replaces atomically.
+        if (std::rename(stagedPath.toLocal8Bit().constData(), appImagePath.toLocal8Bit().constData()) != 0) {
+            const auto err = errno;
+            MW_show_log(tr("Failed to replace the running AppImage (errno %1). Download kept at %2")
+                            .arg(err)
+                            .arg(stagedPath));
+            MessageBoxWarning(software_name, tr("Could not replace the AppImage. The download is still at: %1").arg(stagedPath));
+            return;
+        }
+
+        update_staged = true;
+        this->exit_reason = 2;
+        on_menu_exit_triggered();
+        return;
+    }
+#endif
     // The updater is deliberately absent from the native Linux packages, and
     // the package tests assert its absence, so its presence is a runtime
     // fact and not an invariant: check before promising a restart into it.
@@ -1812,6 +1857,21 @@ void MainWindow::on_menu_exit_triggered() {
         auto program = ProxorGui::PackageExecutablePath("proxor");
 #else
         auto program = isLauncher ? "./launcher" : QApplication::applicationFilePath();
+#ifdef Q_OS_LINUX
+        // QApplication::applicationFilePath() under an AppImage lives inside the
+        // per-run SquashFS mount, which holds the image just superseded and is torn
+        // down when this process exits -- startDetached on it would either relaunch
+        // the old version or fail outright. $APPIMAGE is the real file on disk, and
+        // after onUpdateStaged()'s rename it is the new version, so prefer it here;
+        // this also repairs the "Restart Program" menu action and the Tun restart
+        // (exit_reason == 3) under an AppImage, both of which relaunched from the
+        // dying mount before this change.
+        const auto appImagePath = qEnvironmentVariable("APPIMAGE");
+        if (!isLauncher && !appImagePath.isEmpty()) {
+            program = appImagePath;
+            QDir::setCurrent(QFileInfo(appImagePath).absolutePath());
+        }
+#endif
 #endif
 
         if (exit_reason == 3) {

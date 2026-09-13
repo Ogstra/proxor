@@ -702,6 +702,9 @@ void MainWindow::CheckUpdate(bool silent) {
 
         connect(dlg, &QDialog::accepted, this, [=] {
             if (dlg->chosenAction() == DialogUpdateAvailable::Download && allowSelfUpdate && packageUpdate.allowDownload) {
+                // Remembered here, not re-derived in onUpdateStaged(), so the AppImage
+                // completion handler can name the exact staged path without a second RPC.
+                staged_asset_name = QFileInfo(assetName).fileName();
                 updateProgressDialog = new UpdateProgressDialog(response.assets_name().c_str(), this);
                 connect(updateProgressDialog, &UpdateProgressDialog::downloadComplete, this, &MainWindow::onUpdateStaged);
                 updateProgressDialog->show();
