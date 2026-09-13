@@ -184,6 +184,9 @@ private:
     qint64 vpn_pid = 0;
     //
     bool update_staged = false;
+    QString staged_asset_name; // base name of the asset requested for Download, so
+                                // onUpdateStaged() can derive the AppImage staged path
+                                // without a second RPC
     QPointer<UpdateProgressDialog> updateProgressDialog;
     ProxyListModel *proxyListModel = nullptr;
     QLabel *m_quotaLabel = nullptr;
