@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-    printf '%s\n' "Usage: DESTDIR=<directory> $0 --gui <path> --core <path> --geodata <directory>" >&2
+    printf '%s\n' "Usage: DESTDIR=<directory> $0 --gui <path> --core <path> --geodata <directory> --channel <deb|rpm|arch>" >&2
     exit 2
 }
 
@@ -11,6 +11,7 @@ test -n "${DESTDIR:-}" || usage
 gui=""
 core=""
 geodata=""
+channel=""
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --gui)
@@ -28,6 +29,11 @@ while [ "$#" -gt 0 ]; do
             geodata="$2"
             shift 2
             ;;
+        --channel)
+            [ "$#" -ge 2 ] || usage
+            channel="$2"
+            shift 2
+            ;;
         *)
             usage
             ;;
@@ -35,6 +41,12 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ -n "$gui" ] && [ -n "$core" ] && [ -n "$geodata" ] || usage
+# Required rather than defaulted: a caller that forgets --channel must fail loudly
+# instead of silently shipping a package the app later detects as portable.
+case "$channel" in
+    deb|rpm|arch) ;;
+    *) usage ;;
+esac
 [ -f "$gui" ] || { printf 'GUI not found: %s\n' "$gui" >&2; exit 1; }
 [ -f "$core" ] || { printf 'core not found: %s\n' "$core" >&2; exit 1; }
 [ -d "$geodata" ] || { printf 'geodata directory not found: %s\n' "$geodata" >&2; exit 1; }
@@ -59,6 +71,8 @@ install -m 0755 "$core" "$stage/usr/lib/proxor/proxor_core"
 for asset in geoip.dat geosite.dat geoip.db geosite.db; do
     install -m 0644 "$geodata/$asset" "$stage/usr/share/proxor/$asset"
 done
+printf '%s\n' "$channel" > "$stage/usr/share/proxor/package-channel"
+chmod 0644 "$stage/usr/share/proxor/package-channel"
 
 rm -rf "$DESTDIR"
 mv "$stage" "$DESTDIR"
