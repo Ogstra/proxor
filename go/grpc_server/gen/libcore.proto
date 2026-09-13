@@ -82,6 +82,12 @@ enum UpdateAction {
 message UpdateReq {
   UpdateAction action = 1;
   bool check_pre_release = 2;
+  // The channel the GUI detected (PackageModeName: "deb", "rpm", "arch",
+  // "appimage", "portable", "winget", "flatpak", "unknown-package-manager").
+  // Explicit on the wire because the core is a child process whose environment
+  // is not an architectural contract; an empty value falls back to GOOS/GOARCH
+  // resolution so an older GUI against a newer core still works.
+  string channel = 3;
 }
 
 message UpdateResp {

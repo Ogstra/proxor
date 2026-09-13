@@ -1,6 +1,9 @@
 package grpc_server
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseReleaseVersion(t *testing.T) {
 	version, ok := parseReleaseVersion("proxor-1.0.3-windows64.zip")
@@ -21,7 +24,7 @@ func TestUpdateArchiveSuffixes(t *testing.T) {
 	}{
 		{goos: "windows", goarch: "amd64", expected: []string{"windows64.zip"}},
 		{goos: "windows", goarch: "arm64", expected: []string{"windows-arm64.zip"}},
-		{goos: "linux", goarch: "amd64", wantErr: true},
+		{goos: "linux", goarch: "amd64", expected: []string{"linux64.AppImage"}},
 		{goos: "linux", goarch: "arm64", wantErr: true},
 		{goos: "darwin", goarch: "amd64", wantErr: true},
 	}
@@ -48,15 +51,86 @@ func TestUpdateArchiveSuffixes(t *testing.T) {
 	}
 }
 
-func TestLinuxUpdateGuidanceUsesPackageManagerOrAppImage(t *testing.T) {
-
-	_, err := updateArchiveSuffixes("linux", "amd64")
-	if err == nil {
-		t.Fatal("linux/amd64: expected no self-update error")
+// TestLinuxUpdateCheckResolvesAppImageAsset replaces the old guidance-text contract: the
+// stopgap that refused self-update for all of Linux is gone, and this package no longer
+// produces any channel's guidance wording -- that now lives in src/main/PackagePolicy.cpp.
+func TestLinuxUpdateCheckResolvesAppImageAsset(t *testing.T) {
+	got, err := updateArchiveSuffixes("linux", "amd64")
+	if err != nil {
+		t.Fatalf("linux/amd64: expected no error, got %v", err)
 	}
-	const want = "self-update is not available on Linux; use your package manager or download the latest AppImage from the release page"
-	if err.Error() != want {
-		t.Fatalf("linux/amd64 guidance = %q, want %q", err.Error(), want)
+	if len(got) != 1 || got[0] != "linux64.AppImage" {
+		t.Fatalf("linux/amd64: expected [linux64.AppImage], got %v", got)
+	}
+}
+
+func TestSuffixesForChannel(t *testing.T) {
+	tests := []struct {
+		channel  string
+		goos     string
+		goarch   string
+		expected []string
+		wantErr  bool
+	}{
+		{channel: "deb", goos: "linux", goarch: "amd64", expected: []string{"_amd64.deb"}},
+		{channel: "rpm", goos: "linux", goarch: "amd64", expected: []string{".x86_64.rpm"}},
+		{channel: "flatpak", goos: "linux", goarch: "amd64", expected: []string{".flatpak"}},
+		{channel: "winget", goos: "linux", goarch: "amd64", expected: []string{"winget-x64.zip"}},
+		{channel: "arch", goos: "linux", goarch: "amd64", expected: []string{".tar.gz"}},
+		{channel: "appimage", goos: "linux", goarch: "amd64", expected: []string{"linux64.AppImage"}},
+		{channel: "portable", goos: "linux", goarch: "amd64", expected: []string{"linux64.AppImage"}},
+		// Empty/unrecognised channel falls back to updateArchiveSuffixes, so an older
+		// GUI against a newer core still works.
+		{channel: "", goos: "linux", goarch: "amd64", expected: []string{"linux64.AppImage"}},
+		{channel: "unknown-package-manager", goos: "linux", goarch: "amd64", expected: []string{"linux64.AppImage"}},
+		{channel: "", goos: "linux", goarch: "arm64", wantErr: true},
+		{channel: "deb", goos: "windows", goarch: "amd64", expected: []string{"windows64.zip"}},
+	}
+
+	for _, tt := range tests {
+		got, err := suffixesForChannel(tt.channel, tt.goos, tt.goarch)
+		if tt.wantErr {
+			if err == nil {
+				t.Fatalf("channel=%q %s/%s: expected error", tt.channel, tt.goos, tt.goarch)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("channel=%q %s/%s: unexpected error: %v", tt.channel, tt.goos, tt.goarch, err)
+		}
+		if len(got) != len(tt.expected) {
+			t.Fatalf("channel=%q %s/%s: expected %v, got %v", tt.channel, tt.goos, tt.goarch, tt.expected, got)
+		}
+		for i := range got {
+			if got[i] != tt.expected[i] {
+				t.Fatalf("channel=%q %s/%s: expected %v, got %v", tt.channel, tt.goos, tt.goarch, tt.expected, got)
+			}
+		}
+	}
+}
+
+// Every suffix above matches an asset name actually published in v1.6.7, and
+// parseReleaseVersion extracts 1.6.7 from each.
+func TestSuffixesForChannelMatchRealV167AssetNames(t *testing.T) {
+	realAssetNames := map[string]string{
+		"linux64.AppImage": "proxor-1.6.7-linux64.AppImage",
+		"_amd64.deb":       "proxor_1.6.7-1_amd64.deb",
+		".x86_64.rpm":      "proxor-1.6.7-1.fc44.x86_64.rpm",
+		".flatpak":         "proxor-1.6.7.flatpak",
+		"winget-x64.zip":   "proxor-1.6.7-winget-x64.zip",
+		".tar.gz":          "proxor-1.6.7.tar.gz",
+	}
+	for suffix, assetName := range realAssetNames {
+		if !strings.HasSuffix(assetName, suffix) {
+			t.Fatalf("asset %q does not carry suffix %q", assetName, suffix)
+		}
+		version, ok := parseReleaseVersion(assetName)
+		if !ok {
+			t.Fatalf("parseReleaseVersion could not parse %q", assetName)
+		}
+		if version.major != 1 || version.minor != 6 || version.patch != 7 {
+			t.Fatalf("asset %q parsed as %+v, want 1.6.7", assetName, version)
+		}
 	}
 }
 

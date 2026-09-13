@@ -94,11 +94,47 @@ func updateArchiveSuffixes(goos, goarch string) ([]string, error) {
 	case goos == "windows" && goarch == "arm64":
 		return []string{"windows-arm64.zip"}, nil
 	case goos == "linux" && goarch == "amd64":
-		return nil, fmt.Errorf("self-update is not available on Linux; use your package manager or download the latest AppImage from the release page")
+		// The AppImage is the only asset published for linux/amd64 today. This is also
+		// the fallback every channel on this platform resolves to when it has no
+		// channel-specific entry in suffixesForChannel (e.g. an older GUI against a
+		// newer core, which sends no channel at all).
+		return []string{"linux64.AppImage"}, nil
 	case goos == "linux" && goarch == "arm64":
 		return nil, fmt.Errorf("self-update is not available for Linux/%s", goarch)
 	default:
 		return nil, fmt.Errorf("self-update is not available on %s/%s", goos, goarch)
+	}
+}
+
+// suffixesForChannel resolves the asset name suffix published for the channel the GUI
+// detected. Knowing a version exists is independent of being able to apply it, so this
+// resolves an asset even for channels the GUI will never call Download for (deb, rpm,
+// arch, flatpak, winget) -- the resolved asset's file name is what the C++ guidance text
+// names in the update command (e.g. "proxor_1.6.7-1_amd64.deb"). Go decides nothing about
+// whether an update may be applied; that policy stays in src/main/PackagePolicy.cpp.
+// An empty or unrecognised channel falls back to updateArchiveSuffixes(goos, goarch), so
+// an older GUI talking to a newer core still works.
+func suffixesForChannel(channel, goos, goarch string) ([]string, error) {
+	if goos != "linux" {
+		return updateArchiveSuffixes(goos, goarch)
+	}
+
+	switch channel {
+	case "deb":
+		return []string{"_amd64.deb"}, nil
+	case "rpm":
+		return []string{".x86_64.rpm"}, nil
+	case "flatpak":
+		return []string{".flatpak"}, nil
+	case "winget":
+		return []string{"winget-x64.zip"}, nil
+	case "arch":
+		// The AUR recipe builds from the source tarball, not a prebuilt binary.
+		return []string{".tar.gz"}, nil
+	case "appimage", "portable":
+		return []string{"linux64.AppImage"}, nil
+	default:
+		return updateArchiveSuffixes(goos, goarch)
 	}
 }
 
@@ -310,7 +346,7 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 		checkCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 
-		suffixes, err := updateArchiveSuffixes(runtime.GOOS, runtime.GOARCH)
+		suffixes, err := suffixesForChannel(in.Channel, runtime.GOOS, runtime.GOARCH)
 		if err != nil {
 			ret.Error = err.Error()
 			return ret, nil

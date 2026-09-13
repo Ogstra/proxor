@@ -35,6 +35,7 @@ const (
 type LibcoreServiceClient interface {
 	Exit(ctx context.Context, in *EmptyReq, opts ...grpc.CallOption) (*EmptyResp, error)
 	Update(ctx context.Context, in *UpdateReq, opts ...grpc.CallOption) (*UpdateResp, error)
+	//
 	Validate(ctx context.Context, in *LoadConfigReq, opts ...grpc.CallOption) (*ErrorResp, error)
 	Start(ctx context.Context, in *LoadConfigReq, opts ...grpc.CallOption) (*ErrorResp, error)
 	Stop(ctx context.Context, in *EmptyReq, opts ...grpc.CallOption) (*ErrorResp, error)
@@ -137,6 +138,7 @@ func (c *libcoreServiceClient) ListConnections(ctx context.Context, in *EmptyReq
 type LibcoreServiceServer interface {
 	Exit(context.Context, *EmptyReq) (*EmptyResp, error)
 	Update(context.Context, *UpdateReq) (*UpdateResp, error)
+	//
 	Validate(context.Context, *LoadConfigReq) (*ErrorResp, error)
 	Start(context.Context, *LoadConfigReq) (*ErrorResp, error)
 	Stop(context.Context, *EmptyReq) (*ErrorResp, error)
