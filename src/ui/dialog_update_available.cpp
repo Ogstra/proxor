@@ -3,8 +3,14 @@
 
 #include <QPushButton>
 #include <QApplication>
+#include <QClipboard>
+#include <QGuiApplication>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QLineEdit>
 #include <QPalette>
 #include <QRegularExpression>
+#include <QVBoxLayout>
 
 // Code spans are pulled out before emphasis runs, so markers inside backticks are left
 // alone. U+E000 is a private-use codepoint and cannot appear in HTML-escaped input.
@@ -201,7 +207,8 @@ DialogUpdateAvailable::DialogUpdateAvailable(
     const QString &channel,
     const QString &releaseNote,
     bool allowUpdater,
-    QWidget *parent)
+    QWidget *parent,
+    const QString &managedGuidance)
     : QDialog(parent), ui(new Ui::DialogUpdateAvailable)
 {
     ui->setupUi(this);
@@ -219,6 +226,55 @@ DialogUpdateAvailable::DialogUpdateAvailable(
     bool dark = QApplication::palette().window().color().lightness() < 128;
     ui->textBrowser->setHtml(
         releaseNote.isEmpty() ? tr("No release notes available.") : buildHtml(releaseNote, dark));
+
+    // Guidance row for a package-managed install, inserted above the button box so the
+    // command is read before the buttons are pressed. Built from named widgets so a test
+    // can find them with findChild, rather than only grepping the source for the call.
+    if (!managedGuidance.isEmpty()) {
+        auto *guidanceRow = new QWidget(this);
+        guidanceRow->setObjectName(QStringLiteral("guidanceRow"));
+        auto *guidanceLayout = new QVBoxLayout(guidanceRow);
+        guidanceLayout->setContentsMargins(0, 0, 0, 0);
+
+        auto *labelGuidanceIntro = new QLabel(guidanceRow);
+        labelGuidanceIntro->setObjectName(QStringLiteral("labelGuidanceIntro"));
+        labelGuidanceIntro->setWordWrap(true);
+        guidanceLayout->addWidget(labelGuidanceIntro);
+
+        // One rule, applied consistently: a sentence ends with a period, a command
+        // template never does (not even "winget upgrade Ogstra.Proxor" or
+        // "sudo apt install ./proxor_1.6.7-1_amd64.deb", whose embedded periods are not
+        // at the end of the string).
+        const bool isCommand = !managedGuidance.trimmed().endsWith(QLatin1Char('.'));
+        if (isCommand) {
+            labelGuidanceIntro->setText(
+                tr("This installation is updated by its package manager. Run:"));
+
+            auto *guidanceCommandRow = new QWidget(guidanceRow);
+            auto *guidanceCommandLayout = new QHBoxLayout(guidanceCommandRow);
+            guidanceCommandLayout->setContentsMargins(0, 0, 0, 0);
+
+            auto *lineEditGuidance = new QLineEdit(managedGuidance, guidanceCommandRow);
+            lineEditGuidance->setObjectName(QStringLiteral("lineEditGuidance"));
+            lineEditGuidance->setReadOnly(true);
+            guidanceCommandLayout->addWidget(lineEditGuidance);
+
+            auto *buttonCopyGuidance = new QPushButton(tr("Copy"), guidanceCommandRow);
+            buttonCopyGuidance->setObjectName(QStringLiteral("buttonCopyGuidance"));
+            // Must not accept(): closing the dialog on copy would take away the
+            // release-page link the user still needs.
+            connect(buttonCopyGuidance, &QPushButton::clicked, this, [managedGuidance] {
+                QGuiApplication::clipboard()->setText(managedGuidance);
+            });
+            guidanceCommandLayout->addWidget(buttonCopyGuidance);
+
+            guidanceLayout->addWidget(guidanceCommandRow);
+        } else {
+            labelGuidanceIntro->setText(managedGuidance);
+        }
+
+        ui->verticalLayout->insertWidget(2, guidanceRow);
+    }
 
     // Cancel button (already in buttonBox from .ui)
     connect(ui->buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);

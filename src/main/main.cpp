@@ -115,6 +115,12 @@ int main(int argc, char* argv[]) {
     // widget, so a crash took its own explanation with it.
     ProxorGui_log::Init();
 
+    // Not debug-only: this is the only end-to-end assertion the native package tests
+    // can make that detection actually read the installed marker, by grepping the
+    // installed app's own log for this exact line inside a deb/rpm test container.
+    ProxorGui_log::Write(ProxorGui_log::Level::Info,
+                          "Install channel: " + PackageModeName(ProxorGui::CurrentPackageMode()));
+
     // dispatchers
     DS_cores = new QThread;
     DS_cores->start();
