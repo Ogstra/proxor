@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: Update & Subscription UX
 status: unknown
-last_updated: "2026-09-12T23:43:08.550Z"
+last_updated: "2026-09-13T00:49:10.335Z"
 progress:
   total_phases: 3
   completed_phases: 3
@@ -109,3 +109,4 @@ Historical Phase 02 execution resumed 2026-09-11: Plans 02-01, 02-03 through 02-
 - Phase 46 added: Hybrid SSID on-demand with explicit profile selection, auto-connect only on matching SSIDs, manual preservation on non-matching SSIDs, and sing-box-aware active-session support
 - Phase 47 added: Linux update channels -- channel detection from package markers, package-managed installs routed to their own package manager, no exit reason the app cannot honour, AppImage self-update against $APPIMAGE, and downloads verified against the release SHA256SUMS
 - Phase 47 Plan 01 complete (2026-09-12, commits a224d828/1ccb7607/47cde1b8): landed the owner's CurrentPackageMode/DecidePackageUpdate wiring as its own commit (separated from a repo-wide CRLF line-ending flip in the working tree), added DecideFlatpakLifecycle refusal at the Tun/System Proxy toggle points, added a pure DecideUpdaterLaunch policy gating every path that sets exit_reason=1, and wired test-policy-wiring.sh + test-stage-native-root.sh into the package-policy-tests CI job. LUC-03 marked complete. Local Qt6 is not installed on this machine, so run-tests.sh itself must still be proven green in CI on both runners. Plans 47-02..47-05 remain.
+- Phase 47 Plan 02 complete (2026-09-13, commits d86453ea/241bcf38/b26d49f9/1e511677): PackageMode grew to deb/rpm/arch/AppImage plus a fail-closed NativeUnknownManager, detected only from a marker file or an environment variable; DecidePackageUpdate became a per-mode table with allowCheck true on every channel (including Winget/Flatpak, which previously skipped the check entirely); CurrentPackageMode() now resolves and caches the real marker/env inputs on Linux and main.cpp logs the detected channel at startup; DialogUpdateAvailable gained a guidance row (command field + non-closing Copy button, or a sentence) asserted by a new headless CTest target under QT_QPA_PLATFORM=offscreen. LUC-01/LUC-02/LUC-06 marked complete. A stray `git add` briefly swept the owner's uncommitted connectionElapsedTimer line into a commit; fixed with a follow-up commit that removed it from history and restored it uncommitted, verified clean by git diff. Plans 47-03..47-05 remain; run-tests.sh itself (all three CTest targets, including the new dialog widget test) still needs its first green run in CI, since Qt6 is not installed locally.

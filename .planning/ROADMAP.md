@@ -218,7 +218,7 @@ Plans:
 
 Plans:
 - [x] 47-01-PLAN.md — Land the owner's policy wiring, then refuse any exit reason the app cannot honour (wave 1)
-- [ ] 47-02-PLAN.md — Channel detection from markers and per-channel update guidance in the dialog (wave 2)
+- [x] 47-02-PLAN.md — Channel detection from markers and per-channel update guidance in the dialog (wave 2)
 - [ ] 47-03-PLAN.md — Core reports assets per channel and verifies downloads against SHA256SUMS (wave 3)
 - [ ] 47-05-PLAN.md — Channel marker in the deb, rpm and Arch packages (wave 3, parallel with 47-03)
 - [ ] 47-04-PLAN.md — AppImage replaces and relaunches its own file (wave 4)
@@ -235,7 +235,7 @@ Plans:
 
 **Goal:** Dedicated class that renders proxy/node details as formatted HTML for the info panel, replacing ad-hoc string concatenation. Includes theme-aware styling and structured sections for server, protocol, and routing metadata.
 **Requirements:** TBD
-**Plans:** 1/5 plans executed
+**Plans:** 2/5 plans executed
 
 Plans:
 - [ ] TBD (promote with /gsd:review-backlog when ready)
