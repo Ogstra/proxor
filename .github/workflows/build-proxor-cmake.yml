@@ -335,6 +335,14 @@ jobs:
       - name: Verify package provenance
         shell: bash
         run: bash packaging/source/tests/test-stage-recursive-source.sh
+      - name: Verify dependency pins against the flatpak manifest
+        # No Linux-only guard, unlike its neighbors below: the pins and the
+        # flatpak manifest's copies are two records of the same fact, and this
+        # is the only thing that notices when one moves without the other.
+        # Running it on windows-latest also proves shasum -a 256 exists in Git
+        # Bash before build_deps_all.sh depends on it on that same runner.
+        shell: bash
+        run: bash libs/tests/test-dependency-pins.sh
       - name: Install Qt Core and Test
         uses: jurplel/install-qt-action@c6c7281365daef91a238e1c2ddce4eaa94a2991d # v4.1.1
         with:
