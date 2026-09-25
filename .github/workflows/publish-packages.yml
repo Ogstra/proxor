@@ -92,7 +92,7 @@ jobs:
           git add PKGBUILD .SRCINFO
           git commit -m "proxor ${TAG#v}-1"
           git push origin HEAD:master
-      - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: aur-recipe-${{ inputs.release_tag }}
           path: ${{ runner.temp }}/aur/recipe
@@ -145,7 +145,7 @@ jobs:
           wingetcreate submit --token $env:WINGET_PKGS_TOKEN `
             --prtitle "Ogstra.Proxor version $version" "$env:RUNNER_TEMP/winget/manifests"
           if ($LASTEXITCODE -ne 0) { throw "wingetcreate submit failed with $LASTEXITCODE" }
-      - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: winget-manifests-${{ inputs.release_tag }}
           path: ${{ runner.temp }}/winget/manifests
