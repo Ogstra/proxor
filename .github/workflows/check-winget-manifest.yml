@@ -63,4 +63,6 @@ jobs:
           path: |
             ${{ runner.temp }}/winget/manifests
             ${{ runner.temp }}/winget-logs
+          # A diagnostics artifact is worth nothing with parts of it missing.
+          include-hidden-files: true
           if-no-files-found: warn
