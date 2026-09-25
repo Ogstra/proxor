@@ -149,4 +149,6 @@ jobs:
         with:
           name: winget-manifests-${{ inputs.release_tag }}
           path: ${{ runner.temp }}/winget/manifests
+          # The three rendered manifests, none of them hidden.
+          include-hidden-files: false
           if-no-files-found: error
