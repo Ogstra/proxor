@@ -246,7 +246,7 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 48-01-PLAN.md — Verify every third-party archive by sha256 and take protobuf off the mutable git tag (SUP-01/02/03)
+- [x] 48-01-PLAN.md — Verify every third-party archive by sha256 and take protobuf off the mutable git tag (SUP-01/02/03)
 - [ ] 48-02-PLAN.md — Bump and SHA-pin every workflow action off the deprecated Node.js 20 runtime (SUP-04/05)
 - [ ] 48-03-PLAN.md — Prove the bumped pipeline still ships eight assets, via a workflow_dispatch release run (SUP-06)
 
