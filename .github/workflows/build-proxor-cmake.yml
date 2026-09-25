@@ -433,6 +433,12 @@ jobs:
             --sha256 "$winget_sha" \
             --output deployment/winget-manifests
           winget validate --manifest deployment/winget-manifests || test "$?" -eq 40
+          # winget validate accepts a manifest without it, but winget-pkgs review does not:
+          # a missing schema header is what got the first submission changes-requested.
+          for kind in version:Ogstra.Proxor installer:Ogstra.Proxor.installer defaultLocale:Ogstra.Proxor.locale.en-US; do
+            grep -qxF "# yaml-language-server: \$schema=https://aka.ms/winget-manifest.${kind%%:*}.1.12.0.schema.json" \
+              "deployment/winget-manifests/${kind#*:}.yaml"
+          done
           # winget-pkgs validation resolves NestedInstallerFiles inside the archive, so a
           # path that does not exist there fails there rather than here.
           nested="$(sed -n 's/^ *- RelativeFilePath: *//p' deployment/winget-manifests/Ogstra.Proxor.installer.yaml)"
