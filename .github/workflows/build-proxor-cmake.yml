@@ -343,6 +343,11 @@ jobs:
         # Bash before build_deps_all.sh depends on it on that same runner.
         shell: bash
         run: bash libs/tests/test-dependency-pins.sh
+      - name: Verify action pins
+        # No OS guard either: the workflows are read by both runners, and
+        # running on windows-latest proves the checker works under Git Bash.
+        shell: bash
+        run: bash .github/tests/test-action-pins.sh
       - name: Install Qt Core and Test
         uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
         with:
