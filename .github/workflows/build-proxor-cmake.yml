@@ -638,6 +638,9 @@ jobs:
           path: |
             ${{ runner.temp }}/aur-release/PKGBUILD
             ${{ runner.temp }}/aur-release/.SRCINFO
+          # upload-artifact skips dotfiles unless told otherwise, and since PKGBUILD
+          # still matches, if-no-files-found never notices .SRCINFO went missing.
+          include-hidden-files: true
           if-no-files-found: error
 
   package-flatpak:
