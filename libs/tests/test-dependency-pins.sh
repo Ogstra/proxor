@@ -1,0 +1,75 @@
+#!/bin/bash
+# Offline guard for the third-party archive pins in libs/build_deps_all.sh.
+#
+# 1. Proves fetch_verified (libs/build_deps_fetch.sh) actually rejects a wrong
+#    hash and actually accepts a right one, using a file:// URL so no network
+#    is needed and the runner's flakiness cannot mask a bug here.
+# 2. (extended by a later task) Proves libs/build_deps_all.sh and
+#    packaging/flatpak/io.github.Ogstra.Proxor.yml agree on every pin.
+set -eu
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=../build_deps_fetch.sh
+. "$REPO_ROOT/libs/build_deps_fetch.sh"
+
+FAILURES=0
+fail() {
+  echo "FAIL: $1" >&2
+  FAILURES=$((FAILURES + 1))
+}
+
+command -v shasum >/dev/null 2>&1 || {
+  echo "FAIL: shasum -a 256 is required on this platform" >&2
+  exit 1
+}
+
+TMPDIR_T=$(mktemp -d)
+trap 'rm -rf "$TMPDIR_T"' EXIT
+
+# Build a file:// URL that also works on Windows Git Bash, where pwd -W would
+# give a drive-letter path like C:/Users/... that needs a third leading slash.
+to_file_url() {
+  path=$(cd "$1" && pwd)
+  case "$path" in
+    [A-Za-z]:/*) echo "file:///$path" ;;
+    /*) echo "file://$path" ;;
+    *) echo "file:///$path" ;;
+  esac
+}
+
+printf 'hello dependency pins' > "$TMPDIR_T/src.bin"
+SRC_URL=$(to_file_url "$TMPDIR_T")/src.bin
+REAL_HASH=$(shasum -a 256 "$TMPDIR_T/src.bin" | cut -d' ' -f1)
+ZERO_HASH="0000000000000000000000000000000000000000000000000000000000000000"
+
+# --- correct hash: succeeds, output exists with original bytes ---
+if fetch_verified "$SRC_URL" "$REAL_HASH" "$TMPDIR_T/ok.bin"; then
+  if ! cmp -s "$TMPDIR_T/src.bin" "$TMPDIR_T/ok.bin"; then
+    fail "fetch_verified wrote different bytes than the source on a correct hash"
+  fi
+else
+  fail "fetch_verified returned non-zero on a correct hash"
+fi
+
+# --- wrong hash: fails, stderr names both hashes, no output file left ---
+STDERR_OUT=$(fetch_verified "$SRC_URL" "$ZERO_HASH" "$TMPDIR_T/bad.bin" 2>&1 1>/dev/null) && {
+  fail "fetch_verified returned zero on a wrong hash"
+}
+if [ -e "$TMPDIR_T/bad.bin" ]; then
+  fail "fetch_verified left bad.bin on disk after a checksum mismatch"
+fi
+case "$STDERR_OUT" in
+  *"$REAL_HASH"*) : ;;
+  *) fail "mismatch stderr did not contain the actual hash: $STDERR_OUT" ;;
+esac
+case "$STDERR_OUT" in
+  *"$ZERO_HASH"*) : ;;
+  *) fail "mismatch stderr did not contain the expected hash: $STDERR_OUT" ;;
+esac
+
+if [ "$FAILURES" -ne 0 ]; then
+  echo "$FAILURES check(s) failed" >&2
+  exit 1
+fi
+
+echo "test-dependency-pins.sh: all checks passed"
