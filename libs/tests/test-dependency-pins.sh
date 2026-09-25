@@ -26,10 +26,15 @@ command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1 || {
 TMPDIR_T=$(mktemp -d)
 trap 'rm -rf "$TMPDIR_T"' EXIT
 
-# Build a file:// URL that also works on Windows Git Bash, where pwd -W would
-# give a drive-letter path like C:/Users/... that needs a third leading slash.
+# Build a file:// URL that also works on Windows Git Bash. The curl there is the
+# native Windows one and cannot open a POSIX path, so the directory is translated
+# to its drive-letter form, which then needs a third leading slash.
 to_file_url() {
-  path=$(cd "$1" && pwd)
+  if command -v cygpath >/dev/null 2>&1; then
+    path=$(cygpath -m "$1")
+  else
+    path=$(cd "$1" && pwd)
+  fi
   case "$path" in
     [A-Za-z]:/*) echo "file:///$path" ;;
     /*) echo "file://$path" ;;
