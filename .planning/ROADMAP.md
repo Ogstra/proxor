@@ -214,18 +214,18 @@ Plans:
   5. Anything downloaded before being applied is verified against the `SHA256SUMS` published with the release
   6. A winget-managed install is never overwritten in place, so the version winget reports stays the version on disk
   7. The update check itself keeps working on every channel, because knowing a version exists is independent of being able to apply it
-**Plans**: 5 plans in 4 waves
+**Plans**: 5 plans in 4 waves — all implemented, shipped in v1.6.8; 47-04's AppImage self-update UAT deferred
 
 Plans:
 - [x] 47-01-PLAN.md — Land the owner's policy wiring, then refuse any exit reason the app cannot honour (wave 1)
 - [x] 47-02-PLAN.md — Channel detection from markers and per-channel update guidance in the dialog (wave 2)
 - [x] 47-03-PLAN.md — Core reports assets per channel and verifies downloads against SHA256SUMS (wave 3)
 - [x] 47-05-PLAN.md — Channel marker in the deb, rpm and Arch packages (wave 3, parallel with 47-03)
-- [ ] 47-04-PLAN.md — AppImage replaces and relaunches its own file (wave 4)
+- [x] 47-04-PLAN.md — AppImage replaces and relaunches its own file (wave 4) — implemented, UAT deferred (Task 3's real replace-and-relaunch cycle needs a v1.6.9 to update into; only v1.6.8 exists so far)
 
 ---
 
-*Last updated: 2026-09-12 — Phase 47 broken into 5 plans across 4 waves*
+*Last updated: 2026-09-25 — Phase 47 complete, UAT outstanding on 47-04's AppImage self-update*
 
 ---
 

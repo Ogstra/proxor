@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: Update & Subscription UX
 status: unknown
-last_updated: "2026-09-13T01:23:13.821Z"
+last_updated: "2026-09-25T00:00:00.000Z"
 progress:
   total_phases: 3
   completed_phases: 3
@@ -18,14 +18,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-29)
 
 **Core value:** Proxor is fully branded, modernized, and on par with Throne — clean deployment, stable storage, complete protocols, and visual feedback when the proxy is active.
-**Current focus:** Phase 20 — tray-connection-info UAT
+**Current focus:** Phase 47 — Linux Update Channels complete; 47-04's AppImage self-update UAT deferred to the v1.6.9 cycle
 
 ---
 
 ## Current Position
 
-Phase: 20 (tray-connection-info) — UAT PENDING
-Plan: 1 of 1 implemented
+Phase: 47 (linux-update-channels) — implementation complete, UAT deferred
+Plan: 5 of 5 implemented (47-01, 47-02, 47-03, 47-05 fully complete; 47-04 implemented, Task 3 human-verify deferred, not approved)
 
 ## Milestone Progress
 
@@ -39,9 +39,19 @@ Plan: 1 of 1 implemented
 
 Implementation: ██████████ 100% (Windows UAT outstanding)
 
+## Phase 47 Status (Linux Update Channels — standalone track, not part of v2.2)
+
+| Phase | Name | Status |
+|-------|------|--------|
+| 47 | Linux Update Channels | UAT deferred |
+
+Implementation: ██████████ 100% (shipped in v1.6.8; 47-04's real AppImage replace-and-relaunch cycle outstanding — see Blockers/Concerns)
+
 ---
 
 ## Blockers/Concerns
+
+Phase 47 (Linux Update Channels) shipped in v1.6.8 (2026-09-12, CI green at commit `5da27a15`). What shipped is verified only by CI plus the deb/rpm container smoke tests — channel detection, dialog wiring, `DecideUpdaterLaunch`/`DecideAppImageApply` unit tests, and SHA256SUMS checksum verification. The AppImage self-update path (plan 47-04, LUC-04) has no runtime verification yet: no real `.AppImage` has downloaded a new version of itself, replaced its own file, and relaunched into it. Verifying that needs two releases that both contain this code, and only v1.6.8 does so far — the cycle becomes testable once v1.6.9 exists, since v1.6.8's AppImage will be the first build able to replace itself. The owner deferred plan 47-04's `checkpoint:human-verify` (Task 3) rather than block the phase on it; the seven verification steps are preserved in `.planning/phases/47-linux-update-channels/47-04-SUMMARY.md` for whoever runs them once v1.6.9 exists.
 
 Local GUI compilation is unavailable: `build/` targets Windows/NMake and bundled Qt contains Windows-only tools. Phases 18-20 require Windows UAT.
 
@@ -112,3 +122,4 @@ Historical Phase 02 execution resumed 2026-09-11: Plans 02-01, 02-03 through 02-
 - Phase 47 Plan 02 complete (2026-09-13, commits d86453ea/241bcf38/b26d49f9/1e511677): PackageMode grew to deb/rpm/arch/AppImage plus a fail-closed NativeUnknownManager, detected only from a marker file or an environment variable; DecidePackageUpdate became a per-mode table with allowCheck true on every channel (including Winget/Flatpak, which previously skipped the check entirely); CurrentPackageMode() now resolves and caches the real marker/env inputs on Linux and main.cpp logs the detected channel at startup; DialogUpdateAvailable gained a guidance row (command field + non-closing Copy button, or a sentence) asserted by a new headless CTest target under QT_QPA_PLATFORM=offscreen. LUC-01/LUC-02/LUC-06 marked complete. A stray `git add` briefly swept the owner's uncommitted connectionElapsedTimer line into a commit; fixed with a follow-up commit that removed it from history and restored it uncommitted, verified clean by git diff. Plans 47-03..47-05 remain; run-tests.sh itself (all three CTest targets, including the new dialog widget test) still needs its first green run in CI, since Qt6 is not installed locally.
 - Phase 47 Plan 03 complete (2026-09-13, commits 1fd66da7/e44f6875/dc5dec1c): removed the `809d48ec` stopgap that errored Check for all of Linux; added UpdateReq.channel (explicit on the wire, never inherited from the GUI's environment) and suffixesForChannel, which resolves the asset suffix each channel's release actually publishes (deb/rpm/flatpak/winget/arch/appimage/portable), falling back to GOOS/GOARCH for an empty or unrecognised channel; added UpdateReq.download_dir so the AppImage channel can land its download beside $APPIMAGE instead of inside its own read-only FUSE mount; Download now writes through a .part file and only renames into the final name once checksumForAsset/verifyAssetChecksum confirm the streamed SHA-256 matches the release's SHA256SUMS entry by base name, failing closed (removing the .part, reporting an error) on no SHA256SUMS published, no matching line, an ambiguous duplicate, or a mismatch. LUC-05/LUC-07 marked complete. protoc-gen-go/protoc-gen-go-grpc were not installed locally and were installed via `go install` at update_proto.sh's pinned versions. Plans 47-04/47-05 remain; the C++ side (set_channel/set_download_dir naming-convention risk, full mainwindow_grpc.cpp compile) is unverified locally and awaits CI (build-cpp, package-policy-tests), as is the real Check-against-live-GitHub-API and real-download UAT this plan's own verification section defers.
 - Phase 47 Plan 05 complete (2026-09-12, commits fc92d3d2/17f89776/9c2e416f): `stage-native-root.sh` now requires a `--channel <deb|rpm|arch>` argument, validated before any staging happens, and writes `usr/share/proxor/package-channel` (mode 0644) -- the marker plan 47-02's `CurrentPackageMode()` already reads. All three native recipes (`debian/rules`, `proxor.spec`, `PKGBUILD.in`) pass their own channel; the rpm spec's exhaustive `%files` gained the matching entry. All four package-side tests (`test-stage-native-root.sh` plus the deb/rpm/arch integration tests) assert the marker positively; the deb and rpm tests additionally grep the installed app's startup log for `Install channel: deb`/`rpm` after the Xvfb smoke launch, proving the marker end to end. LUC-01 confirmed complete. `test-stage-native-root.sh` ran and passed locally; the deb/rpm/arch container tests themselves (Docker unavailable on this host) were checked with `bash -n` and careful review only -- their first real run is the `workflow_dispatch` release pipeline. Plan 47-04 remains.
+- Phase 47 Plan 04 implemented (2026-09-13, commits 082be287/1957c3fb/557b957c): `DecideAppImageApply` decides replace-or-keep as a pure function (path-known, staged-file-exists, dir-writable, file-writable, in that order, each with a pinned refusal reason); `onUpdateStaged()` branches on `PackageMode::AppImage` before the `DecideUpdaterLaunch`/`./updater` gate from plan 47-01, replaces `$APPIMAGE` with `std::rename` (not `QFile::rename`, which refuses an existing destination) after a `DecideAppImageApply` check, and relaunches through the existing `exit_reason = 2` path -- no fourth exit reason. `on_menu_exit_triggered()` now prefers `$APPIMAGE` over `QApplication::applicationFilePath()` on Linux, which also fixes the pre-existing "Restart Program" and Tun-admin-restart paths relaunching from the AppImage's dying per-run FUSE mount. Shipped in v1.6.8 (2026-09-12, commit `0134c1c1`; CI green at `5da27a15` after two unrelated container-test fixes). Task 3 (`checkpoint:human-verify`, the real replace-and-relaunch cycle) was **deferred, not approved**, by owner decision on 2026-09-25: verifying a self-update needs two releases that both contain this code, and only v1.6.8 exists so far, so the cycle becomes testable once v1.6.9 exists. LUC-04 remains unchecked in REQUIREMENTS.md pending that UAT. Phase 47 is otherwise complete -- all 5 plans implemented, LUC-01/02/03/05/06/07 confirmed complete, only LUC-04's runtime verification outstanding.
