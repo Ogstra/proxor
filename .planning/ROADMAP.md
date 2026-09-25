@@ -89,6 +89,7 @@ See: [`.planning/milestones/v2.1-ROADMAP.md`](.planning/milestones/v2.1-ROADMAP.
 - [ ] **Phase 02: Cross-Platform Package Distribution** — Windows portable ZIP + winget; Debian/Ubuntu `.deb`, Fedora RPM, source AUR, and restricted Flatpak (standalone delivery track)
 - [ ] **Phase 46: Hybrid SSID On-Demand** — Auto-connect on matching SSID, preserve manual control on non-matching SSIDs, and use sing-box Wi-Fi awareness only where it fits
 - [ ] **Phase 47: Linux Update Channels** — Detect the install channel and route updating to whoever owns the files, with a real self-update only where the app does
+- [ ] **Phase 48: Pinned Dependencies and Supported CI** — Verify every third-party source the build downloads, and move off action runtimes GitHub has deprecated
 
 ---
 
@@ -230,6 +231,24 @@ Plans:
 ---
 
 ## Backlog
+
+### Phase 48: Pinned Dependencies and Supported CI
+**Goal**: Nothing enters a release build unverified, and the pipeline stops depending on an action runtime GitHub has already deprecated
+**Depends on**: Phase 02 (the packaging paths these builds feed)
+**Requirements**: SUP-01, SUP-02, SUP-03, SUP-04, SUP-05, SUP-06
+**Success Criteria** (what must be TRUE):
+  1. Every third-party source libs/build_deps_all.sh downloads is verified against a recorded checksum, and a mismatch stops the build instead of compiling whatever arrived
+  2. Those checksums are the same values packaging/flatpak/io.github.Ogstra.Proxor.yml already verifies, so the two download paths cannot drift apart unnoticed
+  3. The protobuf source comes from a release archive pinned like the others, not from a git clone of a tag that can move
+  4. A CI run produces no Node runtime deprecation annotation, because no step uses an action version GitHub has deprecated
+  5. Every action is pinned to a commit SHA with its human-readable version alongside, which is what the workflow already does for most of them
+  6. The release pipeline still produces the same eight assets after the bump, proven by a dispatch run rather than by a push run alone
+**Plans**: 3 plans
+
+Plans:
+- [ ] 48-01-PLAN.md — Verify every third-party archive by sha256 and take protobuf off the mutable git tag (SUP-01/02/03)
+- [ ] 48-02-PLAN.md — Bump and SHA-pin every workflow action off the deprecated Node.js 20 runtime (SUP-04/05)
+- [ ] 48-03-PLAN.md — Prove the bumped pipeline still ships eight assets, via a workflow_dispatch release run (SUP-06)
 
 ### Phase 999.1: DataViewHtmlGenerator — Port Throne's DataViewHtmlGenerator to proxor (BACKLOG)
 
