@@ -150,7 +150,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends             libgl1-mesa-dev libglu1-mesa-dev libxkbcommon-dev libxkbcommon-x11-dev             libxcb1-dev libxcb-cursor-dev libxcb-icccm4-dev libxcb-image0-dev             libxcb-keysyms1-dev libxcb-randr0-dev libxcb-render-util0-dev             libxcb-shape0-dev libxcb-xinerama0-dev libxcb-xkb-dev             libfontconfig1-dev libfreetype-dev
       - name: Install MSVC compiler
         if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+        uses: egor-tensin/vs-shell@54e4148eac794e4580591c2e0b7750f14b7891fc # v2.2
         with:
           arch: ${{ matrix.arch }}
       # Official Qt via aqt instead of a self-hosted 7z. The previous approach depended on
@@ -167,8 +167,8 @@ jobs:
           # tools_opensslv3_x64 is Windows-only; Linux links the system OpenSSL.
           tools: ${{ matrix.qt_tools }}
           cache: true
-      - name: Install ninja-build tool
-        uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67 # v6
+      # No ninja setup step: every GitHub-hosted image ships it, and the only
+      # setup action available still ran on the retired Node 20 runtime.
       - name: Cache native dependencies
         id: cache-deps
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -395,7 +395,7 @@ jobs:
           tools: tools_opensslv3_x64
           cache: true
       - name: Install MSVC compiler
-        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+        uses: egor-tensin/vs-shell@54e4148eac794e4580591c2e0b7750f14b7891fc # v2.2
         with:
           arch: x64
       - name: Download Artifacts
