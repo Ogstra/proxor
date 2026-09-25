@@ -1,8 +1,11 @@
 #!/bin/bash
 set -e
 
+# Resolved before the cd below, so sourcing works whatever the caller's directory is.
+libs_dir="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+. "$libs_dir/build_deps_fetch.sh"
+
 cd libs
-. "$(dirname "$0")/build_deps_fetch.sh"
 
 # 参数
 if [ -z $cmake ]; then

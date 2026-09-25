@@ -2,8 +2,19 @@
 # Sourced, never executed: keep this file free of side effects.
 #
 # Everything this repository links into a shipped binary is verified before it is
-# used. shasum -a 256 is the tool because it exists in Git Bash on the Windows
-# runner as well as on Linux and macOS; sha256sum does not.
+# used. The tool differs by platform: Git Bash on the Windows runner ships
+# sha256sum and no shasum, while macOS ships shasum and no sha256sum, so take
+# whichever is present rather than assuming either.
+sha256_of() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d' ' -f1
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | cut -d' ' -f1
+  else
+    echo "no sha256 tool available (looked for sha256sum and shasum)" >&2
+    return 1
+  fi
+}
 fetch_verified() {
   fv_url=$1
   fv_expected=$2
@@ -17,7 +28,7 @@ fetch_verified() {
     return 1
   fi
 
-  fv_actual=$(shasum -a 256 "$fv_out" | cut -d' ' -f1)
+  fv_actual=$(sha256_of "$fv_out") || { rm -f "$fv_out"; return 1; }
   if [ "$fv_actual" != "$fv_expected" ]; then
     echo "checksum mismatch, refusing to build $fv_url" >&2
     echo "  expected: $fv_expected" >&2

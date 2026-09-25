@@ -18,8 +18,8 @@ fail() {
   FAILURES=$((FAILURES + 1))
 }
 
-command -v shasum >/dev/null 2>&1 || {
-  echo "FAIL: shasum -a 256 is required on this platform" >&2
+command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1 || {
+  echo "FAIL: neither sha256sum nor shasum is available on this platform" >&2
   exit 1
 }
 
@@ -39,7 +39,7 @@ to_file_url() {
 
 printf 'hello dependency pins' > "$TMPDIR_T/src.bin"
 SRC_URL=$(to_file_url "$TMPDIR_T")/src.bin
-REAL_HASH=$(shasum -a 256 "$TMPDIR_T/src.bin" | cut -d' ' -f1)
+REAL_HASH=$(sha256_of "$TMPDIR_T/src.bin")
 ZERO_HASH="0000000000000000000000000000000000000000000000000000000000000000"
 
 # --- correct hash: succeeds, output exists with original bytes ---
