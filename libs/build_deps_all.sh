@@ -2,6 +2,7 @@
 set -e
 
 cd libs
+. "$(dirname "$0")/build_deps_fetch.sh"
 
 # 参数
 if [ -z $cmake ]; then
@@ -22,6 +23,16 @@ if [ -n "$cmake_major" ] && [ "$cmake_major" -ge 4 ] 2>/dev/null; then
   echo "CMake $cmake_major detected; passing $CMAKE_COMPAT_ARGS to legacy dependencies."
 fi
 
+# Pinned by sha256. These same three archives are also verified by
+# packaging/flatpak/io.github.Ogstra.Proxor.yml, and
+# libs/tests/test-dependency-pins.sh fails the build if the two ever drift.
+ZXING_URL="https://github.com/nu-book/zxing-cpp/archive/refs/tags/v2.0.0.tar.gz"
+ZXING_SHA256="12b76b7005c30d34265fc20356d340da179b0b4d43d2c1b35bcca86776069f76"
+YAMLCPP_URL="https://github.com/jbeder/yaml-cpp/archive/refs/tags/yaml-cpp-0.7.0.tar.gz"
+YAMLCPP_SHA256="43e6a9fcb146ad871515f0d0873947e5d497a1c9c60c58cb102a97b47208b7c3"
+PROTOBUF_URL="https://github.com/protocolbuffers/protobuf/releases/download/v21.4/protobuf-all-21.4.tar.gz"
+PROTOBUF_SHA256="6c5e1b0788afba4569aeebb2cfe205cb154aa01deacaba0cd26442f3b761a836"
+
 # libs/deps/...
 mkdir -p $deps
 cd $deps
@@ -35,14 +46,17 @@ mkdir -p $INSTALL_PREFIX
 
 #### clean ####
 clean() {
-  rm -rf dl.zip yaml-* zxing-* protobuf
+  # dl.zip and the bare protobuf/ dir are pre-this-change leftovers that a
+  # libs/deps tree from before this plan may still hold; keep removing them
+  # so clean actually cleans an old tree, not just a fresh one.
+  rm -rf dl-*.tar.gz dl.zip zxing-* yaml-* protobuf protobuf-21.4
 }
 
 #### ZXing v2.0.0 ####
-curl -L -o dl.zip https://github.com/nu-book/zxing-cpp/archive/refs/tags/v2.0.0.zip
-unzip dl.zip
+fetch_verified "$ZXING_URL" "$ZXING_SHA256" dl-zxing.tar.gz
+tar xzf dl-zxing.tar.gz
 
-cd zxing-*
+cd zxing-cpp-2.0.0
 mkdir -p build
 cd build
 
@@ -57,10 +71,10 @@ ninja && ninja install
 cd ../..
 
 #### yaml-cpp ####
-curl -L -o dl.zip https://github.com/jbeder/yaml-cpp/archive/refs/tags/yaml-cpp-0.7.0.zip
-unzip dl.zip
+fetch_verified "$YAMLCPP_URL" "$YAMLCPP_SHA256" dl-yaml.tar.gz
+tar xzf dl-yaml.tar.gz
 
-cd yaml-*
+cd yaml-cpp-yaml-cpp-0.7.0
 mkdir -p build
 cd build
 
@@ -75,12 +89,16 @@ ninja && ninja install
 cd ../..
 
 #### protobuf ####
-git clone --recurse-submodules -b v21.4 --depth 1 --shallow-submodules https://github.com/protocolbuffers/protobuf
+# protobuf-all is the -all variant precisely because it carries the vendored
+# third_party/ (including googletest) that used to come from the old
+# submodule-recursive checkout, so nothing else has to be fetched separately.
+fetch_verified "$PROTOBUF_URL" "$PROTOBUF_SHA256" dl-protobuf.tar.gz
+tar xzf dl-protobuf.tar.gz
 
 #备注：交叉编译要在 host 也安装 protobuf 并且版本一致,编译安装，同参数，安装到 /usr/local
 
-mkdir -p protobuf/build
-cd protobuf/build
+mkdir -p protobuf-21.4/build
+cd protobuf-21.4/build
 
 $cmake .. -GNinja \
   -DCMAKE_BUILD_TYPE=Release \
