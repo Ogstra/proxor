@@ -89,7 +89,7 @@ See: [`.planning/milestones/v2.1-ROADMAP.md`](.planning/milestones/v2.1-ROADMAP.
 - [ ] **Phase 02: Cross-Platform Package Distribution** — Windows portable ZIP + winget; Debian/Ubuntu `.deb`, Fedora RPM, source AUR, and restricted Flatpak (standalone delivery track)
 - [ ] **Phase 46: Hybrid SSID On-Demand** — Auto-connect on matching SSID, preserve manual control on non-matching SSIDs, and use sing-box Wi-Fi awareness only where it fits
 - [ ] **Phase 47: Linux Update Channels** — Detect the install channel and route updating to whoever owns the files, with a real self-update only where the app does
-- [ ] **Phase 48: Pinned Dependencies and Supported CI** — Verify every third-party source the build downloads, and move off action runtimes GitHub has deprecated
+- [x] **Phase 48: Pinned Dependencies and Supported CI** — Verify every third-party source the build downloads, and move off action runtimes GitHub has deprecated — complete 2026-09-25, shipped in v1.6.9
 
 ---
 
@@ -222,11 +222,11 @@ Plans:
 - [x] 47-02-PLAN.md — Channel detection from markers and per-channel update guidance in the dialog (wave 2)
 - [x] 47-03-PLAN.md — Core reports assets per channel and verifies downloads against SHA256SUMS (wave 3)
 - [x] 47-05-PLAN.md — Channel marker in the deb, rpm and Arch packages (wave 3, parallel with 47-03)
-- [x] 47-04-PLAN.md — AppImage replaces and relaunches its own file (wave 4) — implemented, UAT deferred (Task 3's real replace-and-relaunch cycle needs a v1.6.9 to update into; only v1.6.8 exists so far)
+- [x] 47-04-PLAN.md — AppImage replaces and relaunches its own file (wave 4) — implemented, UAT deferred (Task 3's real replace-and-relaunch cycle is now testable: v1.6.8 and v1.6.9 both exist)
 
 ---
 
-*Last updated: 2026-09-25 — Phase 47 complete, UAT outstanding on 47-04's AppImage self-update*
+*Last updated: 2026-09-25 — Phase 48 complete (v1.6.9); Phase 47 UAT on 47-04's AppImage self-update now unblocked*
 
 ---
 
@@ -247,8 +247,8 @@ Plans:
 
 Plans:
 - [x] 48-01-PLAN.md — Verify every third-party archive by sha256 and take protobuf off the mutable git tag (SUP-01/02/03)
-- [ ] 48-02-PLAN.md — Bump and SHA-pin every workflow action off the deprecated Node.js 20 runtime (SUP-04/05)
-- [ ] 48-03-PLAN.md — Prove the bumped pipeline still ships eight assets, via a workflow_dispatch release run (SUP-06)
+- [x] 48-02-PLAN.md — Bump and SHA-pin every workflow action off the deprecated Node.js 20 runtime (SUP-04/05) — complete: zero Node deprecation annotations on push run 36178662655 and release run 36182003970; ninja setup dropped (preinstalled on runners), msvc-dev-cmd replaced by egor-tensin/vs-shell v2.2, install-qt-action to v4.4.1; guard .github/tests/test-action-pins.sh
+- [x] 48-03-PLAN.md — Prove the bumped pipeline still ships eight assets, via a workflow_dispatch release run (SUP-06) — complete: v1.6.9 prerelease from dispatch run 36182003970, eight assets, SHA256SUMS revalidated against the published files
 
 ### Phase 999.1: DataViewHtmlGenerator — Port Throne's DataViewHtmlGenerator to proxor (BACKLOG)
 
