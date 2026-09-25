@@ -1,0 +1,40 @@
+# Without this file the repository stored whatever line endings each contributor's
+# machine produced: 186 files were committed with CRLF, 462 with LF and 32 with both
+# mixed inside one file. That turned an ordinary checkout into a diff of hundreds of
+# files and repeatedly buried real changes inside line-ending noise.
+* text=auto
+
+# Scripts that a shell runs must not carry CR, and the Windows shells want it.
+*.sh text eol=lf
+*.bash text eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Content where the exact bytes matter.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.xz binary
+*.zst binary
+*.7z binary
+*.dll binary
+*.exe binary
+*.so binary
+*.dylib binary
+*.a binary
+*.lib binary
+*.pdb binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.dat binary
+*.db binary
+*.qm binary
