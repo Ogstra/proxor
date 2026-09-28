@@ -8,6 +8,8 @@ case "${GOOS:-}/${GOARCH:-}" in
   windows/arm64) DEST="$DEPLOYMENT/windows-arm64" ;;
   linux/amd64) DEST="$DEPLOYMENT/linux64" ;;
   linux/arm64) DEST="$DEPLOYMENT/linux-arm64" ;;
+  darwin/arm64) DEST="$DEPLOYMENT/macos-arm64" ;;
+  darwin/amd64) DEST="$DEPLOYMENT/macos-amd64" ;;
   *)
     echo "Unsupported target: ${GOOS:-unset}/${GOARCH:-unset}" >&2
     exit 1

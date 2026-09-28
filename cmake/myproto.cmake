@@ -1,4 +1,7 @@
-if (WIN32)
+if (WIN32 OR APPLE)
+    # Homebrew protobuf's CONFIG package carries absl::* and utf8_range in its interface;
+    # CMake's FindProtobuf module does not, and ld64 does not resolve symbols through
+    # indirect dylibs, so module mode leaves undefined absl:: symbols on macOS.
     find_package(Protobuf CONFIG REQUIRED)
 else ()
     find_package(Protobuf REQUIRED)

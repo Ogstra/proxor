@@ -64,7 +64,9 @@ int main(int argc, char* argv[]) {
         if (QFile::exists("updater.old")) {
             QFile::remove("updater.old");
         }
-#ifndef Q_OS_WIN
+        // macOS has no launcher or updater, and the package root is inside the signed
+        // .app, so the symlink would dangle and invalidate the bundle seal.
+#if !defined(Q_OS_WIN) && !defined(Q_OS_MACOS)
         if (!QFile::exists("updater")) {
             QFile::link("launcher", "updater");
         }

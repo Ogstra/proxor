@@ -29,7 +29,9 @@ endif ()
 
 # Find Qt
 set(PROXOR_LOCAL_QT_DIR "${CMAKE_SOURCE_DIR}/qtsdk/Qt")
-if (EXISTS "${PROXOR_LOCAL_QT_DIR}/lib/cmake")
+# qtsdk/Qt is the Windows MSVC Qt SDK and must never be used on macOS, even when it
+# happens to exist on disk (e.g. a shared checkout also used for Windows builds).
+if (NOT APPLE AND EXISTS "${PROXOR_LOCAL_QT_DIR}/lib/cmake")
     list(PREPEND CMAKE_PREFIX_PATH "${PROXOR_LOCAL_QT_DIR}")
 endif ()
 
@@ -58,6 +60,8 @@ endif ()
 #### Platform Variables ####
 if (WIN32)
     include("cmake/windows/windows.cmake")
+elseif (APPLE)
+    include("cmake/macos/macos.cmake")
 else ()
     include("cmake/linux/linux.cmake")
 endif ()
@@ -355,6 +359,17 @@ if (WIN32)
         set_property(TARGET proxor APPEND_STRING PROPERTY LINK_FLAGS " /MANIFESTUAC:\"level='requireAdministrator' uiAccess='false'\"")
         set_property(TARGET ${PROXOR_GUI_TARGET} APPEND_STRING PROPERTY LINK_FLAGS " /MANIFESTUAC:\"level='requireAdministrator' uiAccess='false'\"")
     endif ()
+endif ()
+
+if (APPLE)
+    set_target_properties(${PROXOR_GUI_TARGET} PROPERTIES
+            MACOSX_BUNDLE TRUE
+            OUTPUT_NAME "Proxor"
+            MACOSX_BUNDLE_BUNDLE_NAME "Proxor"
+            MACOSX_BUNDLE_GUI_IDENTIFIER "io.github.Ogstra.Proxor"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "${NKR_VERSION}"
+            MACOSX_BUNDLE_BUNDLE_VERSION "${NKR_VERSION}"
+    )
 endif ()
 
 # Target Link
