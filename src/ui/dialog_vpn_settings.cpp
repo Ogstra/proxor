@@ -16,6 +16,19 @@
 
 #include <algorithm>
 
+#ifdef Q_OS_MACOS
+#include "sys/macos/MacHelperClient.h"
+#include "sys/macos/MacHelperInstaller.h"
+
+#include <QGroupBox>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QPointer>
+#include <QPushButton>
+
+#include <memory>
+#endif
+
 DialogVPNSettings::DialogVPNSettings(QWidget *parent) : QDialog(parent), ui(new Ui::DialogVPNSettings) {
     ui->setupUi(this);
     ADD_ASTERISK(this);
@@ -32,6 +45,95 @@ DialogVPNSettings::DialogVPNSettings(QWidget *parent) : QDialog(parent), ui(new 
 #endif
     ui->strict_route->setChecked(ProxorGui::dataStore->vpn_strict_route);
     ui->single_core->setChecked(ProxorGui::dataStore->vpn_internal_tun);
+#ifdef Q_OS_MACOS
+    // The single-core Tun option does not apply on macOS (Tun runs in the Proxor service).
+    ui->single_core->setVisible(false);
+    {
+        auto *box = new QGroupBox(tr("Tun service"), this);
+        auto *boxLayout = new QVBoxLayout(box);
+        auto *status = new QLabel(box);
+        status->setWordWrap(true);
+        auto *buttons = new QHBoxLayout();
+        auto *install = new QPushButton(box);
+        auto *remove = new QPushButton(tr("Remove Tun service"), box);
+        buttons->addWidget(install);
+        buttons->addWidget(remove);
+        buttons->addStretch();
+        boxLayout->addWidget(status);
+        boxLayout->addLayout(buttons);
+
+        // Insert above the bottom row (whitelist / troubleshooting / OK-Cancel).
+        if (auto *vbox = qobject_cast<QVBoxLayout *>(layout()))
+            vbox->insertWidget(std::max(0, vbox->count() - 1), box);
+        else
+            layout()->addWidget(box);
+
+        auto state = std::make_shared<MacHelperState>(MacHelperState::NotInstalled);
+
+        // Copyable and self-contained: also captured by the async install/remove callbacks.
+        const auto refresh = [status, install, remove, state]() {
+            const auto probe = MacHelper()->probe(1000);
+            *state = ClassifyMacHelper(probe);
+            install->setVisible(true);
+            install->setEnabled(true);
+            remove->setEnabled(true);
+            switch (*state) {
+            case MacHelperState::NotInstalled:
+                status->setText(tr("Not installed. Turning on Tun Mode or System Proxy installs it (one administrator password prompt)."));
+                install->setText(tr("Install"));
+                remove->setEnabled(false);
+                break;
+            case MacHelperState::InstalledNotRunning:
+                status->setText(tr("Installed but not running. Allow Proxor in System Settings > General > Login Items & Extensions, or reinstall."));
+                install->setText(tr("Reinstall"));
+                break;
+            case MacHelperState::NotAuthorized:
+                status->setText(tr("Installed by another user of this Mac; it does not accept this user yet."));
+                install->setText(tr("Allow this user"));
+                // Removing it would break the other user's Tun; they can remove it themselves.
+                remove->setEnabled(false);
+                break;
+            case MacHelperState::Outdated:
+                status->setText(tr("Installed, needs an update for this version of Proxor."));
+                install->setText(tr("Update"));
+                break;
+            case MacHelperState::Ready:
+                status->setText(tr("Running (service %1, sing-box %2).").arg(probe.build, probe.singbox));
+                install->setVisible(false);
+                break;
+            }
+        };
+
+        QPointer<DialogVPNSettings> self(this);
+
+        connect(install, &QPushButton::clicked, this, [this, self, refresh, state] {
+            MacHelperInstaller::ConfirmAndInstall(
+                this, tr("Tun Mode"), DecideMacHelperEnable(*state), [self, refresh](MacAdminScriptResult r) {
+                    if (!self) return;
+                    refresh();
+                    if (r.outcome == MacAdminScriptOutcome::Failed)
+                        MessageBoxWarning(software_name, tr("The Proxor service could not be installed: %1").arg(r.reason));
+                });
+        });
+
+        connect(remove, &QPushButton::clicked, this, [this, self, refresh] {
+            const auto answer = QMessageBox::question(
+                this, tr("Remove Tun service"),
+                tr("Remove the Proxor Tun service? Tun Mode and System Proxy will be turned off. You can install it again later."));
+            if (answer != QMessageBox::Yes) return;
+            GetMainWindow()->proxor_set_spmode_vpn(false);
+            GetMainWindow()->proxor_set_spmode_system_proxy(false);
+            MacHelperInstaller::Uninstall(this, [self, refresh](MacAdminScriptResult r) {
+                if (!self) return;
+                refresh();
+                if (r.outcome == MacAdminScriptOutcome::Failed)
+                    MessageBoxWarning(software_name, tr("The Proxor service could not be removed: %1").arg(r.reason));
+            });
+        });
+
+        refresh();
+    }
+#endif
     //
     D_LOAD_STRING_PLAIN(vpn_rule_cidr)
     D_LOAD_STRING_PLAIN(vpn_rule_process)
