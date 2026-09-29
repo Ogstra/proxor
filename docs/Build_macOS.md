@@ -65,3 +65,18 @@ confirmed at runtime as `Install channel: portable` in the app log). The default
   attribute first: `xattr -dr com.apple.quarantine Proxor.app`, or right-click and choose Open.
 - Not supported on macOS yet: TUN mode, system proxy, autorun, self-update (update checks
   report no compatible package for this platform), a DMG installer, and an app icon (`.icns`).
+- The menu-bar icon is an app-owned `NSStatusItem`, not `QSystemTrayIcon`: Qt 6.11's tray icon
+  crashes on macOS 27 when its menu opens (it reads `-[NSEvent clickCount]` on a system-defined
+  event). Settings > Appearance > Tray Icon has a "Colored menu bar icon" checkbox; unchecked, the
+  icon is a monochrome template image that macOS tints for the light/dark menu bar (running = both
+  arcs solid, stopped = one arc faint).
+- Cmd+Q and Dock > Quit run Proxor's normal exit (they stop `proxor_core` too). Exit, Settings and
+  About stay in Proxor's own menus; the macOS application menu carries its own Settings... (Cmd+,)
+  and About Proxor entries.
+- "Windows Classic" is not offered on macOS, and the System theme is the native macOS look,
+  following the OS light/dark appearance live: a toolbar with native push buttons, flat tabs and
+  headers, rounded fields, and native `NSMenu` popups. The runtime look lives in `src/ui/mac/`
+  (`MacPlatform.mm`, `MacLook.cpp`, `MacDialogs.cpp`); the shared `.ui` files are not edited for it.
+- Subscription requests send `User-Agent: Proxor/macOS/<version>`, `X-Device-OS: macOS` and
+  `X-Device-Model: <hw.model>` (for example `Mac15,6`). The "include computer/user name" options
+  do not apply on macOS and are hidden.
