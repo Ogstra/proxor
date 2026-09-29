@@ -18,6 +18,7 @@
 
 #ifdef Q_OS_MACOS
 #include "sys/macos/MacHelperClient.h"
+#include "sys/macos/MacHelperService.h"
 #include "sys/macos/MacHelperInstaller.h"
 
 #include <QGroupBox>
@@ -70,41 +71,48 @@ DialogVPNSettings::DialogVPNSettings(QWidget *parent) : QDialog(parent), ui(new 
 
         auto state = std::make_shared<MacHelperState>(MacHelperState::NotInstalled);
 
-        // Copyable and self-contained: also captured by the async install/remove callbacks.
-        const auto refresh = [status, install, remove, state]() {
-            const auto probe = MacHelper()->probe(1000);
-            *state = ClassifyMacHelper(probe);
-            install->setVisible(true);
-            install->setEnabled(true);
-            remove->setEnabled(true);
-            switch (*state) {
-            case MacHelperState::NotInstalled:
-                status->setText(tr("Not installed. Turning on Tun Mode or System Proxy installs it (one administrator password prompt)."));
-                install->setText(tr("Install"));
-                remove->setEnabled(false);
-                break;
-            case MacHelperState::InstalledNotRunning:
-                status->setText(tr("Installed but not running. Allow Proxor in System Settings > General > Login Items & Extensions, or reinstall."));
-                install->setText(tr("Reinstall"));
-                break;
-            case MacHelperState::NotAuthorized:
-                status->setText(tr("Installed by another user of this Mac; it does not accept this user yet."));
-                install->setText(tr("Allow this user"));
-                // Removing it would break the other user's Tun; they can remove it themselves.
-                remove->setEnabled(false);
-                break;
-            case MacHelperState::Outdated:
-                status->setText(tr("Installed, needs an update for this version of Proxor."));
-                install->setText(tr("Update"));
-                break;
-            case MacHelperState::Ready:
-                status->setText(tr("Running (service %1, sing-box %2).").arg(probe.build, probe.singbox));
-                install->setVisible(false);
-                break;
-            }
-        };
-
         QPointer<DialogVPNSettings> self(this);
+
+        // Copyable and self-contained: also captured by the async install/remove callbacks. The probe never
+        // blocks the UI thread; the classification is applied when it answers (and only if the dialog is alive).
+        const auto refresh = [self, status, install, remove, state]() {
+            if (!self) return;
+            status->setText(tr("Checking..."));
+            install->setEnabled(false);
+            remove->setEnabled(false);
+            MacHelperSvc()->probe(self.data(), 1000, [self, status, install, remove, state](const MacHelperProbe &probe, MacHelperState st) {
+                if (!self) return;
+                *state = st;
+                install->setVisible(true);
+                install->setEnabled(true);
+                remove->setEnabled(true);
+                switch (st) {
+                case MacHelperState::NotInstalled:
+                    status->setText(tr("Not installed. Turning on Tun Mode or System Proxy installs it (one administrator password prompt)."));
+                    install->setText(tr("Install"));
+                    remove->setEnabled(false);
+                    break;
+                case MacHelperState::InstalledNotRunning:
+                    status->setText(tr("Installed but not running. Allow Proxor in System Settings > General > Login Items & Extensions, or reinstall."));
+                    install->setText(tr("Reinstall"));
+                    break;
+                case MacHelperState::NotAuthorized:
+                    status->setText(tr("Installed by another user of this Mac; it does not accept this user yet."));
+                    install->setText(tr("Allow this user"));
+                    // Removing it would break the other user's Tun; they can remove it themselves.
+                    remove->setEnabled(false);
+                    break;
+                case MacHelperState::Outdated:
+                    status->setText(tr("Installed, needs an update for this version of Proxor."));
+                    install->setText(tr("Update"));
+                    break;
+                case MacHelperState::Ready:
+                    status->setText(tr("Running (service %1, sing-box %2).").arg(probe.build, probe.singbox));
+                    install->setVisible(false);
+                    break;
+                }
+            });
+        };
 
         connect(install, &QPushButton::clicked, this, [this, self, refresh, state] {
             MacHelperInstaller::ConfirmAndInstall(

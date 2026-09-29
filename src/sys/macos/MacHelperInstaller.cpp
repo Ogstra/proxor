@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 #include "MacHelperClient.h"
+#include "MacHelperService.h"
 #include "main/ProxorGui.hpp"
 
 namespace {
@@ -84,19 +85,29 @@ void runAdminScript(const QString &script, const QStringList &args, DoneFn done)
                 {QStringLiteral("-e"), MacAdminAppleScript(QStringLiteral("/bin/sh"), QStringList{script} + args)});
 }
 
-// After a successful install: wait (bounded, one short probe per tick) until the helper answers.
+// After a successful install: wait (bounded, one short async probe per tick) until the helper answers.
+// Never starts a new probe while one is in flight.
 void waitUntilReady(DoneFn done) {
     auto *timer = new QTimer(qApp);
     auto attempts = std::make_shared<int>(0);
-    QObject::connect(timer, &QTimer::timeout, timer, [timer, attempts, done] {
+    auto inFlight = std::make_shared<bool>(false);
+    auto finished = std::make_shared<bool>(false);
+    QObject::connect(timer, &QTimer::timeout, timer, [timer, attempts, inFlight, finished, done] {
+        if (*finished) return;
         ++*attempts;
-        if (MacHelper()->state(500) == MacHelperState::Ready) {
-            timer->stop();
-            timer->deleteLater();
-            done({MacAdminScriptOutcome::Ok, QString()});
-            return;
+        if (!*inFlight) {
+            *inFlight = true;
+            MacHelperSvc()->probe(timer, 500, [timer, inFlight, finished, done](const MacHelperProbe &, MacHelperState st) {
+                *inFlight = false;
+                if (*finished || st != MacHelperState::Ready) return;
+                *finished = true;
+                timer->stop();
+                timer->deleteLater();
+                done({MacAdminScriptOutcome::Ok, QString()});
+            });
         }
-        if (*attempts >= kReadyPollAttempts) {
+        if (*attempts >= kReadyPollAttempts && !*finished) {
+            *finished = true;
             timer->stop();
             timer->deleteLater();
             done({MacAdminScriptOutcome::Failed,
@@ -160,21 +171,30 @@ void MacHelperInstaller::ConfirmAndInstall(QWidget *parent, const QString &featu
 
 void MacHelperInstaller::Uninstall(QWidget *parent, std::function<void(MacAdminScriptResult)> done) {
     Q_UNUSED(parent);
-    if (MacHelper()->state() == MacHelperState::Ready) {
-        const MacHelperClient::Reply reply = MacHelper()->uninstall();
-        if (reply.ok) {
-            MacHelper()->disconnectFromHelper();
-            done({MacAdminScriptOutcome::Ok, QString()});
+    // Fallback: the bundled script through one administrator prompt (helper not reachable, or it refused).
+    auto viaScript = [done] {
+        const QString script = BundledScriptPath(QStringLiteral("helper-uninstall.sh"));
+        if (script.isEmpty()) {
+            done({MacAdminScriptOutcome::Failed, tr("uninstaller script not found in the app bundle")});
             return;
         }
-    }
-    const QString script = BundledScriptPath(QStringLiteral("helper-uninstall.sh"));
-    if (script.isEmpty()) {
-        done({MacAdminScriptOutcome::Failed, tr("uninstaller script not found in the app bundle")});
-        return;
-    }
-    runAdminScript(script, {}, [done](MacAdminScriptResult result) {
-        if (result.outcome == MacAdminScriptOutcome::Ok) MacHelper()->disconnectFromHelper();
-        done(result);
+        runAdminScript(script, {}, [done](MacAdminScriptResult result) {
+            if (result.outcome == MacAdminScriptOutcome::Ok) MacHelperSvc()->disconnectFromHelper();
+            done(result);
+        });
+    };
+    MacHelperSvc()->probe(qApp, 1000, [done, viaScript](const MacHelperProbe &, MacHelperState st) {
+        if (st != MacHelperState::Ready) {
+            viaScript();
+            return;
+        }
+        MacHelperSvc()->uninstall(qApp, 10000, [done, viaScript](const MacHelperService::Reply &reply) {
+            if (reply.ok) {
+                MacHelperSvc()->disconnectFromHelper();
+                done({MacAdminScriptOutcome::Ok, QString()});
+                return;
+            }
+            viaScript();
+        });
     });
 }

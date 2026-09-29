@@ -1166,14 +1166,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     const bool restore_system_proxy = ProxorGui::dataStore->remember_spmode.contains("system_proxy");
 #ifdef Q_OS_MACOS
-    // Restore a remembered Tun only when the installed helper answers (MacHelperPolicy). A missing,
-    // stopped, foreign-user or outdated helper must never hold profile starts or prompt at startup.
-    // Fresh configs land here too: DataStore defaults remember_spmode to {"vpn"}.
+    // A remembered Tun holds the remembered profile only until the asynchronous helper probe answers
+    // (macStartupProbed, bounded by a safety timer): Ready restores it, any other state starts the profile
+    // without Tun (MacHelperPolicy). Fresh configs land here too: DataStore defaults remember_spmode to {"vpn"}.
     const bool mac_remembered_vpn = ProxorGui::dataStore->remember_spmode.contains("vpn") || ProxorGui::dataStore->flag_restart_tun_on;
-    const auto mac_helper_state = (mac_remembered_vpn || restore_system_proxy) ? MacHelper()->state(1000) : MacHelperState::NotInstalled;
-    const auto mac_tun_startup = DecideMacTunStartup(mac_remembered_vpn, mac_helper_state);
-    const bool restore_vpn = mac_tun_startup.setStartupTunPending;
-    if (!mac_tun_startup.logLine.isEmpty()) setTimeout([=] { MW_show_log(mac_tun_startup.logLine); }, this, 0);
+    mac_startup_probe_pending = mac_remembered_vpn || restore_system_proxy;
+    const bool restore_vpn = mac_remembered_vpn; // provisional until the probe answers
 #else
     const bool restore_vpn = ProxorGui::dataStore->remember_spmode.contains("vpn") || ProxorGui::dataStore->flag_restart_tun_on;
 #endif
@@ -1285,8 +1283,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     if (ProxorGui::dataStore->remember_enable || ProxorGui::dataStore->flag_restart_tun_on || restore_vpn) {
         setTimeout([=] {
 #ifdef Q_OS_MACOS
-            mac_spmode_restoring = true;
-#endif
+            macStartupRestore(restore_system_proxy, restore_vpn);
+#else
             if (restore_system_proxy) {
                 proxor_set_spmode_system_proxy(true, false);
             }
@@ -1298,8 +1296,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
                     failStartupTunAuthorization();
                 }
             }
-#ifdef Q_OS_MACOS
-            mac_spmode_restoring = false;
 #endif
         }, this, 0);
     }
@@ -2085,6 +2081,9 @@ void MainWindow::on_menu_exit_triggered() {
     // QCoreApplication::quit() ends in -[NSApp terminate:], which sends another spontaneous
     // QEvent::Quit; let it through now that the real exit path has finished.
     ProxorMac::AllowQuit();
+    // Deliberate lease close: the helper stops Tun and restores the proxy. The window is already hidden,
+    // so waiting here (bounded) does not freeze anything visible; queued restores run before it (FIFO).
+    MacHelperSvc()->shutdown(3000);
 #endif
     QCoreApplication::quit();
 }
@@ -3823,6 +3822,60 @@ void MainWindow::macTunFailed(const QString &reason) {
     const auto text = MacTunFailureText(mac_tun_failure_reason);
     MW_show_log(text);
     MessageBoxWarning(software_name, text);
+}
+
+void MainWindow::macStartupRestore(bool rememberedSystemProxy, bool rememberedTun) {
+    if (!mac_startup_probe_pending) return; // nothing remembered: nothing to restore
+    MacHelperSvc()->probe(this, 1000, [this, rememberedTun, rememberedSystemProxy](const MacHelperProbe &, MacHelperState st) {
+        macStartupProbed(st, rememberedTun, rememberedSystemProxy);
+    });
+    // Safety net: a probe that never answers must not hold the remembered profile forever.
+    if (!mac_startup_probe_timer) {
+        mac_startup_probe_timer = new QTimer(this);
+        mac_startup_probe_timer->setSingleShot(true);
+        connect(mac_startup_probe_timer, &QTimer::timeout, this, [this, rememberedTun, rememberedSystemProxy] {
+            macStartupProbed(MacHelperState::InstalledNotRunning, rememberedTun, rememberedSystemProxy);
+        });
+    }
+    mac_startup_probe_timer->start(8000);
+}
+
+void MainWindow::macStartupProbed(MacHelperState st, bool rememberedTun, bool rememberedSystemProxy) {
+    if (!mac_startup_probe_pending) return; // runs at most once (probe answer or safety timer)
+    mac_startup_probe_pending = false;
+    if (mac_startup_probe_timer) mac_startup_probe_timer->stop();
+    const auto d = DecideMacTunStartup(rememberedTun, st);
+    if (st == MacHelperState::Ready) {
+        mac_spmode_restoring = true;
+        if (rememberedSystemProxy) {
+            proxor_set_spmode_system_proxy(true, false);
+        }
+        if (rememberedTun && d.setStartupTunPending) {
+            proxor_set_spmode_vpn(true, false);
+            if (ProxorGui::UseInternalTun() && ProxorGui::dataStore->spmode_vpn) {
+                completeStartupTunAuthorization();
+            } else if (!ProxorGui::UseInternalTun() && !ProxorGui::dataStore->spmode_vpn) {
+                failStartupTunAuthorization();
+            }
+        }
+        mac_spmode_restoring = false;
+    } else {
+        // Not Ready: never block, never prompt here (the startup install prompt belongs to a later plan).
+        if (!d.logLine.isEmpty()) MW_show_log(d.logLine);
+        if (startup_tun_pending) {
+            // Release the hold without deadlock: the same steps as the "should be impossible" branch of proxor_set_spmode_vpn.
+            startup_tun_pending = false;
+            startup_tun_authorized = false;
+            if (!ProxorGui::dataStore->prepare_exit) resumeDeferredStartupProfile();
+            if (startup_network_work) {
+                auto w = std::move(startup_network_work);
+                w();
+            }
+        }
+        if (rememberedSystemProxy) {
+            MW_show_log(tr("System Proxy is remembered, but the Proxor service is not available; leaving it off. Turn on System Proxy to install the service."));
+        }
+    }
 }
 
 void MainWindow::macOnTunReady() {

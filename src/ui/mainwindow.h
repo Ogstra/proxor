@@ -195,6 +195,10 @@ private:
     void macOnTunReady();
     void macOnTunStopped(const QString &reason);
     void macOnHelperLost();
+    bool mac_startup_probe_pending = false;
+    QTimer *mac_startup_probe_timer = nullptr;
+    void macStartupRestore(bool rememberedSystemProxy, bool rememberedTun);
+    void macStartupProbed(MacHelperState st, bool rememberedTun, bool rememberedSystemProxy);
     bool mac_sysproxy_parked = false;
     void macApplySystemProxy(bool interactive, bool saved = false);
     void macParkSystemProxy();

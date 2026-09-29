@@ -123,8 +123,6 @@ private:
     MacHelperProbe hello_; // protocol/build/singbox of the live session
 };
 
-MacHelperClient *MacHelper(); // app singleton, UI thread only
-
 QString MacShellQuote(const QString &value);
 // "do shell script <quoted command> <admin privileges clause>" for `osascript -e`.
 QString MacAdminAppleScript(const QString &program, const QStringList &args);

@@ -341,11 +341,6 @@ MacHelperClient::Reply MacHelperClient::uninstall(int timeoutMs) {
     return request(req, timeoutMs);
 }
 
-MacHelperClient *MacHelper() {
-    static MacHelperClient *instance = new MacHelperClient();
-    return instance;
-}
-
 QString MacShellQuote(const QString &value) {
     QString escaped = value;
     escaped.replace(QLatin1Char('\''), QStringLiteral("'\"'\"'"));

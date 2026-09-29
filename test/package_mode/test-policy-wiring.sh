@@ -22,7 +22,7 @@ grep -q 'APPIMAGE' "$repo_root/src/ui/mainwindow.cpp"
 # macOS Tun through the Proxor service (phase 50)
 grep -q 'DecideMacTunStartup' "$repo_root/src/ui/mainwindow.cpp"
 grep -q 'DecideMacHelperEnable' "$repo_root/src/ui/mainwindow.cpp"
-grep -q 'MacHelper()->tunStart' "$repo_root/src/ui/mainwindow.cpp"
+grep -q 'MacHelperSvc()->tunStart' "$repo_root/src/ui/mainwindow.cpp"
 grep -q 'MacTunFailureText' "$repo_root/src/ui/mainwindow_grpc.cpp"
 grep -q 'mac_stop_keeps_remembered_profile' "$repo_root/src/ui/mainwindow_grpc.cpp"
 grep -q 'src/sys/macos/MacHelperPolicy.cpp' "$repo_root/cmake/macos/macos.cmake"
@@ -35,8 +35,17 @@ if grep -q 'Tun mode is not available on macOS yet' "$repo_root/src/ui/mainwindo
   exit 1
 fi
 # macOS System Proxy through the Proxor service (phase 50): toggle, restore on user stop, re-apply on start
-grep -q 'MacHelper()->sysproxyApply' "$repo_root/src/ui/mainwindow.cpp"
-grep -q 'MacHelper()->sysproxyRestore' "$repo_root/src/ui/mainwindow.cpp"
+grep -q 'MacHelperSvc()->sysproxyApply' "$repo_root/src/ui/mainwindow.cpp"
+grep -q 'MacHelperSvc()->sysproxyRestore' "$repo_root/src/ui/mainwindow.cpp"
 grep -q 'macParkSystemProxy' "$repo_root/src/ui/mainwindow_grpc.cpp"
 grep -q 'macApplySystemProxy' "$repo_root/src/ui/mainwindow_grpc.cpp"
 grep -q '!sem && ProxorGui::dataStore->spmode_system_proxy && !ProxorGui::dataStore->prepare_exit' "$repo_root/src/ui/mainwindow_grpc.cpp"
+# The GUI never waits for the helper: async facade call sites, async startup probe, bounded exit close.
+grep -q 'MacHelperSvc()->probe' "$repo_root/src/ui/mainwindow.cpp"
+grep -q 'macStartupProbed' "$repo_root/src/ui/mainwindow.cpp"
+grep -q 'MacHelperSvc()->shutdown' "$repo_root/src/ui/mainwindow.cpp"
+grep -q 'src/sys/macos/MacHelperService.cpp' "$repo_root/cmake/macos/macos.cmake"
+if grep -rnE 'MacHelper\(\)' "$repo_root/src" >/dev/null; then
+  echo "test-policy-wiring.sh: the synchronous helper singleton is back" >&2
+  exit 1
+fi
