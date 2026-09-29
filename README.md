@@ -46,6 +46,10 @@ Current version: `1.6.9`
 
 If the application reports missing runtime DLLs, install the [Microsoft Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe).
 
+### macOS
+
+Apple Silicon Macs running macOS 15 or later install Proxor with Homebrew: `brew install --cask ogstra/tap/proxor`, and update it with `brew upgrade --cask proxor`. The app is ad-hoc signed and not notarized; the cask clears the quarantine flag. See [Build on macOS](docs/Build_macOS.md).
+
 ### Linux
 
 Linux releases provide the retained x86_64 AppImage plus native Debian/Ubuntu `.deb`, Fedora
