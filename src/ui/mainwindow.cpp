@@ -1051,6 +1051,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     connect(ui->actionShow_window, &QAction::triggered, this, [=] { tray->activated(QSystemTrayIcon::ActivationReason::Trigger); });
     //
     connect(ui->checkBox_VPN, &QCheckBox::clicked, this, [=](bool checked) { proxor_set_spmode_vpn(checked); });
+#ifdef Q_OS_MACOS
+    ui->checkBox_VPN->setEnabled(false);
+    ui->checkBox_VPN->setToolTip(tr("Tun mode is not available on macOS yet."));
+    ui->menu_spmode_vpn->setEnabled(false);
+#endif
     connect(ui->checkBox_SystemProxy, &QCheckBox::clicked, this, [=](bool checked) { proxor_set_spmode_system_proxy(checked); });
     connect(ui->menu_spmode, &QMenu::aboutToShow, this, [=]() {
         ui->menu_spmode_disabled->setChecked(!(ProxorGui::dataStore->spmode_system_proxy || ProxorGui::dataStore->spmode_vpn));
@@ -1156,7 +1161,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     setup_grpc();
 
     const bool restore_system_proxy = ProxorGui::dataStore->remember_spmode.contains("system_proxy");
+#ifdef Q_OS_MACOS
+    // Tun is not available on macOS yet: a remembered Tun (e.g. a config carried over from
+    // another platform) must not hold every profile start behind an authorization that
+    // can never succeed there.
+    const bool restore_vpn = false;
+#else
     const bool restore_vpn = ProxorGui::dataStore->remember_spmode.contains("vpn") || ProxorGui::dataStore->flag_restart_tun_on;
+#endif
     // A remembered TUN must be ready before any automatic work creates traffic.
     startup_tun_pending = restore_vpn;
     if (startup_tun_pending && ProxorGui::dataStore->remember_enable && ProxorGui::dataStore->remember_id >= 0) {
@@ -2111,6 +2123,12 @@ void MainWindow::proxor_set_spmode_system_proxy(bool enable, bool save) {
 }
 
 void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
+#ifdef Q_OS_MACOS
+    if (enable) {
+        MessageBoxWarning(software_name, tr("Tun mode is not available on macOS yet."));
+        proxor_set_spmode_FAILED
+    }
+#endif
     // A Flatpak sandbox has no TUN device, so asking is a guaranteed failure
     // dialog; refuse before even trying. Distinguish the startup restore path
     // from a manual toggle only for the wording the policy layer may use.
