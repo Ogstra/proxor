@@ -119,8 +119,8 @@ namespace ProxorGui {
         QString splitter_state = "";
 #ifdef Q_OS_MACOS
         // Menu-bar icon: true = the status-colored icon, false = monochrome template glyph that
-        // macOS tints for light/dark menu bars.
-        bool tray_icon_colored = true;
+        // macOS tints for light/dark menu bars. Monochrome by default, like other menu-bar apps.
+        bool tray_icon_colored = false;
 #endif
 
         // Subscription
