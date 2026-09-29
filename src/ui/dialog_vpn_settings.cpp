@@ -116,12 +116,17 @@ bool DialogVPNSettings::eventFilter(QObject *watched, QEvent *event) {
 }
 
 void DialogVPNSettings::positionPickProcessButton() {
+#ifdef Q_OS_MACOS
+    // On macOS the manual move overlapped the group box border; MacDialogs.cpp lays the button out
+    // under the text box instead.
+#else
     constexpr int margin = 8;
     auto *button = ui->btn_pick_process;
     const auto size = button->sizeHint();
     button->resize(size);
     button->move(std::max(margin, ui->gb_process_name->width() - size.width() - margin), 0);
     button->raise();
+#endif
 }
 
 void DialogVPNSettings::accept() {

@@ -45,6 +45,7 @@
 #ifdef Q_OS_MACOS
 #include "ui/mac/MacPlatform.h"
 #include "ui/mac/MacLook.h"
+#include "ui/mac/MacDialogs.h"
 #endif
 
 #include <QClipboard>
@@ -1269,6 +1270,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     }
 
 #ifdef Q_OS_MACOS
+    ProxorMac::InstallDialogPolish();
     ProxorMac::PolishMainWindow(this);
 #endif
     if (!ProxorGui::dataStore->flag_tray) show();
