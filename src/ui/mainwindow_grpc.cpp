@@ -439,6 +439,12 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
             start_pending = false;
             refresh_status();
             refresh_proxy_list(ent->id);
+#ifdef Q_OS_MACOS
+            if (mac_sysproxy_parked && ProxorGui::dataStore->spmode_system_proxy) {
+                mac_sysproxy_parked = false;
+                macApplySystemProxy(false);
+            }
+#endif
             if (ProxorGui::dataStore->spmode_vpn && !ProxorGui::UseInternalTun() && vpn_pid == 0) {
                 MW_show_log(tr("Proxy profile ready; starting Tun."));
                 StartVPNProcess();
@@ -548,6 +554,12 @@ void MainWindow::proxor_stop(bool crash, bool sem) {
         if (sem) sem_stopped.release();
         return;
     }
+#ifdef Q_OS_MACOS
+    // User stop: point the network back at the snapshot but keep System Proxy on and remembered;
+    // proxor_start re-applies it. Restart Proxy / profile switch (sem=true, a start follows at once)
+    // and exit (sem=true, System Proxy already turned off) must not flap.
+    if (!sem && ProxorGui::dataStore->spmode_system_proxy && !ProxorGui::dataStore->prepare_exit) macParkSystemProxy();
+#endif
 
     auto proxor_stop_stage2 = [=] {
         runOnUiThread(

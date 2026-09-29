@@ -34,3 +34,9 @@ if grep -q 'Tun mode is not available on macOS yet' "$repo_root/src/ui/mainwindo
   echo "test-policy-wiring.sh: the macOS Tun stopgap is back" >&2
   exit 1
 fi
+# macOS System Proxy through the Proxor service (phase 50): toggle, restore on user stop, re-apply on start
+grep -q 'MacHelper()->sysproxyApply' "$repo_root/src/ui/mainwindow.cpp"
+grep -q 'MacHelper()->sysproxyRestore' "$repo_root/src/ui/mainwindow.cpp"
+grep -q 'macParkSystemProxy' "$repo_root/src/ui/mainwindow_grpc.cpp"
+grep -q 'macApplySystemProxy' "$repo_root/src/ui/mainwindow_grpc.cpp"
+grep -q '!sem && ProxorGui::dataStore->spmode_system_proxy && !ProxorGui::dataStore->prepare_exit' "$repo_root/src/ui/mainwindow_grpc.cpp"
