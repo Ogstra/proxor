@@ -1,6 +1,8 @@
 package machelper
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -119,5 +121,49 @@ func TestParseAllowedUIDs(t *testing.T) {
 	want = map[uint32]bool{503: true, 504: true}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestFileAllowlistReloadsOnChange(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "allowed-uids")
+	a := &fileAllowlist{path: path}
+
+	if a.Allowed(501) {
+		t.Fatal("missing file must allow nobody")
+	}
+	if err := os.WriteFile(path, []byte("501\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !a.Allowed(501) || a.Allowed(502) {
+		t.Fatal("first load wrong")
+	}
+
+	// Multi-user install appends; the size changes even if mtime granularity is coarse.
+	if err := os.WriteFile(path, []byte("501\n502\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !a.Allowed(502) {
+		t.Fatal("appended uid must be picked up without a restart")
+	}
+
+	// A file others can write is not trusted.
+	if err := os.Chmod(path, 0o666); err != nil {
+		t.Fatal(err)
+	}
+	if a.Allowed(501) {
+		t.Fatal("group/world-writable allowlist must be ignored")
+	}
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !a.Allowed(501) {
+		t.Fatal("restoring the mode must restore access")
+	}
+
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if a.Allowed(501) {
+		t.Fatal("removed file must allow nobody")
 	}
 }

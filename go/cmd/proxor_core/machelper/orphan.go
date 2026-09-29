@@ -1,9 +1,12 @@
 package machelper
 
 import (
+	"io/fs"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -72,4 +75,48 @@ func ParseAllowedUIDs(s string) map[uint32]bool {
 		out[uint32(n)] = true
 	}
 	return out
+}
+
+// fileAllowlist serves the uid allowlist from a root-owned file and re-reads it
+// whenever its mtime, size or mode changes (a second user's install appends a
+// uid while the daemon runs). It fails closed: a missing, unreadable or
+// group/world-writable file allows nobody (root is allowed by the server).
+type fileAllowlist struct {
+	path string
+
+	mu    sync.Mutex
+	valid bool
+	mtime time.Time
+	size  int64
+	mode  fs.FileMode
+	set   map[uint32]bool
+}
+
+// Allowed reports whether uid is on the allowlist.
+func (a *fileAllowlist) Allowed(uid uint32) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.refreshLocked()
+	return a.set[uid]
+}
+
+func (a *fileAllowlist) refreshLocked() {
+	fi, err := os.Stat(a.path)
+	if err != nil || !fi.Mode().IsRegular() {
+		a.valid, a.set = false, nil
+		return
+	}
+	if a.valid && fi.ModTime().Equal(a.mtime) && fi.Size() == a.size && fi.Mode() == a.mode {
+		return
+	}
+	a.valid, a.mtime, a.size, a.mode = true, fi.ModTime(), fi.Size(), fi.Mode()
+	a.set = nil
+	if fi.Mode().Perm()&0o022 != 0 {
+		return // somebody other than the owner can write it: not trusted
+	}
+	data, err := os.ReadFile(a.path)
+	if err != nil {
+		return
+	}
+	a.set = ParseAllowedUIDs(string(data))
 }
