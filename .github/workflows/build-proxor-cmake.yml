@@ -861,3 +861,27 @@ jobs:
           path: release-stage/recipes
           include-hidden-files: true
           if-no-files-found: error
+
+  bump-homebrew-tap:
+    name: Bump the Homebrew tap
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'y' && github.event.inputs.tag != ''
+    needs: [publish-release]
+    runs-on: ubuntu-latest
+    # The only publishing credential this workflow touches, confined to this job and its
+    # environment: a fine-grained token with contents:write on Ogstra/homebrew-tap only.
+    # The cask is re-derived from the published zip and SHA256SUMS, never from a build artifact.
+    environment: homebrew-publication
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the release commit
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+      - name: Point the cask at the published macOS zip
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TAG: ${{ github.event.inputs.tag }}
+        run: packaging/homebrew/bump-tap.sh --tag "$TAG" --work "$RUNNER_TEMP/homebrew"
