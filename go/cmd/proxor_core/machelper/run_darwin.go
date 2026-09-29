@@ -33,6 +33,13 @@ func Main(args []string) int {
 	}
 	logger := log.New(os.Stderr, "proxor-helper ", log.LstdFlags)
 
+	// sing-box opens ./cache.db whenever a log writer is attached (the Tun log is streamed to the
+	// GUI), and launchd starts daemons in "/", which is read-only. Work from the root-owned support
+	// directory instead; uninstall removes it together with the cache.
+	if err := os.Chdir(SupportDir); err != nil {
+		logger.Printf("chdir %s: %v (Tun will fail to open its cache file)", SupportDir, err)
+	}
+
 	// Register first so a SIGTERM during startup still gets a clean exit.
 	sigs := make(chan os.Signal, 2)
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
