@@ -148,8 +148,13 @@ def scutil_proxy():
 
 
 def shows_proxy(text, port):
+    # The Enable keys matter: the helper no longer sends separate `-set*proxystate on` writes, it
+    # relies on -setwebproxy/-setsecurewebproxy/-setsocksfirewallproxy turning the proxy on.
     return (re.search(r"HTTPProxy\s*:\s*127\.0\.0\.1\b", text) is not None
-            and re.search(r"HTTPPort\s*:\s*%d\b" % port, text) is not None)
+            and re.search(r"HTTPPort\s*:\s*%d\b" % port, text) is not None
+            and re.search(r"HTTPEnable\s*:\s*1\b", text) is not None
+            and re.search(r"HTTPSEnable\s*:\s*1\b", text) is not None
+            and re.search(r"SOCKSEnable\s*:\s*1\b", text) is not None)
 
 
 def no_service(reply):
@@ -221,11 +226,21 @@ def cmd_tun(args):
 
 
 def apply_proxy(c, port):
+    """sysproxy_apply; the reply gets "_ms": request sent -> reply received."""
+    t0 = time.monotonic()
     reply = c.request("sysproxy_apply", timeout=30, port=port, bypass=BYPASS)
+    reply["_ms"] = int((time.monotonic() - t0) * 1000)
     if not reply.get("ok"):
         return reply
     print("applied: %s failed: %s" % (reply.get("applied"), reply.get("failed")), flush=True)
     return reply
+
+
+def timed_request(c, cmd, **fields):
+    """(reply, milliseconds from request sent to reply received)."""
+    t0 = time.monotonic()
+    reply = c.request(cmd, timeout=30, **fields)
+    return reply, int((time.monotonic() - t0) * 1000)
 
 
 def cmd_sysproxy_apply(args):
@@ -252,7 +267,8 @@ def cmd_sysproxy_restore(_args):
 
 
 def cmd_sysproxy_cycle(args):
-    """The GUI's profile Stop -> Start on ONE connection (lease): apply, restore, apply, restore."""
+    """The GUI's profile Stop -> Start on ONE connection (lease): apply, restore, apply, restore.
+    Prints SYSPROXY_TIMING per round; with --max-ms N round 2 must finish each call within N ms."""
     before = norm_proxy(open(args.before, encoding="utf-8").read())
     c, _ = connect_and_hello()
 
@@ -264,19 +280,127 @@ def cmd_sysproxy_cycle(args):
             before.splitlines(True), now.splitlines(True), "before", "now")))
         return 1
 
+    timings = {}
     for round_no in (1, 2):
         reply = apply_proxy(c, args.port)
         if not reply.get("ok"):
             print("sysproxy_apply failed: " + json.dumps(reply), file=sys.stderr)
             return 4 if no_service(reply) else 1
+        apply_ms = reply["_ms"]
+        services = len(reply.get("applied") or [])
         if not wait_for(lambda: shows_proxy(scutil_proxy(), args.port), 10):
-            return fail("round %d: scutil never showed 127.0.0.1:%d" % (round_no, args.port))
-        reply = c.request("sysproxy_restore", timeout=30)
+            return fail("round %d: scutil never showed 127.0.0.1:%d with the three proxies enabled"
+                        % (round_no, args.port))
+        reply, restore_ms = timed_request(c, "sysproxy_restore")
         if not reply.get("ok"):
             return fail("round %d: restore failed: %s" % (round_no, json.dumps(reply)))
         if not wait_for(lambda: scutil_proxy() == before, 10):
             return fail("round %d: scutil did not return to the pre-test state" % round_no)
+        timings[round_no] = (apply_ms, restore_ms)
+        print("SYSPROXY_TIMING round=%d apply_ms=%d restore_ms=%d services=%d"
+              % (round_no, apply_ms, restore_ms, services), flush=True)
         print("cycle round %d ok" % round_no, flush=True)
+    if args.max_ms > 0:
+        apply_ms, restore_ms = timings[2]
+        for what, ms in (("apply", apply_ms), ("restore", restore_ms)):
+            if ms > args.max_ms:
+                print("sysproxy-cycle: round 2 %s took %d ms, budget %d ms" % (what, ms, args.max_ms),
+                      file=sys.stderr)
+                return 1
+    return 0
+
+
+def cmd_ns_call_ms(_args):
+    """Median wall time of one read-only networksetup call, to scale the timing budget to the runner."""
+    samples = []
+    for _ in range(5):
+        t0 = time.monotonic()
+        sh("/usr/sbin/networksetup", "-listallnetworkservices")
+        samples.append(int((time.monotonic() - t0) * 1000))
+    samples.sort()
+    print("NS_CALL_MS=%d" % samples[len(samples) // 2], flush=True)
+    return 0
+
+
+def cmd_pause_resume(args):
+    """The GUI's profile Stop -> Start with Tun + System Proxy on ONE connection (the lease):
+    apply + tun_start -> PAUSE (restore + tun_stop) -> RESUME (apply + tun_start) -> close."""
+    before = norm_proxy(open(args.before, encoding="utf-8").read())
+    use_tun, use_proxy = not args.no_tun, not args.no_proxy
+    config = open(args.config, encoding="utf-8").read() if use_tun else ""
+    c, _ = connect_and_hello()
+
+    def fail(what):
+        print("pause-resume: " + what, file=sys.stderr)
+        return 1
+
+    def start_tun():
+        """tun_start, wait tun_ready and the route; returns milliseconds, or None on failure."""
+        t0 = time.monotonic()
+        reply = c.request("tun_start", timeout=30, config=config, socksPort=args.port)
+        if not reply.get("ok"):
+            print("tun_start refused: " + json.dumps(reply), file=sys.stderr)
+            return None
+        ev = c.wait_event(("tun_ready", "tun_stopped"), 60)
+        if ev is None or ev.get("event") != "tun_ready":
+            print("no tun_ready (got %s)" % json.dumps(ev), file=sys.stderr)
+            return None
+        if not wait_for(tun_route, 10):
+            print("no 198.51.100 route via utunN after tun_ready", file=sys.stderr)
+            return None
+        return int((time.monotonic() - t0) * 1000)
+
+    if use_proxy:
+        reply = apply_proxy(c, args.proxy_port)
+        if not reply.get("ok"):
+            print("sysproxy_apply failed: " + json.dumps(reply), file=sys.stderr)
+            return 4 if no_service(reply) else 1
+    if use_tun and start_tun() is None:
+        return 1
+
+    # PAUSE
+    restore_ms = tun_stop_ms = 0
+    if use_proxy:
+        reply, restore_ms = timed_request(c, "sysproxy_restore")
+        if not reply.get("ok"):
+            return fail("restore failed: " + json.dumps(reply))
+    if use_tun:
+        reply, tun_stop_ms = timed_request(c, "tun_stop")
+        if not reply.get("ok"):
+            return fail("tun_stop failed: " + json.dumps(reply))
+    print("PAUSE_TIMING restore_ms=%d tun_stop_ms=%d" % (restore_ms, tun_stop_ms), flush=True)
+    if use_tun and not wait_for(lambda: not test_net_routes(), 5):
+        return fail("198.51.100 route still present 5 s after the pause:\n" + "\n".join(test_net_routes()))
+    if use_proxy and not wait_for(lambda: scutil_proxy() == before, 5):
+        return fail("scutil did not return to the pre-test state within 5 s of the pause")
+    # the connection must still be usable and nothing may be left running
+    status = c.request("status", timeout=10)
+    if not status.get("ok"):
+        return fail("status after the pause: " + json.dumps(status))
+    # the helper omits false booleans (json omitempty)
+    if status.get("tunRunning", False) or status.get("proxyApplied", False):
+        return fail("state leaked after the pause: " + json.dumps(status))
+    if use_tun and tun_stop_ms > 3000:
+        return fail("tun_stop took %d ms, budget 3000 ms" % tun_stop_ms)
+    c.events[:] = []  # nothing from the first run may satisfy the second wait
+
+    # RESUME
+    apply_ms = 0
+    if use_proxy:
+        reply = apply_proxy(c, args.proxy_port)
+        if not reply.get("ok"):
+            return fail("second sysproxy_apply failed: " + json.dumps(reply))
+        apply_ms = reply["_ms"]
+    tun_ready_ms = 0
+    if use_tun:
+        tun_ready_ms = start_tun()
+        if tun_ready_ms is None:
+            return fail("second tun_start failed")
+    print("RESUME_TIMING apply_ms=%d tun_ready_ms=%d" % (apply_ms, tun_ready_ms), flush=True)
+    if use_proxy and not wait_for(lambda: shows_proxy(scutil_proxy(), args.proxy_port), 10):
+        return fail("scutil never showed 127.0.0.1:%d after the resume" % args.proxy_port)
+    print("PAUSE_RESUME_OK", flush=True)
+    c.close()  # abrupt: the shell asserts the lease cleanup
     return 0
 
 
@@ -304,6 +428,15 @@ def main():
     cyc = sub.add_parser("sysproxy-cycle")
     cyc.add_argument("--port", type=int, required=True)
     cyc.add_argument("--before", required=True)
+    cyc.add_argument("--max-ms", type=int, default=0, help="round 2 apply/restore budget; 0 = no check")
+    sub.add_parser("ns-call-ms")
+    pr = sub.add_parser("pause-resume")
+    pr.add_argument("--config", required=True)
+    pr.add_argument("--port", type=int, required=True, help="mock SOCKS port for tun_start")
+    pr.add_argument("--proxy-port", type=int, required=True)
+    pr.add_argument("--before", required=True)
+    pr.add_argument("--no-tun", action="store_true")
+    pr.add_argument("--no-proxy", action="store_true")
     sub.add_parser("sysproxy-restore")
     sub.add_parser("uninstall")
     args = p.parse_args()
@@ -313,6 +446,8 @@ def main():
         "tun": cmd_tun,
         "sysproxy-apply": cmd_sysproxy_apply,
         "sysproxy-cycle": cmd_sysproxy_cycle,
+        "ns-call-ms": cmd_ns_call_ms,
+        "pause-resume": cmd_pause_resume,
         "sysproxy-restore": cmd_sysproxy_restore,
         "uninstall": cmd_uninstall,
     }[args.sub]

@@ -199,8 +199,10 @@ apply_hold() {
 }
 
 APPLY_RC=0
+SYSPROXY_ON=1
 apply_hold || APPLY_RC=$?
 if [ "$APPLY_RC" = 4 ]; then
+  SYSPROXY_ON=0
   echo "SKIP sysproxy: the runner has no network service with a hardware device"
   echo "== STEP 5: sysproxy SKIP (no eligible service)"
 else
@@ -209,7 +211,16 @@ else
   wait_until 10 proxy_restored || { diff "$WORK/before" <(norm_proxy) >&2 || true; fail "scutil --proxy differs from the pre-test state after restore"; }
   stop_holder
 
-  as_runner "${CLIENT[@]}" sysproxy-cycle --port "$PROXY_PORT" --before "$WORK/before" || fail "sysproxy-cycle failed"
+  # Timing budget: max(1000 ms, 12 x one networksetup call). The helper works on the services
+  # concurrently, so one apply/restore costs about the chain of ONE service (~9 sequential calls:
+  # 3 set + bypass + a few PAC/WPAD/state writes, plus the concurrent reads and two list calls)
+  # regardless of how many services the Mac has. The old sequential code needed >= 15 call-times
+  # even for a single service and grew with every extra one, so it fails this budget.
+  NS_MS="$(as_runner "${CLIENT[@]}" ns-call-ms | sed -n 's/^NS_CALL_MS=//p')"
+  [[ "$NS_MS" =~ ^[0-9]+$ ]] || fail "could not measure a networksetup call (got '$NS_MS')"
+  MAX_MS=$(( NS_MS * 12 > 1000 ? NS_MS * 12 : 1000 ))
+  echo "SYSPROXY_TIMING budget=${MAX_MS}ms (networksetup call ${NS_MS}ms)"
+  as_runner "${CLIENT[@]}" sysproxy-cycle --port "$PROXY_PORT" --before "$WORK/before" --max-ms "$MAX_MS" || fail "sysproxy-cycle failed"
 
   # lease: closing the connection restores the proxy
   apply_hold || fail "second apply failed"
@@ -232,18 +243,64 @@ else
   step 5 "system proxy (apply, restore, stop-start cycle, lease close, kill -9 recovery)"
 fi
 
-# ---- STEP 6: uninstall command -----------------------------------------------------------------
+# ---- STEP 6: pause/resume (Tun + System Proxy on one lease, as a profile Stop -> Start) ---------
+# The GUI's user Stop pauses Tun (tun_stop) and restores the proxy but keeps the connection; the next
+# Start applies both again on the SAME connection. Nothing may leak in between, and closing the
+# connection afterwards must clean up.
+PR_ARGS=()
+[ "${PROXOR_CI_SKIP_TUN:-}" = 1 ] && PR_ARGS+=(--no-tun)
+[ "$SYSPROXY_ON" = 0 ] && PR_ARGS+=(--no-proxy)
+if [ "${PROXOR_CI_SKIP_TUN:-}" = 1 ] && [ "$SYSPROXY_ON" = 0 ]; then
+  echo "== STEP 6: pause/resume SKIP (no utun on this VM and no eligible network service)"
+else
+  if [ "${PROXOR_CI_SKIP_TUN:-}" != 1 ]; then
+    as_runner "$PY" -c "
+import socket
+s = socket.socket()
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(('127.0.0.1', $SOCKS_PORT))
+s.listen(16)
+while True:
+    c, _ = s.accept()
+    c.close()
+" &
+    SOCKS_PID=$!
+    wait_until 10 bash -c "exec 3<>/dev/tcp/127.0.0.1/$SOCKS_PORT" 2>/dev/null || fail "mock SOCKS did not start"
+    sed "s/%PORT%/$SOCKS_PORT/g" "$HERE/tun-test-config.json" >"$WORK/tun.json"
+    chmod 644 "$WORK/tun.json"
+  else
+    : >"$WORK/tun.json"
+    chmod 644 "$WORK/tun.json"
+  fi
+  as_runner "${CLIENT[@]}" pause-resume --config "$WORK/tun.json" --port "$SOCKS_PORT" --proxy-port "$PROXY_PORT" \
+    --before "$WORK/before" ${PR_ARGS[@]+"${PR_ARGS[@]}"} || fail "pause-resume failed"
+  # the client closed the connection abruptly: the lease cleanup must remove route and proxy
+  if [ "${PROXOR_CI_SKIP_TUN:-}" != 1 ]; then
+    gone() { ! route_present; }
+    wait_until 5 gone || fail "198.51.100 route still present after the pause-resume connection closed"
+  fi
+  if [ "$SYSPROXY_ON" = 1 ]; then
+    wait_until 10 proxy_restored || { diff "$WORK/before" <(norm_proxy) >&2 || true; fail "connection close after resume did not restore the system proxy"; }
+  fi
+  if [ -n "$SOCKS_PID" ]; then
+    kill "$SOCKS_PID" 2>/dev/null || true
+    SOCKS_PID=""
+  fi
+  step 6 "pause/resume (Tun + System Proxy on one lease: pause left nothing behind, resume brought both back, close cleaned up)"
+fi
+
+# ---- STEP 7: uninstall command -----------------------------------------------------------------
 as_runner "${CLIENT[@]}" uninstall || fail "uninstall command failed"
 wait_until 15 helper_gone || fail "files remain after the uninstall command: $(ls -d "$PLIST" "$BIN" "$SUP" "$SOCK" 2>/dev/null | tr '\n' ' ')"
 if launchctl print "system/$LABEL" >/dev/null 2>&1; then fail "launchd still knows the service after uninstall"; fi
-step 6 "uninstall command"
+step 7 "uninstall command"
 
-# ---- STEP 7: reinstall, then the uninstall script (twice: idempotent) --------------------------
+# ---- STEP 8: reinstall, then the uninstall script (twice: idempotent) --------------------------
 install_helper
 [ "$INSTALL_RC" = 0 ] || fail "reinstall exited $INSTALL_RC"
 sh "$UNINSTALL_SH" || fail "helper-uninstall.sh failed"
 helper_gone || fail "files remain after helper-uninstall.sh"
 sh "$UNINSTALL_SH" || fail "helper-uninstall.sh is not idempotent"
-step 7 "reinstall, helper-uninstall.sh, idempotent rerun"
+step 8 "reinstall, helper-uninstall.sh, idempotent rerun"
 
 echo "ci-integration.sh: OK"
