@@ -106,11 +106,56 @@ QStringList MacDefaultProxyBypass() {
             QStringLiteral("192.168.0.0/16"), QStringLiteral("100.64.0.0/10")};
 }
 
-// RED stubs (50-16 task 1)
-MacStartupInstallDecision DecideMacStartupInstall(bool, bool, MacHelperState, bool) {
-    return {MacStartupInstallAction::None, MacHelperEnableAction::Proceed, QString(), QString()};
+MacStartupInstallDecision DecideMacStartupInstall(bool rememberedTun, bool rememberedSystemProxy,
+                                                  MacHelperState state, bool promptedThisSession) {
+    const MacStartupInstallDecision none{MacStartupInstallAction::None, MacHelperEnableAction::Proceed, QString(),
+                                         QString()};
+    if (!rememberedTun && !rememberedSystemProxy) return none;
+    if (state == MacHelperState::Ready) return none;
+
+    // Reuse the existing Tun wording when Tun is remembered; System Proxy alone gets its own line.
+    const auto logLineFor = [&]() -> QString {
+        if (rememberedTun) return DecideMacTunStartup(true, state).logLine;
+        switch (state) {
+        case MacHelperState::NotInstalled:
+            return tr("System Proxy is remembered, but the Proxor service is not installed. "
+                      "Connecting without System Proxy; turn on System Proxy to install the service.");
+        case MacHelperState::InstalledNotRunning:
+            return tr("System Proxy is remembered, but the Proxor service is not running. "
+                      "Allow Proxor in System Settings > General > Login Items & Extensions, "
+                      "or reinstall it from Tun settings. Connecting without System Proxy.");
+        case MacHelperState::NotAuthorized:
+            return tr("System Proxy is remembered, but the Proxor service on this Mac was installed by another user "
+                      "and does not accept this one yet. Connecting without System Proxy; turn on System Proxy to "
+                      "allow this user (one administrator password prompt).");
+        case MacHelperState::Outdated:
+            return tr("System Proxy is remembered, but the Proxor service needs an update. "
+                      "Connecting without System Proxy; turn on System Proxy to update it.");
+        case MacHelperState::Ready: break;
+        }
+        return QString();
+    };
+
+    // A reinstall does not fix a Login Items denial: only log.
+    if (state == MacHelperState::InstalledNotRunning || promptedThisSession) {
+        return {MacStartupInstallAction::LogOnly, MacHelperEnableAction::Proceed, QString(), logLineFor()};
+    }
+
+    QString feature;
+    if (rememberedTun && rememberedSystemProxy) feature = tr("Tun Mode and System Proxy");
+    else if (rememberedTun) feature = tr("Tun Mode");
+    else feature = tr("System Proxy");
+    return {MacStartupInstallAction::Prompt, DecideMacHelperEnable(state), feature, QString()};
 }
 
-QString MacStartupInstallDeclinedText(bool, bool) {
-    return QString();
+QString MacStartupInstallDeclinedText(bool tun, bool systemProxy) {
+    if (tun && systemProxy) {
+        return tr("Proxor connected without Tun and System Proxy. "
+                  "To enable them, turn them on in Settings > Tun settings and the System Proxy option.");
+    }
+    if (systemProxy) {
+        return tr("Proxor connected without System Proxy. "
+                  "To enable it, turn on System Proxy again and install the service when asked.");
+    }
+    return tr("Proxor connected without Tun. To enable it, turn on Tun Mode in Settings > Tun settings.");
 }
