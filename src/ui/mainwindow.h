@@ -197,6 +197,8 @@ private:
     void macOnTunStopped(const QString &reason);
     void macOnHelperLost();
     bool mac_startup_probe_pending = false;
+    bool mac_install_prompted_this_session = false; // the automatic launch prompt happens at most once
+    bool mac_tun_request_saves = true;              // whether a failed Tun start may un-remember Tun
     QTimer *mac_startup_probe_timer = nullptr;
     void macStartupRestore(bool rememberedSystemProxy, bool rememberedTun);
     void macStartupProbed(MacHelperState st, bool rememberedTun, bool rememberedSystemProxy);

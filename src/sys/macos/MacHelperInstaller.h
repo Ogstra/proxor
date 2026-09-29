@@ -21,6 +21,10 @@ QString BundledScriptPath(const QString &name);
 void ConfirmAndInstall(QWidget *parent, const QString &feature, MacHelperEnableAction action,
                        std::function<void(MacAdminScriptResult)> done);
 
+// True from the moment the explanation dialog opens until the install finished (or was declined).
+// Callers must not open a second installer while it is true. UI thread only.
+bool InstallInProgress();
+
 // Removal: uses the helper's own `uninstall` command when it answers (no password), otherwise runs
 // helper-uninstall.sh through one admin prompt.
 void Uninstall(QWidget *parent, std::function<void(MacAdminScriptResult)> done);

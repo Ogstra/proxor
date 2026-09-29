@@ -2194,6 +2194,11 @@ void MainWindow::proxor_set_spmode_system_proxy(bool enable, bool save) {
 
 #ifdef Q_OS_MACOS
 void MainWindow::macInstallHelperThen(const QString &feature, MacHelperEnableAction action, std::function<void()> onReady) {
+    if (MacHelperInstaller::InstallInProgress()) {
+        // One installer at a time: the switch stays off, exactly like after a declined install.
+        MW_show_log(tr("The Proxor service installation is already waiting for your answer."));
+        return;
+    }
     MW_show_log(tr("Waiting for the administrator password prompt to install the Proxor service..."));
     MacHelperInstaller::ConfirmAndInstall(this, feature, action, [this, feature, onReady = std::move(onReady)](MacAdminScriptResult result) {
         switch (result.outcome) {
@@ -2339,6 +2344,9 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
                 }
                 const bool restoringProfile = startup_tun_pending && startup_deferred_profile_id >= 0;
                 if (ProxorGui::dataStore->started_id >= 0 || restoringProfile) {
+#ifdef Q_OS_MACOS
+                    mac_tun_request_saves = save; // a failed start un-remembers Tun only when the user asked for it
+#endif
                     if (!StartVPNProcess()) {
                         proxor_set_spmode_FAILED
                     }
@@ -3705,7 +3713,7 @@ bool MainWindow::StartVPNProcess() {
                 }
                 MessageBoxWarning(software_name, MacTunFailureText(reply.error));
                 // Manual Tun after a profile is already up (proxor_start), or the switch was shown on optimistically.
-                if (ProxorGui::dataStore->spmode_vpn) proxor_set_spmode_vpn(false);
+                if (ProxorGui::dataStore->spmode_vpn) proxor_set_spmode_vpn(false, mac_tun_request_saves);
                 return;
             }
             if (startup_tun_pending) {
@@ -3871,8 +3879,9 @@ void MainWindow::macStartupProbed(MacHelperState st, bool rememberedTun, bool re
         }
         mac_spmode_restoring = false;
     } else {
-        // Not Ready: never block, never prompt here (the startup install prompt belongs to a later plan).
-        if (!d.logLine.isEmpty()) MW_show_log(d.logLine);
+        // Not Ready: never block. First release the startup hold so the profile connects in plain proxy mode
+        // before any dialog appears (a hidden or ignored dialog, e.g. a tray start at login, can never deadlock).
+        const auto inst = DecideMacStartupInstall(rememberedTun, rememberedSystemProxy, st, mac_install_prompted_this_session);
         if (startup_tun_pending) {
             // Release the hold without deadlock: the same steps as the "should be impossible" branch of proxor_set_spmode_vpn.
             startup_tun_pending = false;
@@ -3883,7 +3892,44 @@ void MainWindow::macStartupProbed(MacHelperState st, bool rememberedTun, bool re
                 w();
             }
         }
-        if (rememberedSystemProxy) {
+        if (inst.action == MacStartupInstallAction::Prompt && !ProxorGui::dataStore->prepare_exit) {
+            mac_install_prompted_this_session = true; // at most one automatic prompt per session
+            if (MacHelperInstaller::InstallInProgress()) {
+                // The user already opened an installer (toggle or Tun settings): no second dialog.
+                MW_show_log(tr("The Proxor service installation is already waiting for your answer."));
+                return;
+            }
+            MW_show_log(tr("%1 is on, but the Proxor network service is not installed or needs an update; asking to install it. Connected without it meanwhile.").arg(inst.feature));
+            // Parentless when the window is hidden, so the dialog is not a sheet on an invisible window.
+            MacHelperInstaller::ConfirmAndInstall(isVisible() ? this : nullptr, inst.feature, inst.enableAction,
+                                                  [this, rememberedTun, rememberedSystemProxy](MacAdminScriptResult result) {
+                if (result.outcome == MacAdminScriptOutcome::Ok) {
+                    MW_show_log(tr("Proxor service installed."));
+                    // The service is Ready now: the profile already runs, so Tun comes up on it without a restart.
+                    const bool before = mac_spmode_restoring;
+                    mac_spmode_restoring = true;
+                    if (rememberedSystemProxy) proxor_set_spmode_system_proxy(true, false);
+                    if (rememberedTun) proxor_set_spmode_vpn(true, false);
+                    mac_spmode_restoring = before;
+                    return;
+                }
+                // Cancelled or Failed: the profile stays connected without Tun; remember_spmode is untouched,
+                // so the next launch (for example after a brew upgrade) asks again.
+                auto text = MacStartupInstallDeclinedText(rememberedTun, rememberedSystemProxy);
+                if (result.outcome == MacAdminScriptOutcome::Failed) {
+                    const auto failure = tr("The Proxor service could not be installed: %1").arg(result.reason);
+                    MW_show_log(failure);
+                    text = failure + QStringLiteral("\n\n") + text;
+                }
+                MW_show_log(MacStartupInstallDeclinedText(rememberedTun, rememberedSystemProxy));
+                refresh_status();
+                MessageBoxWarning(software_name, text);
+            });
+            return;
+        }
+        // LogOnly (or nothing to ask): today's behavior.
+        if (!inst.logLine.isEmpty()) MW_show_log(inst.logLine);
+        if (rememberedTun && rememberedSystemProxy) {
             MW_show_log(tr("System Proxy is remembered, but the Proxor service is not available; leaving it off. Turn on System Proxy to install the service."));
         }
     }
@@ -3905,7 +3951,7 @@ void MainWindow::macOnTunStopped(const QString &reason) {
     vpn_pid = 0;
     if (ProxorGui::dataStore->spmode_vpn && !ProxorGui::dataStore->prepare_exit) {
         MW_show_log(MacTunFailureText(reason));
-        proxor_set_spmode_vpn(false);
+        proxor_set_spmode_vpn(false, false); // not the user's choice: Tun stays remembered for the next launch
     }
 }
 
@@ -3977,6 +4023,7 @@ void MainWindow::macResumeModes(bool systemProxy, bool tun) {
     if (systemProxy) macApplySystemProxy(false);
     if (tun) {
         MW_show_log(tr("Proxy profile ready; starting Tun."));
+        mac_tun_request_saves = false; // a resume must never un-remember Tun
         StartVPNProcess();
     }
 }

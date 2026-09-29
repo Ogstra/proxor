@@ -115,6 +115,10 @@ DialogVPNSettings::DialogVPNSettings(QWidget *parent) : QDialog(parent), ui(new 
         };
 
         connect(install, &QPushButton::clicked, this, [this, self, refresh, state] {
+            if (MacHelperInstaller::InstallInProgress()) {
+                MessageBoxInfo(software_name, tr("The Proxor service installation is already waiting for your answer."));
+                return;
+            }
             MacHelperInstaller::ConfirmAndInstall(
                 this, tr("Tun Mode"), DecideMacHelperEnable(*state), [self, refresh](MacAdminScriptResult r) {
                     if (!self) return;

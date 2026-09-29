@@ -26,6 +26,9 @@ QString tr(const char *text) {
     return QCoreApplication::translate("MacHelperInstaller", text);
 }
 
+// One installer dialog/install at a time, for every caller (UI thread only).
+bool g_installInProgress = false;
+
 constexpr int kReadyPollIntervalMs = 500;
 constexpr int kReadyPollAttempts = 20; // 10 s
 
@@ -155,18 +158,28 @@ void MacHelperInstaller::ConfirmAndInstall(QWidget *parent, const QString &featu
         return;
     }
     // Non-modal-loop dialog: the caller regains control immediately and `done` fires later.
+    // The in-progress flag is cleared right before every `done` call, so it is false when `done` runs.
+    g_installInProgress = true;
+    DoneFn finish = [done](MacAdminScriptResult result) {
+        g_installInProgress = false;
+        done(std::move(result));
+    };
     auto *box = new QMessageBox(QMessageBox::Question, tr("Proxor network service"), explanation(feature, action),
                                 QMessageBox::Yes | QMessageBox::No, parent);
     box->setDefaultButton(QMessageBox::Yes);
     box->setAttribute(Qt::WA_DeleteOnClose);
-    QObject::connect(box, &QDialog::finished, box, [done](int result) {
+    QObject::connect(box, &QDialog::finished, box, [finish](int result) {
         if (result != QMessageBox::Yes) {
-            done({MacAdminScriptOutcome::Cancelled, QStringLiteral("declined")});
+            finish({MacAdminScriptOutcome::Cancelled, QStringLiteral("declined")});
             return;
         }
-        startInstall(done);
+        startInstall(finish);
     });
     box->open();
+}
+
+bool MacHelperInstaller::InstallInProgress() {
+    return g_installInProgress;
 }
 
 void MacHelperInstaller::Uninstall(QWidget *parent, std::function<void(MacAdminScriptResult)> done) {
