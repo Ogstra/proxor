@@ -446,8 +446,22 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         "QCheckBox#checkBox_VPN::indicator, QCheckBox#checkBox_SystemProxy::indicator {"
         "  margin-top: 1px;"
         "}");
+#ifdef Q_OS_MACOS
+    // The System theme on macOS keeps the native checkboxes; the Windows-tuned padding only
+    // applies to the other (Fusion/QSS) themes, and is re-evaluated when the theme changes.
+    {
+        auto applyToolbarCheckboxSS = [this](const QString &themeName) {
+            const bool isSystem = (themeManager->NormalizeTheme(themeName) == QStringLiteral("System"));
+            ui->checkBox_VPN->setStyleSheet(isSystem ? QString() : toolbarCheckboxSS);
+            ui->checkBox_SystemProxy->setStyleSheet(isSystem ? QString() : toolbarCheckboxSS);
+        };
+        applyToolbarCheckboxSS(ProxorGui::dataStore->theme);
+        connect(themeManager, &ThemeManager::themeChanged, this, applyToolbarCheckboxSS);
+    }
+#else
     ui->checkBox_VPN->setStyleSheet(toolbarCheckboxSS);
     ui->checkBox_SystemProxy->setStyleSheet(toolbarCheckboxSS);
+#endif
     m_quotaLabel = new QLabel(this);
     m_quotaLabel->setContentsMargins(0, 0, 8, 0);
     m_quotaLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -632,10 +646,38 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             "  background-color: palette(light);"
             "  border-color: palette(shadow);"
             "}");
+#ifdef Q_OS_MACOS
+        // Mac toolbar look: QMacStyle draws a QToolButton outside a QToolBar as a boxed bevel
+        // whatever autoRaise says, so the four big toolbar buttons get a minimal flat
+        // hover-only skin instead of the Windows-tuned systemBtnSS. Translucent grays work
+        // in light and dark without a custom palette. Test Latency / Update Sub keep the
+        // native QMacStyle button bevel so they still read as buttons.
+        (void) systemBtnSS;
+        static const QString macFlatBtnSS = QStringLiteral(
+            "QToolButton {"
+            "  background: transparent;"
+            "  border: none;"
+            "  border-radius: 6px;"
+            "  padding: 3px;"
+            "}"
+            "QToolButton:hover {"
+            "  background: rgba(127, 127, 127, 46);"
+            "}"
+            "QToolButton:pressed, QToolButton:open {"
+            "  background: rgba(127, 127, 127, 80);"
+            "}");
+        for (auto *btn : btns) {
+            const bool flat = isSystem && btn != ui->toolButton_url_test &&
+                              btn != ui->toolButton_update_subscription;
+            btn->setAutoRaise(flat);
+            btn->setStyleSheet(flat ? macFlatBtnSS : QString());
+        }
+#else
         for (auto *btn : btns) {
             btn->setAutoRaise(isSystem);
             btn->setStyleSheet(isSystem ? systemBtnSS : QString());
         }
+#endif
     };
     applyToolbarAutoRaise(ProxorGui::dataStore->theme);
     connect(themeManager, &ThemeManager::themeChanged, this, applyToolbarAutoRaise);
@@ -656,6 +698,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             button->setMinimumHeight(referenceHeight);
             button->setMinimumWidth(referenceHeight);
         }
+#ifndef Q_OS_MACOS
         const int stackedSpacing = ui->verticalLayout_url_sub->spacing();
         const int stackedAvailableHeight = qMax(2, referenceHeight - stackedSpacing);
         const int topButtonHeight = stackedAvailableHeight / 2;
@@ -674,7 +717,47 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         ui->checkBox_VPN->setMaximumHeight(topCheckboxHeight);
         ui->checkBox_SystemProxy->setMinimumHeight(bottomCheckboxHeight);
         ui->checkBox_SystemProxy->setMaximumHeight(bottomCheckboxHeight);
+#endif
     }, this, 0);
+#ifdef Q_OS_MACOS
+    {
+        // Same height math as the block above, only for the non-System themes; System resets
+        // it so the native size hints win. Re-evaluated on theme changes in both directions.
+        auto applyStackedHeights = [this](const QString &themeName) {
+            const bool isSystem = (themeManager->NormalizeTheme(themeName) == QStringLiteral("System"));
+            if (isSystem) {
+                for (QWidget *w : {static_cast<QWidget *>(ui->toolButton_url_test),
+                                   static_cast<QWidget *>(ui->toolButton_update_subscription),
+                                   static_cast<QWidget *>(ui->checkBox_VPN),
+                                   static_cast<QWidget *>(ui->checkBox_SystemProxy)}) {
+                    w->setMinimumHeight(0);
+                    w->setMaximumHeight(QWIDGETSIZE_MAX);
+                }
+                return;
+            }
+            const int referenceHeight = qMax(ui->toolButton_program->height(), ui->toolButton_program->sizeHint().height());
+            const int stackedSpacing = ui->verticalLayout_url_sub->spacing();
+            const int stackedAvailableHeight = qMax(2, referenceHeight - stackedSpacing);
+            const int topButtonHeight = stackedAvailableHeight / 2;
+            const int bottomButtonHeight = stackedAvailableHeight - topButtonHeight;
+            ui->toolButton_url_test->setMinimumHeight(topButtonHeight);
+            ui->toolButton_url_test->setMaximumHeight(topButtonHeight);
+            ui->toolButton_update_subscription->setMinimumHeight(bottomButtonHeight);
+            ui->toolButton_update_subscription->setMaximumHeight(bottomButtonHeight);
+
+            const int checkboxSpacing = ui->verticalLayout_4->spacing();
+            const int checkboxAvailableHeight = qMax(2, referenceHeight - checkboxSpacing);
+            const int topCheckboxHeight = checkboxAvailableHeight / 2;
+            const int bottomCheckboxHeight = checkboxAvailableHeight - topCheckboxHeight;
+            ui->checkBox_VPN->setMinimumHeight(topCheckboxHeight);
+            ui->checkBox_VPN->setMaximumHeight(topCheckboxHeight);
+            ui->checkBox_SystemProxy->setMinimumHeight(bottomCheckboxHeight);
+            ui->checkBox_SystemProxy->setMaximumHeight(bottomCheckboxHeight);
+        };
+        setTimeout([this, applyStackedHeights] { applyStackedHeights(ProxorGui::dataStore->theme); }, this, 0);
+        connect(themeManager, &ThemeManager::themeChanged, this, applyStackedHeights);
+    }
+#endif
     connect(ui->toolButton_url_test, &QToolButton::clicked, this, [=] {
         const int m = ProxorGui::dataStore->ping_type == 1 ? 3 : (ProxorGui::dataStore->ping_type == 2 ? 4 : 0);
         speedtest_current_group(m, true);
@@ -687,7 +770,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->masterLogBrowser->setUndoRedoEnabled(false);
     ui->masterLogBrowser->setDocument(qvLogDocument);
     auto bottomPaneFont = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+#ifdef Q_OS_MACOS
+    bottomPaneFont.setPointSize(11); // macOS points are 72-dpi based, 9 pt is too small there
+#else
     bottomPaneFont.setPointSize(9);
+#endif
     ui->masterLogBrowser->setFont(bottomPaneFont);
     qvLogDocument->setDefaultFont(bottomPaneFont);
     // Keep log and connection tabs visually aligned.
@@ -761,6 +848,23 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     };
     refreshTableTheme(ProxorGui::dataStore->theme);
     connect(themeManager, &ThemeManager::themeChanged, this, refreshTableTheme);
+#ifdef Q_OS_MACOS
+    {
+        // System on macOS: native document-mode tab strips and native alternating rows without
+        // grid lines. Other themes get today's values back. Connected after refreshTableTheme,
+        // so it runs after that lambda resets the palettes on every themeChanged.
+        auto applyMacNativeLook = [this](const QString &themeName) {
+            const bool isSystem = (themeManager->NormalizeTheme(themeName) == QStringLiteral("System"));
+            ui->tabWidget->setDocumentMode(isSystem);
+            ui->down_tab->setDocumentMode(isSystem);
+            ui->proxyListTable->setAlternatingRowColors(isSystem);
+            ui->tableWidget_conn->setAlternatingRowColors(true);
+            ui->tableWidget_conn->setShowGrid(!isSystem);
+        };
+        applyMacNativeLook(ProxorGui::dataStore->theme);
+        connect(themeManager, &ThemeManager::themeChanged, this, applyMacNativeLook);
+    }
+#endif
     connect(themeManager, &ThemeManager::themeChanged, this, [=](const QString &) {
         rebuildLogDocument(ui->log_filter->text());
     });

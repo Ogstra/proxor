@@ -328,6 +328,10 @@ QList<ThemeManager::ThemeOption> ThemeManager::AvailableThemes() const {
             continue;
         if (key.toLower() == QStringLiteral("fusion"))
             continue;  // Fusion is used as QDarkStyle base, skip to avoid confusion
+#ifdef Q_OS_MACOS
+        if (key.compare(QStringLiteral("Windows"), Qt::CaseInsensitive) == 0)
+            continue;  // "Windows Classic" makes no sense on macOS
+#endif
         QString displayName = key;
         if (key.compare(QStringLiteral("Windows"), Qt::CaseInsensitive) == 0) {
             displayName = QStringLiteral("Windows Classic");
@@ -376,6 +380,13 @@ QString ThemeManager::NormalizeTheme(const QString &theme) const {
     if (lowerTheme == QStringLiteral("system")) {
         return QStringLiteral("System");
     }
+
+#ifdef Q_OS_MACOS
+    // A stored Windows Classic theme lands on System (the native macOS look).
+    if (lowerTheme == QStringLiteral("windows")) {
+        return QStringLiteral("System");
+    }
+#endif
 
     // Check if it is a valid QStyleFactory key (case-insensitive match)
     for (const auto &key : QStyleFactory::keys()) {
@@ -476,6 +487,20 @@ void ThemeManager::ApplyTheme(const QString &theme, bool force) {
         qApp->installEventFilter(this);
         event_filter_installed = true;
     }
+
+#ifdef Q_OS_MACOS
+    // The native macos style and the default palette already follow the OS light/dark
+    // setting, but Proxor's own themeChanged listeners (log colors, table theme, settings
+    // navigation QSS) only refresh on ApplyTheme, so re-apply System when the OS flips.
+    static bool color_scheme_connected = false;
+    if (!color_scheme_connected) {
+        color_scheme_connected = true;
+        QObject::connect(qApp->styleHints(), &QStyleHints::colorSchemeChanged, this, [this](Qt::ColorScheme) {
+            if (applying || NormalizeTheme(current_theme) != QStringLiteral("System")) return;
+            QTimer::singleShot(0, this, [this] { ApplyTheme(current_theme, true); });
+        });
+    }
+#endif
 
 #ifdef Q_OS_WIN
     title_bar_dark = resolvedIsDark(lowerTheme, requestedMode);

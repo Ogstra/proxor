@@ -32,6 +32,16 @@
 
 namespace {
 QString SettingsListStyleForTheme(const QString &themeName) {
+#ifdef Q_OS_MACOS
+    if (themeManager->NormalizeTheme(themeName) == QStringLiteral("System")) {
+        // Sidebar-like navigation that follows light/dark through palette roles.
+        return QStringLiteral(
+            "QListWidget{background:transparent;border:none;outline:0;}"
+            "QListWidget::item{padding:5px 12px;margin:1px 6px;border-radius:6px;}"
+            "QListWidget::item:selected{background:palette(highlight);color:palette(highlighted-text);}"
+        );
+    }
+#endif
     QString style = QStringLiteral("QListWidget::item{padding:4px 10px;}");
     if (themeManager->NormalizeTheme(themeName) != QStringLiteral("System")) {
         style += QStringLiteral(
