@@ -117,6 +117,11 @@ namespace ProxorGui {
         bool start_minimal = false;
         int max_log_line = 200;
         QString splitter_state = "";
+#ifdef Q_OS_MACOS
+        // Menu-bar icon: true = the status-colored icon, false = monochrome template glyph that
+        // macOS tints for light/dark menu bars.
+        bool tray_icon_colored = true;
+#endif
 
         // Subscription
         QString user_agent = ""; // set at main.cpp

@@ -8,6 +8,7 @@
 #include "sub/GroupUpdater.hpp"
 #include "sys/ExternalProcess.hpp"
 #include "sys/WifiMonitor.hpp"
+#include "main/PackagePolicy.hpp"
 
 #include "ui/ThemeManager.hpp"
 #include "ui/Icon.hpp"
@@ -37,6 +38,14 @@
 #include "sys/linux/LinuxCap.h"
 #endif
 #include <unistd.h>
+#include <cerrno>
+#include <cstdio>
+#endif
+
+#ifdef Q_OS_MACOS
+#include "ui/mac/MacPlatform.h"
+#include "ui/mac/MacLook.h"
+#include "ui/mac/MacDialogs.h"
 #endif
 
 #include <QClipboard>
@@ -44,6 +53,7 @@
 #include <QAbstractItemView>
 #include <QBrush>
 #include <QColor>
+#include <QDateTime>
 #include <QLabel>
 #include <QCheckBox>
 #include <QFontMetrics>
@@ -82,6 +92,13 @@
 #include <QPushButton>
 
 namespace {
+// When the tunnel is the active mode, every test leaves through it, so a test that runs
+// while the core is still installing routes reports the whole list as unavailable. The
+// moment Tun was last switched on lives here rather than in the class because the tests
+// only need to know how long the routes have had to settle.
+qint64 g_tun_enabled_ms = 0;
+constexpr qint64 kTunSettleMs = 6000;
+
 // Qt::SingleShotConnection retires the connection on the FIRST emission of the signal,
 // whether or not the slot did anything useful. reachabilityChanged fires for every
 // topology change -- notably when the TUN adapter comes up -- so a slot that filters for
@@ -431,8 +448,22 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         "QCheckBox#checkBox_VPN::indicator, QCheckBox#checkBox_SystemProxy::indicator {"
         "  margin-top: 1px;"
         "}");
+#ifdef Q_OS_MACOS
+    // The System theme on macOS keeps the native checkboxes; the Windows-tuned padding only
+    // applies to the other (Fusion/QSS) themes, and is re-evaluated when the theme changes.
+    {
+        auto applyToolbarCheckboxSS = [this](const QString &themeName) {
+            const bool isSystem = (themeManager->NormalizeTheme(themeName) == QStringLiteral("System"));
+            ui->checkBox_VPN->setStyleSheet(isSystem ? QString() : toolbarCheckboxSS);
+            ui->checkBox_SystemProxy->setStyleSheet(isSystem ? QString() : toolbarCheckboxSS);
+        };
+        applyToolbarCheckboxSS(ProxorGui::dataStore->theme);
+        connect(themeManager, &ThemeManager::themeChanged, this, applyToolbarCheckboxSS);
+    }
+#else
     ui->checkBox_VPN->setStyleSheet(toolbarCheckboxSS);
     ui->checkBox_SystemProxy->setStyleSheet(toolbarCheckboxSS);
+#endif
     m_quotaLabel = new QLabel(this);
     m_quotaLabel->setContentsMargins(0, 0, 8, 0);
     m_quotaLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -440,8 +471,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->down_tab->setCornerWidget(m_quotaLabel, Qt::TopRightCorner);
     m_quotaLabel->hide();
     connect(ui->down_tab, &QTabWidget::currentChanged, this, &MainWindow::on_down_tab_currentChanged);
-    connect(qApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState) {
+    connect(qApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState state) {
         update_connection_statistics_polling_state();
+        if (state != Qt::ApplicationActive) {
+            application_was_inactive = true;
+        } else if (application_was_inactive) {
+            application_was_inactive = false;
+            queue_resume_subscription_check();
+        }
     });
     update_connection_statistics_polling_state();
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
@@ -475,6 +512,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
         auto *chosen = menu.exec(tabBar->mapToGlobal(pos));
         if (chosen == updateAction) {
+            if (startup_tun_pending || startup_tun_failed) {
+                MessageBoxWarning(software_name, tr("Subscription updates are disabled until Tun authorization succeeds."));
+                return;
+            }
             ProxorGui_sub::groupUpdater->AsyncUpdate(group->url, group->id);
             return;
         }
@@ -539,9 +580,19 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     // cannot be suppressed via QSS on the Windows platform style.
     auto attachMenuOnClick = [](QToolButton *btn, QMenu *menu) {
         btn->setFocusPolicy(Qt::NoFocus);
+#ifdef Q_OS_MACOS
+        // Pop the menu up as a native NSMenu, like the menu-bar menus (the Qt-drawn popup had square
+        // corners, no shortcuts, and on the Settings button did not show at all, leaving it pressed).
+        QObject::connect(btn, &QToolButton::clicked, btn, [btn, menu]() {
+            ProxorMac::PopupMenu(menu, btn);
+            btn->setDown(false);
+            btn->update();
+        });
+#else
         QObject::connect(btn, &QToolButton::clicked, btn, [btn, menu]() {
             menu->popup(btn->mapToGlobal(QPoint(0, btn->height())));
         });
+#endif
         QObject::connect(menu, &QMenu::aboutToHide, btn, [btn]() {
             btn->setDown(false);
             btn->update();
@@ -551,6 +602,42 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     attachMenuOnClick(ui->toolButton_preferences, ui->menu_preferences);
     attachMenuOnClick(ui->toolButton_server, ui->menu_server);
     ui->menubar->setVisible(false);
+#ifdef Q_OS_MACOS
+    // QMenuBar::setVisible(false) does not remove a native menu bar, so menu_program /
+    // menu_preferences / menu_server stay in the macOS global menu bar. Qt's
+    // TextHeuristicRole would then move any action whose caption starts with
+    // About/Settings/Preferences/Quit/etc. into the application menu (Qt 6.11
+    // qcocoamenuitem.mm detectMenuRole), emptying Exit / Settings / About Proxor out of
+    // Proxor's own menus (and the mirrored tray menu built below, same QAction objects).
+    // NoRole keeps every one of these actions exactly where the .ui put them.
+    {
+        std::function<void(QAction *)> forceNoRole = [&](QAction *action) {
+            action->setMenuRole(QAction::NoRole);
+            if (auto *sub = action->menu()) {
+                for (auto *subAction : sub->actions()) forceNoRole(subAction);
+            }
+        };
+        for (auto *topMenu : {ui->menu_program, ui->menu_preferences, ui->menu_server}) {
+            for (auto *action : topMenu->actions()) forceNoRole(action);
+        }
+    }
+    // Mac convention: a "Proxor" application-menu entry for Settings... (Cmd+,) and About
+    // Proxor, wired to the same slots as the .ui actions above. These are separate QActions
+    // that exist only here, so menu_basic_settings/menu_about stay NoRole and visible in
+    // menu_preferences/menu_program. No QuitRole action is added here: Qt's default
+    // "Quit Proxor" item (Cmd+Q) is handled by the spontaneous-Quit interceptor installed
+    // further below, which runs Proxor's real exit path.
+    {
+        auto *macAppRoleMenu = ui->menubar->addMenu(QStringLiteral("Proxor"));
+        auto *macSettingsAction = macAppRoleMenu->addAction(tr("Settings…"));
+        macSettingsAction->setMenuRole(QAction::PreferencesRole);
+        macSettingsAction->setShortcut(QKeySequence::Preferences);
+        connect(macSettingsAction, &QAction::triggered, this, &MainWindow::on_menu_basic_settings_triggered);
+        auto *macAboutAction = macAppRoleMenu->addAction(tr("About Proxor"));
+        macAboutAction->setMenuRole(QAction::AboutRole);
+        connect(macAboutAction, &QAction::triggered, this, [this] { ui->menu_about->trigger(); });
+    }
+#endif
     auto applyToolbarAutoRaise = [this](const QString &themeName) {
         const bool isSystem = (themeManager->NormalizeTheme(themeName) == QStringLiteral("System"));
         const QList<QToolButton *> btns = {
@@ -571,10 +658,22 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             "  background-color: palette(light);"
             "  border-color: palette(shadow);"
             "}");
+#ifdef Q_OS_MACOS
+        // QMacStyle draws a QToolButton outside a QToolBar as a boxed bevel, which gives the same
+        // boxed buttons as the other platforms in the Mac style. The Windows-tuned systemBtnSS
+        // would replace that native drawing, so every button keeps no style sheet here.
+        (void) systemBtnSS;
+        (void) isSystem;
+        for (auto *btn : btns) {
+            btn->setAutoRaise(false);
+            btn->setStyleSheet(QString());
+        }
+#else
         for (auto *btn : btns) {
             btn->setAutoRaise(isSystem);
             btn->setStyleSheet(isSystem ? systemBtnSS : QString());
         }
+#endif
     };
     applyToolbarAutoRaise(ProxorGui::dataStore->theme);
     connect(themeManager, &ThemeManager::themeChanged, this, applyToolbarAutoRaise);
@@ -595,6 +694,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             button->setMinimumHeight(referenceHeight);
             button->setMinimumWidth(referenceHeight);
         }
+#ifndef Q_OS_MACOS
         const int stackedSpacing = ui->verticalLayout_url_sub->spacing();
         const int stackedAvailableHeight = qMax(2, referenceHeight - stackedSpacing);
         const int topButtonHeight = stackedAvailableHeight / 2;
@@ -613,7 +713,26 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         ui->checkBox_VPN->setMaximumHeight(topCheckboxHeight);
         ui->checkBox_SystemProxy->setMinimumHeight(bottomCheckboxHeight);
         ui->checkBox_SystemProxy->setMaximumHeight(bottomCheckboxHeight);
+#endif
     }, this, 0);
+#ifdef Q_OS_MACOS
+    {
+        // The Windows-tuned forced heights squeeze the native Mac bevels (the stacked buttons
+        // overlapped and the check boxes sat above their labels), so on macOS the native size
+        // hints win under every theme.
+        auto applyStackedHeights = [this](const QString &) {
+            for (QWidget *w : {static_cast<QWidget *>(ui->toolButton_url_test),
+                               static_cast<QWidget *>(ui->toolButton_update_subscription),
+                               static_cast<QWidget *>(ui->checkBox_VPN),
+                               static_cast<QWidget *>(ui->checkBox_SystemProxy)}) {
+                w->setMinimumHeight(0);
+                w->setMaximumHeight(QWIDGETSIZE_MAX);
+            }
+        };
+        setTimeout([this, applyStackedHeights] { applyStackedHeights(ProxorGui::dataStore->theme); }, this, 0);
+        connect(themeManager, &ThemeManager::themeChanged, this, applyStackedHeights);
+    }
+#endif
     connect(ui->toolButton_url_test, &QToolButton::clicked, this, [=] {
         const int m = ProxorGui::dataStore->ping_type == 1 ? 3 : (ProxorGui::dataStore->ping_type == 2 ? 4 : 0);
         speedtest_current_group(m, true);
@@ -626,7 +745,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->masterLogBrowser->setUndoRedoEnabled(false);
     ui->masterLogBrowser->setDocument(qvLogDocument);
     auto bottomPaneFont = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+#ifdef Q_OS_MACOS
+    bottomPaneFont.setPointSize(11); // macOS points are 72-dpi based, 9 pt is too small there
+#else
     bottomPaneFont.setPointSize(9);
+#endif
     ui->masterLogBrowser->setFont(bottomPaneFont);
     qvLogDocument->setDefaultFont(bottomPaneFont);
     // Keep log and connection tabs visually aligned.
@@ -700,6 +823,24 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     };
     refreshTableTheme(ProxorGui::dataStore->theme);
     connect(themeManager, &ThemeManager::themeChanged, this, refreshTableTheme);
+#ifdef Q_OS_MACOS
+    {
+        // System on macOS: native tab panes (same framed layout as the other platforms) and
+        // native alternating rows without grid lines. Other themes get today's values back.
+        // Connected after refreshTableTheme, so it runs after that lambda resets the palettes
+        // on every themeChanged.
+        auto applyMacNativeLook = [this](const QString &themeName) {
+            const bool isSystem = (themeManager->NormalizeTheme(themeName) == QStringLiteral("System"));
+            ui->tabWidget->setDocumentMode(false);
+            ui->down_tab->setDocumentMode(false);
+            ui->proxyListTable->setAlternatingRowColors(isSystem);
+            ui->tableWidget_conn->setAlternatingRowColors(true);
+            ui->tableWidget_conn->setShowGrid(!isSystem);
+        };
+        applyMacNativeLook(ProxorGui::dataStore->theme);
+        connect(themeManager, &ThemeManager::themeChanged, this, applyMacNativeLook);
+    }
+#endif
     connect(themeManager, &ThemeManager::themeChanged, this, [=](const QString &) {
         rebuildLogDocument(ui->log_filter->text());
     });
@@ -854,9 +995,42 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     // Setup Tray
     tray = new QSystemTrayIcon(this); // 初始化托盘对象tray
+#ifdef Q_OS_MACOS
+    // Never call tray->setContextMenu/setIcon/show() on macOS: QSystemTrayIcon::setContextMenu
+    // is exactly what crashes (see MacPlatform.mm's header comment and tray-crash.log). `tray`
+    // stays around only so actionShow_window and the hotkey below can keep emitting
+    // tray->activated(Trigger) into the same lambda; its own (never shown) status item is inert.
+    // Proxor owns a real NSStatusItem instead, with a dedicated tray menu (not shared with the
+    // toolbar's ui->menu_program, since one NSMenu cannot have two supermenus).
+    mac_tray_menu = new QMenu(this);
+    for (auto *action : ui->menu_program->actions()) {
+        if (action->isSeparator()) {
+            mac_tray_menu->addSeparator();
+            continue;
+        }
+        if (action == ui->menu_spmode->menuAction()) {
+            auto *spmodeMirror = mac_tray_menu->addMenu(action->text());
+            for (auto *spAction : ui->menu_spmode->actions()) {
+                spmodeMirror->addAction(spAction);
+            }
+            connect(spmodeMirror, &QMenu::aboutToShow, this, [this] { emit ui->menu_spmode->aboutToShow(); });
+            continue;
+        }
+        mac_tray_menu->addAction(action);
+    }
+    mac_status_item = new ProxorMac::StatusItem;
+    mac_status_item->setColored(ProxorGui::dataStore->tray_icon_colored);
+    mac_status_item->setIcon(Icon::GetTrayIcon(Icon::NONE));
+    mac_status_item->setMenu(mac_tray_menu);
+    mac_status_item->setVisible(true);
+    ProxorMac::InstallQuitInterceptor(this, [this] {
+        if (!ProxorGui::dataStore->prepare_exit) on_menu_exit_triggered();
+    });
+#else
     tray->setIcon(Icon::GetTrayIcon(Icon::NONE));
     tray->setContextMenu(ui->menu_program); // 创建托盘菜单
     tray->show();                           // 让托盘图标显示在系统托盘上
+#endif
     connect(tray, &QSystemTrayIcon::activated, this, [=](QSystemTrayIcon::ActivationReason reason) {
         if (reason == QSystemTrayIcon::Trigger) {
             if (this->isVisible()) {
@@ -890,6 +1064,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         proxor_set_spmode_vpn(false);
     });
     connect(ui->menu_qr, &QAction::triggered, this, [=]() { display_qr_link(false); });
+#ifdef NKR_NO_ZXING
+    // on_menu_scan_qr_triggered needs the barcode reader this build does not link.
+    ui->menu_scan_qr->setVisible(false);
+#endif
     connect(ui->menu_tcp_ping, &QAction::triggered, this, [=]() { speedtest_current_group(0, false); });
     connect(ui->menu_url_test, &QAction::triggered, this, [=]() { speedtest_current_group(1, false); });
     connect(ui->menu_full_test, &QAction::triggered, this, [=]() { speedtest_current_group(2, false); });
@@ -977,13 +1155,25 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     // a still-null defaultClient.
     setup_grpc();
 
+    const bool restore_system_proxy = ProxorGui::dataStore->remember_spmode.contains("system_proxy");
+    const bool restore_vpn = ProxorGui::dataStore->remember_spmode.contains("vpn") || ProxorGui::dataStore->flag_restart_tun_on;
+    // A remembered TUN must be ready before any automatic work creates traffic.
+    startup_tun_pending = restore_vpn;
+    if (startup_tun_pending && ProxorGui::dataStore->remember_enable && ProxorGui::dataStore->remember_id >= 0) {
+        startup_deferred_profile_id = ProxorGui::dataStore->remember_id;
+    }
+
     // Start core
     runOnUiThread(
         [=] {
             core_process = new ProxorGui_sys::CoreProcess(core_path, args);
             // Remember last started
             if (ProxorGui::dataStore->remember_enable && ProxorGui::dataStore->remember_id >= 0) {
-                core_process->start_profile_when_core_is_up = ProxorGui::dataStore->remember_id;
+                if (startup_tun_pending && !startup_tun_authorized) {
+                    startup_deferred_profile_id = ProxorGui::dataStore->remember_id;
+                } else {
+                    core_process->start_profile_when_core_is_up = ProxorGui::dataStore->remember_id;
+                }
             }
             // Setup
             core_process->Start();
@@ -993,9 +1183,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     wifi_monitor = new WifiMonitor(this);
     connect(wifi_monitor, &WifiMonitor::ssidChanged, this, &MainWindow::onWifiSsidChanged);
     wifi_monitor->start();
-
-    const bool restore_system_proxy = ProxorGui::dataStore->remember_spmode.contains("system_proxy");
-    const bool restore_vpn = ProxorGui::dataStore->remember_spmode.contains("vpn") || ProxorGui::dataStore->flag_restart_tun_on;
 
     connect(qApp, &QGuiApplication::commitDataRequest, this, &MainWindow::on_commitDataRequest);
 
@@ -1014,38 +1201,63 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             TM_auto_update_subsctiption->start(60 * 1000);
         }
     };
-    connect(TM_auto_update_subsctiption, &QTimer::timeout, this, [&] { UI_update_due_groups_on_timer(); });
+    connect(TM_auto_update_subsctiption, &QTimer::timeout, this, [this] {
+        const auto now = QDateTime::currentMSecsSinceEpoch();
+        const bool resumed = subscription_timer_last_tick_ms > 0 && now - subscription_timer_last_tick_ms > 70 * 1000;
+        subscription_timer_last_tick_ms = now;
+        if (resumed) {
+            queue_resume_subscription_check();
+            return;
+        }
+        if (!startup_tun_pending && !startup_tun_failed) UI_update_due_groups_on_timer();
+    });
     TM_auto_update_subsctiption_Reset_Minute(ProxorGui::dataStore->sub_auto_update);
+    #if QT_VERSION >= QT_VERSION_CHECK(6, 4, 0)
     const bool niLoaded = QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability);
+    #elif QT_VERSION >= QT_VERSION_CHECK(6, 3, 0)
+    const bool niLoaded = QNetworkInformation::loadDefaultBackend();
+    #else
+    const bool niLoaded = false;
+    #endif
     QNetworkInformation *ni = niLoaded ? QNetworkInformation::instance() : nullptr;
     const bool isOnline = ni && ni->reachability() == QNetworkInformation::Reachability::Online;
 
-    if (ProxorGui::dataStore->sub_update_on_start) {
-        if (!ni || isOnline) {
-            setTimeout([this] { UI_update_all_groups(true); }, this, 2000);
+    startup_network_work = [this, ni, isOnline] {
+        if (ProxorGui::dataStore->sub_update_on_start) {
+            if (!ni || isOnline) {
+                setTimeout([this] { UI_update_all_groups(true); }, this, 2000);
+            } else {
+                runOnceWhenOnline(ni, this, [this] { UI_update_all_groups(true); });
+            }
         } else {
-            runOnceWhenOnline(ni, this, [this] { UI_update_all_groups(true); });
+            if (!ni || isOnline) {
+                setTimeout([this] { UI_update_due_groups_on_start(); }, this, 2000);
+            } else {
+                runOnceWhenOnline(ni, this, [this] { UI_update_due_groups_on_start(); });
+            }
         }
-    } else {
-        if (!ni || isOnline) {
-            setTimeout([this] { UI_update_due_groups_on_start(); }, this, 2000);
-        } else {
-            runOnceWhenOnline(ni, this, [this] { UI_update_due_groups_on_start(); });
-        }
-    }
-    setTimeout([this] { run_subscription_ping_on_open(); }, this, 2500);
+        setTimeout([this] { run_subscription_ping_on_open(); }, this, 2500);
 
-    if (ProxorGui::dataStore->check_update_on_start) {
-        auto doCheck = [this]() {
-            setTimeout([this] { runOnNewThread([this] { CheckUpdate(true); }); }, this, 1500);
-        };
-        if (!ni || isOnline) {
-            doCheck();
-        } else {
-            runOnceWhenOnline(ni, this, [this] { runOnNewThread([this] { CheckUpdate(true); }); });
+        if (ProxorGui::dataStore->check_update_on_start) {
+            auto doCheck = [this]() {
+                setTimeout([this] { runOnNewThread([this] { CheckUpdate(true); }); }, this, 1500);
+            };
+            if (!ni || isOnline) {
+                doCheck();
+            } else {
+                runOnceWhenOnline(ni, this, [this] { runOnNewThread([this] { CheckUpdate(true); }); });
+            }
         }
+    };
+    if (!startup_tun_pending) {
+        auto startupWork = std::move(startup_network_work);
+        startupWork();
     }
 
+#ifdef Q_OS_MACOS
+    ProxorMac::InstallDialogPolish();
+    ProxorMac::PolishMainWindow(this);
+#endif
     if (!ProxorGui::dataStore->flag_tray) show();
 
     // Restore spmode after the window has entered the event loop so prompts
@@ -1057,16 +1269,31 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             }
             if (restore_vpn) {
                 proxor_set_spmode_vpn(true, false);
+                if (ProxorGui::UseInternalTun() && ProxorGui::dataStore->spmode_vpn) {
+                    completeStartupTunAuthorization();
+                } else if (!ProxorGui::UseInternalTun() && !ProxorGui::dataStore->spmode_vpn) {
+                    failStartupTunAuthorization();
+                }
             }
         }, this, 0);
     }
 }
 
 void MainWindow::run_subscription_ping_on_open(int attempts) {
+    if (startup_tun_pending || startup_tun_failed) return;
     constexpr int maxAttempts = 90;
     if (attempts > maxAttempts) return;
 
-    if (UI_subscription_updates_running() || !ProxorGui::dataStore->core_running) {
+    // Tun carries the tests, and the core installs its routes after it answers on gRPC, so
+    // a started profile and a settled tunnel are both required. Without this the list came
+    // back entirely unavailable on every platform, because the probes left before the
+    // tunnel could carry them.
+    const bool tunSelected = ProxorGui::dataStore->spmode_vpn;
+    const bool tunSettled = g_tun_enabled_ms > 0 &&
+                            QDateTime::currentMSecsSinceEpoch() - g_tun_enabled_ms >= kTunSettleMs;
+    const bool waitingForTun = tunSelected && (ProxorGui::dataStore->started_id < 0 || !tunSettled);
+
+    if (UI_subscription_updates_running() || !ProxorGui::dataStore->core_running || waitingForTun) {
         setTimeout([this, attempts] { run_subscription_ping_on_open(attempts + 1); }, this, 1000);
         return;
     }
@@ -1091,7 +1318,11 @@ void MainWindow::run_subscription_ping_on_open(int attempts) {
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {
+#ifdef Q_OS_MACOS
+    if (mac_status_item != nullptr && mac_status_item->isVisible()) {
+#else
     if (tray->isVisible()) {
+#endif
         ui->proxyListTable->clearSelection();
         hide();          // 隐藏窗口
         event->ignore(); // 忽略事件
@@ -1212,6 +1443,7 @@ std::shared_ptr<ProxorGui::ProxyEntity> MainWindow::resolveSsidOnDemandProfile()
 }
 
 void MainWindow::onWifiSsidChanged(const QString &ssid) {
+    if (startup_tun_pending || startup_tun_failed) return;
     if (!ProxorGui::dataStore->ssid_on_demand_enabled) return;
 
     bool isTrigger = !ssid.isEmpty() &&
@@ -1297,6 +1529,7 @@ void MainWindow::on_tabWidget_currentChanged(int index) {
                 ProxorGui::profileManager->AddGroup(ent);
                 refresh_groups();
                 if (!ent->url.trimmed().isEmpty()) {
+                    if (startup_tun_pending || startup_tun_failed) return;
                     ProxorGui_sub::groupUpdater->AsyncUpdate(ent->url, ent->id);
                 }
             } else {
@@ -1336,6 +1569,17 @@ void MainWindow::update_connection_statistics_polling_state() {
                                QApplication::applicationState() == Qt::ApplicationActive;
     conn_stats_tab_active.store(tabActive, std::memory_order_relaxed);
     conn_stats_window_visible.store(windowVisible, std::memory_order_relaxed);
+}
+
+void MainWindow::queue_resume_subscription_check() {
+    if (subscription_resume_check_pending || !UI_has_scheduled_subscription_updates()) return;
+    subscription_resume_check_pending = true;
+    setTimeout([this] {
+        subscription_resume_check_pending = false;
+        if (!startup_tun_pending && !startup_tun_failed && !UI_subscription_updates_running()) {
+            UI_update_due_groups_on_timer();
+        }
+    }, this, 2000);
 }
 
 void MainWindow::update_quota_display() {
@@ -1427,6 +1671,11 @@ void MainWindow::dialog_message_impl(const QString &sender, const QString &info)
         refresh_status();
     }
     if (info.contains("UpdateDataStore")) {
+#ifdef Q_OS_MACOS
+        // The colored/monochrome menu-bar icon setting applies without a restart.
+        icon_status = -1;
+        refresh_status();
+#endif
         auto suggestRestartProxy = ProxorGui::dataStore->Save();
         if (info.contains("RouteChanged")) {
             suggestRestartProxy = true;
@@ -1650,6 +1899,58 @@ void MainWindow::on_commitDataRequest() {
 }
 
 void MainWindow::onUpdateStaged() {
+#ifdef Q_OS_LINUX
+    // The AppImage owns its own file and replaces it directly -- it must never reach
+    // the DecideUpdaterLaunch gate below, since that path only ever leads to the
+    // archive-only ./updater, which is not shipped and could not apply a raw
+    // .AppImage even if it were.
+    if (ProxorGui::CurrentPackageMode() == PackageMode::AppImage) {
+        const auto appImagePath = qEnvironmentVariable("APPIMAGE");
+        const auto stagedPath = QDir(QFileInfo(appImagePath).absolutePath()).filePath(staged_asset_name);
+
+        AppImageApplyProbe probe{};
+        probe.appImagePathKnown = !appImagePath.isEmpty();
+        probe.stagedFileExists = QFileInfo::exists(stagedPath);
+        probe.targetDirWritable = QFileInfo(QFileInfo(appImagePath).absolutePath()).isWritable();
+        probe.targetFileWritable = QFileInfo(appImagePath).isWritable();
+
+        const auto decision = DecideAppImageApply(probe);
+        if (!decision.replaceTarget) {
+            MessageBoxInfo(software_name, tr("%1 The download was kept at: %2").arg(decision.reason, stagedPath));
+            MW_show_log(tr("AppImage update not applied: %1 Download kept at %2").arg(decision.reason, stagedPath));
+            return;
+        }
+
+        QFile::setPermissions(stagedPath, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner |
+                                               QFile::ReadGroup | QFile::ExeGroup |
+                                               QFile::ReadOther | QFile::ExeOther);
+        // std::rename, not QFile::rename: QFile::rename refuses an existing destination,
+        // which would force a remove-then-rename window with no working AppImage at all.
+        // rename(2) within one directory replaces atomically.
+        if (std::rename(stagedPath.toLocal8Bit().constData(), appImagePath.toLocal8Bit().constData()) != 0) {
+            const auto err = errno;
+            MW_show_log(tr("Failed to replace the running AppImage (errno %1). Download kept at %2")
+                            .arg(err)
+                            .arg(stagedPath));
+            MessageBoxWarning(software_name, tr("Could not replace the AppImage. The download is still at: %1").arg(stagedPath));
+            return;
+        }
+
+        update_staged = true;
+        this->exit_reason = 2;
+        on_menu_exit_triggered();
+        return;
+    }
+#endif
+    // The updater is deliberately absent from the native Linux packages, and
+    // the package tests assert its absence, so its presence is a runtime
+    // fact and not an invariant: check before promising a restart into it.
+    const auto launch = DecideUpdaterLaunch(ProxorGui::ProbeUpdaterLaunch());
+    if (!launch.canLaunch) {
+        MessageBoxWarning(software_name, tr("%1 The app will stay open.").arg(launch.reason));
+        MW_show_log(tr("Update downloaded, but it cannot be installed: %1").arg(launch.reason));
+        return;
+    }
     update_staged = true;
     tray->showMessage(
         tr("Proxor"),
@@ -1665,7 +1966,12 @@ void MainWindow::onUpdateStaged() {
 void MainWindow::on_menu_exit_triggered() {
     if (mu_exit.tryLock()) {
         if (update_staged && exit_reason == 0) {
-            exit_reason = 1;
+            // Re-check: the updater binary or install directory could have
+            // changed since onUpdateStaged ran, and promising a restart the
+            // app cannot honour is exactly the bug this gate exists to avoid.
+            if (DecideUpdaterLaunch(ProxorGui::ProbeUpdaterLaunch()).canLaunch) {
+                exit_reason = 1;
+            }
         }
         ProxorGui::dataStore->prepare_exit = true;
         //
@@ -1695,12 +2001,12 @@ void MainWindow::on_menu_exit_triggered() {
     //
     MF_release_runguard();
     if (exit_reason == 1) {
-        QDir::setCurrent(ProxorGui::PackageRootPath());
-#ifdef Q_OS_WIN
-        QProcess::startDetached(ProxorGui::PackageExecutablePath("updater"), QStringList{});
-#else
-        QProcess::startDetached("./updater", QStringList{});
-#endif
+        // Final check before spawning: the updater is a runtime fact, not an
+        // invariant, so don't quit on a promise of a restart that won't happen.
+        if (DecideUpdaterLaunch(ProxorGui::ProbeUpdaterLaunch()).canLaunch) {
+            QDir::setCurrent(ProxorGui::PackageRootPath());
+            QProcess::startDetached(ProxorGui::PackageExecutablePath("updater"), QStringList{});
+        }
     } else if (exit_reason == 2 || exit_reason == 3) {
         QDir::setCurrent(ProxorGui::PackageRootPath());
 
@@ -1717,6 +2023,21 @@ void MainWindow::on_menu_exit_triggered() {
         auto program = ProxorGui::PackageExecutablePath("proxor");
 #else
         auto program = isLauncher ? "./launcher" : QApplication::applicationFilePath();
+#ifdef Q_OS_LINUX
+        // QApplication::applicationFilePath() under an AppImage lives inside the
+        // per-run SquashFS mount, which holds the image just superseded and is torn
+        // down when this process exits -- startDetached on it would either relaunch
+        // the old version or fail outright. $APPIMAGE is the real file on disk, and
+        // after onUpdateStaged()'s rename it is the new version, so prefer it here;
+        // this also repairs the "Restart Program" menu action and the Tun restart
+        // (exit_reason == 3) under an AppImage, both of which relaunched from the
+        // dying mount before this change.
+        const auto appImagePath = qEnvironmentVariable("APPIMAGE");
+        if (!isLauncher && !appImagePath.isEmpty()) {
+            program = appImagePath;
+            QDir::setCurrent(QFileInfo(appImagePath).absolutePath());
+        }
+#endif
 #endif
 
         if (exit_reason == 3) {
@@ -1733,6 +2054,12 @@ void MainWindow::on_menu_exit_triggered() {
     }
     QApplication::closeAllWindows();
     tray->hide();
+#ifdef Q_OS_MACOS
+    if (mac_status_item) mac_status_item->setVisible(false);
+    // QCoreApplication::quit() ends in -[NSApp terminate:], which sends another spontaneous
+    // QEvent::Quit; let it through now that the real exit path has finished.
+    ProxorMac::AllowQuit();
+#endif
     QCoreApplication::quit();
 }
 
@@ -1741,11 +2068,31 @@ void MainWindow::on_menu_exit_triggered() {
     return;
 
 void MainWindow::proxor_set_spmode_system_proxy(bool enable, bool save) {
+    // A Flatpak sandbox cannot reach the host's proxy settings, so asking is a
+    // guaranteed failure dialog; refuse before even trying.
+    if (enable) {
+        const auto lifecycle = DecideFlatpakLifecycle(ProxorGui::CurrentPackageMode(), FlatpakLifecycleEntryPoint::MenuToggle);
+        if (!lifecycle.allowSystemProxy) {
+            MessageBoxWarning(software_name, tr("System Proxy is not available in a Flatpak sandbox."));
+            proxor_set_spmode_FAILED
+        }
+    }
     if (enable != ProxorGui::dataStore->spmode_system_proxy) {
         if (enable) {
             auto socks_port = ProxorGui::dataStore->inbound_socks_port;
             auto http_port = ProxorGui::dataStore->inbound_socks_port;
-            SetSystemProxy(http_port, socks_port);
+            if (!SetSystemProxy(http_port, socks_port)) {
+#ifdef Q_OS_LINUX
+                MessageBoxWarning(
+                    software_name,
+                    tr("System Proxy could not be configured for this desktop environment. Use GNOME, KDE Plasma, or a native installation with Tun mode.")
+                );
+#else
+                MessageBoxWarning(software_name, tr("System Proxy could not be configured."));
+#endif
+                refresh_status();
+                return;
+            }
         } else {
             ClearSystemProxy();
         }
@@ -1764,14 +2111,45 @@ void MainWindow::proxor_set_spmode_system_proxy(bool enable, bool save) {
 }
 
 void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
+    // A Flatpak sandbox has no TUN device, so asking is a guaranteed failure
+    // dialog; refuse before even trying. Distinguish the startup restore path
+    // from a manual toggle only for the wording the policy layer may use.
+    if (enable) {
+        const auto entryPoint = startup_tun_pending
+            ? FlatpakLifecycleEntryPoint::StartupRestore
+            : FlatpakLifecycleEntryPoint::MenuToggle;
+        const auto lifecycle = DecideFlatpakLifecycle(ProxorGui::CurrentPackageMode(), entryPoint);
+        if (!lifecycle.allowTun) {
+            MessageBoxWarning(software_name, tr("Tun mode is not available in a Flatpak sandbox."));
+            proxor_set_spmode_FAILED
+        }
+    }
+    if (enable && startup_tun_failed) {
+        startup_tun_failed = false;
+        startup_tun_pending = true;
+        startup_tun_authorized = false;
+    }
+    // Turning Tun off means there is no tunnel left to wait for, so startup work that was
+    // held back by a failed authorization -- the subscription update after an update
+    // restart, for one -- can finally run.
+    if (!enable && startup_tun_failed && startup_network_work) {
+        startup_tun_failed = false;
+        MW_show_log(tr("Tun mode turned off; running the startup work that was waiting for it."));
+        auto startupWork = std::move(startup_network_work);
+        startupWork();
+    }
     if (enable != ProxorGui::dataStore->spmode_vpn) {
         if (enable) {
-            if (ProxorGui::dataStore->vpn_internal_tun) {
+            if (ProxorGui::UseInternalTun()) {
                 bool requestPermission = !ProxorGui::IsAdmin();
                 if (requestPermission) {
 #ifdef Q_OS_LINUX
                     if (!Linux_HavePkexec()) {
-                        MessageBoxWarning(software_name, "Please install \"pkexec\" first.");
+                        MessageBoxWarning(software_name, tr("Tun mode needs pkexec. Install PolicyKit and try again."));
+                        proxor_set_spmode_FAILED
+                    }
+                    if (!Linux_HaveSetcap()) {
+                        MessageBoxWarning(software_name, tr("Tun mode needs setcap. Install libcap and try again."));
                         proxor_set_spmode_FAILED
                     }
                     auto ret = Linux_Pkexec_SetCapString(ProxorGui::FindProxorCoreRealPath(), "cap_net_admin=ep");
@@ -1779,10 +2157,10 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
                         this->exit_reason = 3;
                         on_menu_exit_triggered();
                     } else {
-                        MessageBoxWarning(software_name, "Setcap for Tun mode failed.\n\n1. You may canceled the dialog.\n2. You may be using an incompatible environment like AppImage.");
-                        if (QProcessEnvironment::systemEnvironment().contains("APPIMAGE")) {
-                            MW_show_log("If you are using AppImage, it's impossible to start a Tun. Please use other package instead.");
-                        }
+                        MessageBoxWarning(
+                            software_name,
+                            tr("Tun mode could not grant cap_net_admin to proxor_core. You may have cancelled the authorization dialog, or the installation may not allow file capabilities.")
+                        );
                     }
 #endif
 #ifdef Q_OS_WIN
@@ -1795,16 +2173,40 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
                     proxor_set_spmode_FAILED
                 }
             } else {
+#ifdef Q_OS_LINUX
+                if (!Linux_HavePkexec()) {
+                    MessageBoxWarning(software_name, tr("Tun mode needs pkexec. Install PolicyKit and try again."));
+                    proxor_set_spmode_FAILED
+                }
+                if (qEnvironmentVariableIsSet("APPIMAGE")) {
+                    MW_show_log(tr("AppImage Tun uses a separate privileged compatibility core."));
+                }
+#endif
                 if (ProxorGui::dataStore->need_keep_vpn_off) {
                     MessageBoxWarning(software_name, tr("Current server is incompatible with Tun. Please stop the server first, enable Tun Mode, and then restart."));
                     proxor_set_spmode_FAILED
                 }
-                if (!StartVPNProcess()) {
-                    proxor_set_spmode_FAILED
+                const bool restoringProfile = startup_tun_pending && startup_deferred_profile_id >= 0;
+                if (ProxorGui::dataStore->started_id >= 0 || restoringProfile) {
+                    if (!StartVPNProcess()) {
+                        proxor_set_spmode_FAILED
+                    }
+                } else {
+                    // A compatibility TUN forwards traffic through the selected profile's
+                    // local SOCKS listener; do not install routes before it exists.
+                    MW_show_log(tr("Tun is enabled and will start after a proxy profile is running."));
+                    if (startup_tun_pending) {
+                        startup_tun_pending = false;
+                        startup_tun_authorized = true;
+                        if (startup_network_work) {
+                            auto startupWork = std::move(startup_network_work);
+                            startupWork();
+                        }
+                    }
                 }
             }
         } else {
-            if (ProxorGui::dataStore->vpn_internal_tun) {
+            if (ProxorGui::UseInternalTun()) {
                 // current core is sing-box
             } else {
                 if (!StopVPNProcess()) {
@@ -1823,9 +2225,13 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
     }
 
     ProxorGui::dataStore->spmode_vpn = enable;
+    g_tun_enabled_ms = enable ? QDateTime::currentMSecsSinceEpoch() : 0;
     refresh_status();
 
-    if (ProxorGui::dataStore->vpn_internal_tun && ProxorGui::dataStore->started_id >= 0) proxor_start(ProxorGui::dataStore->started_id);
+    if (enable && startup_tun_pending && ProxorGui::UseInternalTun()) {
+        completeStartupTunAuthorization();
+    }
+    if (ProxorGui::UseInternalTun() && ProxorGui::dataStore->started_id >= 0) proxor_start(ProxorGui::dataStore->started_id);
 }
 
 void MainWindow::syncWindowsHostsMapping(bool enable) {
@@ -1956,6 +2362,13 @@ void MainWindow::refresh_status(const QString &traffic_update) {
     if (tray != nullptr) {
         tray->setToolTip(make_title(true));
         if (icon_status_new != icon_status) tray->setIcon(Icon::GetTrayIcon(icon_status_new));
+#ifdef Q_OS_MACOS
+        if (mac_status_item) {
+            mac_status_item->setToolTip(make_title(true));
+            mac_status_item->setColored(ProxorGui::dataStore->tray_icon_colored);
+            if (icon_status_new != icon_status) mac_status_item->setIcon(Icon::GetTrayIcon(icon_status_new));
+        }
+#endif
     }
 
     icon_status = icon_status_new;
@@ -2567,7 +2980,11 @@ void MainWindow::on_menu_resolve_domain_triggered() {
 }
 
 void MainWindow::on_proxyListTable_customContextMenuRequested(const QPoint &pos) {
+#ifdef Q_OS_MACOS
+    ProxorMac::PopupMenuAt(ui->menu_server, ui->proxyListTable->viewport(), pos); // native NSMenu
+#else
     ui->menu_server->popup(ui->proxyListTable->viewport()->mapToGlobal(pos)); // 弹出菜单
+#endif
 }
 
 QList<std::shared_ptr<ProxorGui::ProxyEntity>> MainWindow::get_now_selected_list() {
@@ -2900,7 +3317,11 @@ void MainWindow::on_masterLogBrowser_customContextMenuRequested(const QPoint &po
     });
     menu->addAction(action_clear);
 
+#ifdef Q_OS_MACOS
+    ProxorMac::PopupMenuAt(menu, ui->masterLogBrowser->viewport(), pos); // native NSMenu
+#else
     menu->exec(ui->masterLogBrowser->viewport()->mapToGlobal(pos)); // 弹出菜单
+#endif
 }
 
 // eventFilter
@@ -3116,7 +3537,7 @@ bool MainWindow::StartVPNProcess() {
     }
     //
     auto configPath = ProxorGui::WriteVPNSingBoxConfig();
-    auto scriptPath = ProxorGui::WriteVPNLinuxScript(configPath);
+    auto scriptPath = ProxorGui::WriteVPNLinuxScript();
     //
 #ifdef Q_OS_WIN
     runOnNewThread([=] {
@@ -3129,26 +3550,127 @@ bool MainWindow::StartVPNProcess() {
     });
 #else
     //
+    auto corePath = ProxorGui::FindProxorCoreRealPath();
+#ifdef Q_OS_LINUX
+    if (qEnvironmentVariableIsSet("APPIMAGE")) {
+        const auto runtimeDir = QDir::current().filePath("runtime");
+        const auto copiedCorePath = QDir(runtimeDir).filePath("proxor_core");
+        if (!QDir().mkpath(runtimeDir) || !QFile::remove(copiedCorePath) && QFile::exists(copiedCorePath) ||
+            !QFile::copy(corePath, copiedCorePath)) {
+            MessageBoxWarning(software_name, tr("Failed to prepare the AppImage Tun compatibility core."));
+            return false;
+        }
+        QFile::setPermissions(copiedCorePath, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+        corePath = copiedCorePath;
+    }
+#endif
     auto vpn_process = new QProcess;
     QProcess::connect(vpn_process, &QProcess::stateChanged, this, [=](QProcess::ProcessState state) {
         if (state == QProcess::NotRunning) {
+            if (startup_tun_pending) failStartupTunAuthorization();
             vpn_pid = 0;
             vpn_process->deleteLater();
             GetMainWindow()->proxor_set_spmode_vpn(false);
         }
     });
     //
-    vpn_process->setProcessChannelMode(QProcess::ForwardedChannels);
+    vpn_process->setProcessChannelMode(QProcess::SeparateChannels);
 #ifdef Q_OS_MACOS
-    vpn_process->start("osascript", {"-e", QStringLiteral("do shell script \"%1\" with administrator privileges")
-                                               .arg("bash " + scriptPath)});
+    auto shellQuote = [](QString value) {
+        return QStringLiteral("'") + value.replace(QStringLiteral("'"), QStringLiteral("'\\\"'\\\"'")) + QStringLiteral("'");
+    };
+    auto appleScriptQuote = [](QString value) {
+        value.replace('\\', QStringLiteral("\\\\"));
+        value.replace('"', QStringLiteral("\\\""));
+        return QStringLiteral("\"") + value + QStringLiteral("\"");
+    };
+    const auto command = QStringLiteral("bash %1 %2 %3 '' %4").arg(
+        shellQuote(scriptPath),
+        shellQuote(corePath),
+        shellQuote(configPath),
+        shellQuote(Int2String(ProxorGui::dataStore->inbound_socks_port))
+    );
+    vpn_process->start("osascript", {"-e", QStringLiteral("do shell script %1 with administrator privileges").arg(appleScriptQuote(command))});
 #else
-    vpn_process->start("pkexec", {"bash", scriptPath});
+    QStringList vpnArgs{"bash", scriptPath, corePath, configPath, "proxor-tun"};
+    // The script only starts after a profile is active or is being restored.
+    // Wait for its SOCKS listener before TUN routes system traffic.
+    if (ProxorGui::dataStore->started_id >= 0 || (startup_tun_pending && startup_deferred_profile_id >= 0)) {
+        vpnArgs += Int2String(ProxorGui::dataStore->inbound_socks_port);
+    }
+    vpn_process->start(Linux_PkexecPath(), vpnArgs);
 #endif
-    vpn_process->waitForStarted();
+    if (!vpn_process->waitForStarted()) {
+        vpn_process->deleteLater();
+        if (startup_tun_pending) failStartupTunAuthorization();
+        return false;
+    }
+    auto startupMarkerBuffer = std::make_shared<QString>();
+    auto handleStandardOutput = [this, vpn_process, startupMarkerBuffer] {
+        auto output = QString::fromUtf8(vpn_process->readAllStandardOutput());
+        if (startup_tun_pending) {
+            *startupMarkerBuffer += output;
+            if (startupMarkerBuffer->contains("PROXOR_TUN_AUTHORIZED")) authorizeStartupTun();
+            if (startupMarkerBuffer->contains("PROXOR_TUN_READY")) completeStartupTunAuthorization();
+            if (startupMarkerBuffer->size() > 64) *startupMarkerBuffer = startupMarkerBuffer->right(64);
+        }
+        const auto log = output.replace("PROXOR_TUN_AUTHORIZED", "").replace("PROXOR_TUN_READY", "").trimmed();
+        if (!log.isEmpty()) MW_show_log(log);
+    };
+    connect(vpn_process, &QProcess::readyReadStandardOutput, this, handleStandardOutput);
+    connect(vpn_process, &QProcess::readyReadStandardError, this, [vpn_process] {
+        const auto log = QString::fromUtf8(vpn_process->readAllStandardError()).trimmed();
+        if (!log.isEmpty()) MW_show_log(log);
+    });
+    handleStandardOutput();
     vpn_pid = vpn_process->processId(); // actually it's pkexec or bash PID
 #endif
     return true;
+}
+
+void MainWindow::resumeDeferredStartupProfile() {
+    if (startup_deferred_profile_id >= 0) {
+        const auto profileId = startup_deferred_profile_id;
+        startup_deferred_profile_id = -1;
+        if (ProxorGui::dataStore->core_running) {
+            proxor_start(profileId);
+        } else if (core_process != nullptr) {
+            core_process->start_profile_when_core_is_up = profileId;
+        } else {
+            startup_deferred_profile_id = profileId;
+        }
+    }
+}
+
+void MainWindow::authorizeStartupTun() {
+    if (!startup_tun_pending || startup_tun_authorized) return;
+    startup_tun_authorized = true;
+    MW_show_log(tr("Tun authorization granted; starting the deferred proxy profile."));
+    resumeDeferredStartupProfile();
+}
+
+void MainWindow::completeStartupTunAuthorization() {
+    if (!startup_tun_pending) return;
+    startup_tun_pending = false;
+    startup_tun_authorized = true;
+    MW_show_log(tr("Tun interface ready; resuming deferred startup work."));
+
+    resumeDeferredStartupProfile();
+    if (startup_network_work) {
+        auto startupWork = std::move(startup_network_work);
+        startupWork();
+    }
+}
+
+void MainWindow::failStartupTunAuthorization() {
+    if (!startup_tun_pending) return;
+    startup_tun_pending = false;
+    startup_tun_authorized = false;
+    startup_tun_failed = true;
+    // startup_network_work is deliberately left in place: the work is not cancelled, only
+    // held, so enabling Tun later -- or turning the mode off -- still runs it instead of
+    // sending those requests outside the tunnel the user asked for.
+    MW_show_log(tr("Tun authorization failed; startup network work waits until Tun is available."));
 }
 
 bool MainWindow::StopVPNProcess(bool unconditional) {
@@ -3167,9 +3689,9 @@ bool MainWindow::StopVPNProcess(bool unconditional) {
                                         .arg("pkill -2 -U 0 proxor_core")});
 #else
         if (unconditional) {
-            p.start("pkexec", {"killall", "-2", "proxor_core"});
+            p.start(Linux_PkexecPath(), {"killall", "-2", "proxor_core"});
         } else {
-            p.start("pkexec", {"pkill", "-2", "-P", Int2String(vpn_pid)});
+            p.start(Linux_PkexecPath(), {"pkill", "-2", "-P", Int2String(vpn_pid)});
         }
 #endif
         p.waitForFinished();

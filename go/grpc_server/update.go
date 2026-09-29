@@ -2,12 +2,15 @@ package grpc_server
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"grpc_server/gen"
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -40,8 +43,9 @@ type githubRelease struct {
 }
 
 var (
-	updateDownloadURL string
-	updatePackagePath string
+	updateDownloadURL  string
+	updateAssetName    string
+	updateChecksumsURL string
 )
 
 type downloadProgress struct {
@@ -94,11 +98,47 @@ func updateArchiveSuffixes(goos, goarch string) ([]string, error) {
 	case goos == "windows" && goarch == "arm64":
 		return []string{"windows-arm64.zip"}, nil
 	case goos == "linux" && goarch == "amd64":
-		return []string{"linux64.zip", "linux64.tar.gz"}, nil
+		// The AppImage is the only asset published for linux/amd64 today. This is also
+		// the fallback every channel on this platform resolves to when it has no
+		// channel-specific entry in suffixesForChannel (e.g. an older GUI against a
+		// newer core, which sends no channel at all).
+		return []string{"linux64.AppImage"}, nil
 	case goos == "linux" && goarch == "arm64":
-		return []string{"linux-arm64.zip", "linux-arm64.tar.gz"}, nil
+		return nil, fmt.Errorf("self-update is not available for Linux/%s", goarch)
 	default:
 		return nil, fmt.Errorf("self-update is not available on %s/%s", goos, goarch)
+	}
+}
+
+// suffixesForChannel resolves the asset name suffix published for the channel the GUI
+// detected. Knowing a version exists is independent of being able to apply it, so this
+// resolves an asset even for channels the GUI will never call Download for (deb, rpm,
+// arch, flatpak, winget) -- the resolved asset's file name is what the C++ guidance text
+// names in the update command (e.g. "proxor_1.6.7-1_amd64.deb"). Go decides nothing about
+// whether an update may be applied; that policy stays in src/main/PackagePolicy.cpp.
+// An empty or unrecognised channel falls back to updateArchiveSuffixes(goos, goarch), so
+// an older GUI talking to a newer core still works.
+func suffixesForChannel(channel, goos, goarch string) ([]string, error) {
+	if goos != "linux" {
+		return updateArchiveSuffixes(goos, goarch)
+	}
+
+	switch channel {
+	case "deb":
+		return []string{"_amd64.deb"}, nil
+	case "rpm":
+		return []string{".x86_64.rpm"}, nil
+	case "flatpak":
+		return []string{".flatpak"}, nil
+	case "winget":
+		return []string{"winget-x64.zip"}, nil
+	case "arch":
+		// The AUR recipe builds from the source tarball, not a prebuilt binary.
+		return []string{".tar.gz"}, nil
+	case "appimage", "portable":
+		return []string{"linux64.AppImage"}, nil
+	default:
+		return updateArchiveSuffixes(goos, goarch)
 	}
 }
 
@@ -292,6 +332,89 @@ func downloadedArchivePath(assetName string) string {
 	}
 }
 
+// downloadDestination returns the final path Download should write assetName to. An
+// empty downloadDir defers to today's behaviour, downloadedArchivePath, beside the
+// install. A non-empty downloadDir is the caller's choice -- the AppImage channel is
+// the reason this exists, since the core's own working directory sits inside a
+// read-only FUSE mount and can never be the right answer for that channel -- and is
+// validated as an existing, writable directory before it is trusted.
+func downloadDestination(downloadDir, assetName string) (string, error) {
+	if downloadDir == "" {
+		return downloadedArchivePath(assetName), nil
+	}
+
+	info, err := os.Stat(downloadDir)
+	if err != nil {
+		return "", fmt.Errorf("download directory %q is not usable: %w", downloadDir, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("download directory %q is not a directory", downloadDir)
+	}
+
+	probe, err := os.CreateTemp(downloadDir, ".proxor-update-write-check-*")
+	if err != nil {
+		return "", fmt.Errorf("download directory %q is not writable: %w", downloadDir, err)
+	}
+	probeName := probe.Name()
+	probe.Close()
+	os.Remove(probeName)
+
+	return filepath.Join(downloadDir, filepath.Base(assetName)), nil
+}
+
+// checksumForAsset finds the published SHA-256 digest for assetName in sums, the raw
+// contents of a release's SHA256SUMS asset. prepare-release-assets.sh generates that file
+// with `shasum -a 256` from inside the output directory, which is why matching on
+// path.Base (stripping both a confirmed "./" prefix and any directory component the
+// wanted name might carry) is correct and matching on a full browser_download_url would
+// silently never match. Fails closed: an absent or ambiguous entry is an error, never an
+// empty string, because the caller must treat an unverifiable download as a failed one.
+func checksumForAsset(sums, assetName string) (string, error) {
+	wanted := path.Base(assetName)
+	var found string
+
+	for _, line := range strings.Split(sums, "\n") {
+		line = strings.TrimRight(line, "\r")
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		digest := fields[0]
+		name := strings.TrimPrefix(fields[1], "*")
+		if path.Base(name) != wanted {
+			continue
+		}
+		if found != "" && !strings.EqualFold(found, digest) {
+			return "", fmt.Errorf("SHA256SUMS lists %q twice with different hashes", wanted)
+		}
+		found = digest
+	}
+
+	if found == "" {
+		return "", fmt.Errorf("SHA256SUMS has no entry for %q", wanted)
+	}
+	return found, nil
+}
+
+// verifyAssetChecksum is the single chokepoint a downloaded asset must pass before it is
+// ever kept under its final name. A deliberately corrupted asset cannot be produced
+// against a published release, so this comparison -- not a live download -- is what
+// proves the mismatch path: fail closed on a missing/ambiguous SHA256SUMS entry
+// (checksumForAsset) and on a digest that does not match, case-insensitively.
+func verifyAssetChecksum(sums, assetName, gotDigestHex string) error {
+	wantDigestHex, err := checksumForAsset(sums, assetName)
+	if err != nil {
+		return err
+	}
+	if !strings.EqualFold(wantDigestHex, gotDigestHex) {
+		return fmt.Errorf("downloaded %q does not match its published SHA-256", assetName)
+	}
+	return nil
+}
+
 func githubError(resp *http.Response) string {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
 	message := strings.TrimSpace(string(body))
@@ -310,7 +433,7 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 		checkCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 
-		suffixes, err := updateArchiveSuffixes(runtime.GOOS, runtime.GOARCH)
+		suffixes, err := suffixesForChannel(in.Channel, runtime.GOOS, runtime.GOARCH)
 		if err != nil {
 			ret.Error = err.Error()
 			return ret, nil
@@ -349,7 +472,8 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 		release, asset, selection := matchingReleaseAsset(releases, proxor_common.Version_proxor, suffixes, in.CheckPreRelease)
 		if selection == updateSelectionCurrent {
 			updateDownloadURL = ""
-			updatePackagePath = ""
+			updateAssetName = ""
+			updateChecksumsURL = ""
 			return ret, nil
 		}
 		if selection == updateSelectionNoCompatible || release == nil || asset == nil {
@@ -358,7 +482,22 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 		}
 
 		updateDownloadURL = asset.BrowserDownloadURL
-		updatePackagePath = downloadedArchivePath(asset.Name)
+		// The destination is resolved later, at Download time, from whatever
+		// download_dir that request names -- not here -- so a stale Check result
+		// can never be reused against a directory a different request chose.
+		updateAssetName = asset.Name
+
+		// Downloads are only ever kept when they match the release's own published
+		// SHA256SUMS entry for this exact asset name. An empty URL here means the
+		// release published none, which Download must treat as a failure, not a
+		// skip -- the asset name alone is never trusted.
+		updateChecksumsURL = ""
+		for _, a := range release.Assets {
+			if a.Name == "SHA256SUMS" {
+				updateChecksumsURL = a.BrowserDownloadURL
+				break
+			}
+		}
 
 		ret.AssetsName = asset.Name
 		ret.DownloadUrl = asset.BrowserDownloadURL
@@ -368,10 +507,20 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 		return ret, nil
 
 	case gen.UpdateAction_Download:
-		if updateDownloadURL == "" || updatePackagePath == "" {
+		if updateDownloadURL == "" || updateAssetName == "" {
 			ret.Error = "No update package is queued for download."
 			return ret, nil
 		}
+
+		destination, err := downloadDestination(in.DownloadDir, updateAssetName)
+		if err != nil {
+			ret.Error = err.Error()
+			return ret, nil
+		}
+		// Write under a .part name and only rename into the final name once the
+		// content is verified: a half-written file must never be visible under a
+		// name the GUI will treat as a finished update.
+		partPath := destination + ".part"
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, updateDownloadURL, nil)
 		if err != nil {
@@ -391,7 +540,7 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 			return ret, nil
 		}
 
-		file, err := os.OpenFile(updatePackagePath, os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0644)
+		file, err := os.OpenFile(partPath, os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0644)
 		if err != nil {
 			ret.Error = err.Error()
 			return ret, nil
@@ -402,20 +551,58 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 		dlProgress = downloadProgress{totalBytes: resp.ContentLength}
 		dlProgressMu.Unlock()
 
-		pw := &progressWriter{w: file, mu: &dlProgressMu, progress: &dlProgress}
-		if _, err = io.Copy(pw, resp.Body); err != nil {
+		// fail records the error on both the polled progress and the immediate
+		// response, then removes the partial file: an unverifiable or incomplete
+		// download is a failed download, never a kept one.
+		fail := func(err error) (*gen.UpdateResp, error) {
 			dlProgressMu.Lock()
 			dlProgress.err = err.Error()
 			dlProgressMu.Unlock()
 			ret.Error = err.Error()
+			os.Remove(partPath)
 			return ret, nil
 		}
+
+		// The digest is computed while streaming rather than by re-reading the file,
+		// so progress reporting (progressWriter) is untouched by verification.
+		hasher := sha256.New()
+		pw := &progressWriter{w: io.MultiWriter(file, hasher), mu: &dlProgressMu, progress: &dlProgress}
+		if _, err = io.Copy(pw, resp.Body); err != nil {
+			return fail(err)
+		}
 		if err = file.Sync(); err != nil {
-			dlProgressMu.Lock()
-			dlProgress.err = err.Error()
-			dlProgressMu.Unlock()
-			ret.Error = err.Error()
-			return ret, nil
+			return fail(err)
+		}
+
+		if updateChecksumsURL == "" {
+			return fail(fmt.Errorf("the release published no SHA256SUMS asset; refusing to apply an unverifiable download"))
+		}
+
+		sumsReq, err := http.NewRequestWithContext(ctx, http.MethodGet, updateChecksumsURL, nil)
+		if err != nil {
+			return fail(err)
+		}
+		sumsReq.Header.Set("User-Agent", updateUserAgentPrefix+proxor_common.Version_proxor)
+
+		sumsResp, err := client.Do(sumsReq)
+		if err != nil {
+			return fail(err)
+		}
+		sumsBody, err := io.ReadAll(io.LimitReader(sumsResp.Body, 1<<20))
+		sumsResp.Body.Close()
+		if err != nil {
+			return fail(err)
+		}
+		if sumsResp.StatusCode < 200 || sumsResp.StatusCode >= 300 {
+			return fail(fmt.Errorf("failed to fetch SHA256SUMS: status %d", sumsResp.StatusCode))
+		}
+
+		if err = verifyAssetChecksum(string(sumsBody), updateAssetName, hex.EncodeToString(hasher.Sum(nil))); err != nil {
+			return fail(err)
+		}
+
+		if err = os.Rename(partPath, destination); err != nil {
+			return fail(err)
 		}
 
 		dlProgressMu.Lock()

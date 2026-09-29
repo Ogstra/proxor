@@ -4,6 +4,8 @@
 #include "ProxorGui_Utils.hpp"
 #include "ProxorGui_ConfigItem.hpp"
 #include "ProxorGui_DataStore.hpp"
+#include "PackageMode.hpp"
+#include "PackagePolicy.hpp"
 
 // Switch core support
 
@@ -19,6 +21,12 @@ namespace ProxorGui {
     QString FindCoreAsset(const QString &name);
 
     QString FindProxorCoreRealPath();
+
+    PackageMode CurrentPackageMode();
+
+    UpdaterLaunchProbe ProbeUpdaterLaunch();
+
+    bool UseInternalTun();
 
     bool IsAdmin();
 } // namespace ProxorGui

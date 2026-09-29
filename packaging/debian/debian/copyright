@@ -1,0 +1,13 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Proxor
+Source: https://github.com/Ogstra/proxor
+
+Files: *
+Copyright: Proxor contributors
+License: GPL-3+
+ On Debian systems, the complete text of the GNU General Public License
+ version 3 can be found in /usr/share/common-licenses/GPL-3.
+
+Files: 3rdparty/qv2ray/*
+Copyright: MatsuriDayo and Qv2ray contributors
+License: GPL-3+

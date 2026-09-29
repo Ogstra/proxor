@@ -1,4 +1,5 @@
 #include "ProxorGui.hpp"
+#include "PackageMode.hpp"
 #include "fmt/Preset.hpp"
 
 #include <QFile>
@@ -19,6 +20,10 @@
 #include <sys/linux/LinuxCap.h>
 #endif
 #include <unistd.h>
+#endif
+#ifdef Q_OS_MACOS
+#include <sys/types.h>
+#include <sys/sysctl.h>
 #endif
 
 namespace ProxorGui_ConfigItem {
@@ -251,6 +256,9 @@ namespace ProxorGui {
         _add(new configItem("ua_include_computer", &ua_include_computer, itemType::boolean));
         _add(new configItem("ua_include_username", &ua_include_username, itemType::boolean));
         _add(new configItem("ua_include_hwid", &ua_include_hwid, itemType::boolean));
+#ifdef Q_OS_MACOS
+        _add(new configItem("tray_icon_colored", &tray_icon_colored, itemType::boolean));
+#endif
         _add(new configItem("last_run_version", &last_run_version, itemType::string));
         _add(new configItem("test_url", &test_latency_url, itemType::string));
         _add(new configItem("test_url_dl", &test_download_url, itemType::string));
@@ -341,8 +349,13 @@ namespace ProxorGui {
         QString version = SubStrBefore(NKR_VERSION, "-");
         if (!version.contains(".")) version = "2.0";
         QString platform = QSysInfo::productType(); // "windows", "macos", "linux"
+#ifdef Q_OS_MACOS
+        // The panel's canonical OS name is "macOS"; capitalising productType() gave "Macos".
+        platform = QStringLiteral("macOS");
+#else
         // Capitalize first letter
         if (!platform.isEmpty()) platform[0] = platform[0].toUpper();
+#endif
         return QStringLiteral("Proxor/%1/%2").arg(platform, version);
     }
 
@@ -352,21 +365,51 @@ namespace ProxorGui {
         QSettings hwReg("HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography", QSettings::NativeFormat);
         return hwReg.value("MachineGuid").toString();
 #else
-        return {};
+        // /etc/machine-id on Linux and the platform UUID on macOS: stable for the
+        // installation and readable without privileges.
+        return QString::fromLatin1(QSysInfo::machineUniqueId());
 #endif
     }
 
     QString DataStore::GetDeviceModel() const {
-        if (!ua_include_computer) return {};
-        const auto computer = QString::fromLocal8Bit(qgetenv("COMPUTERNAME"));
-        const auto user = QString::fromLocal8Bit(qgetenv("USERNAME"));
+#ifdef Q_OS_MACOS
+        // Always the hardware model identifier (e.g. "Mac15,6"), which the panel resolves to a
+        // marketing name by exact match. No computer name or username is appended, so
+        // ua_include_computer / ua_include_username do not apply on macOS.
+        size_t length = 0;
+        if (sysctlbyname("hw.model", nullptr, &length, nullptr, 0) != 0 || length < 2) return {};
+        QByteArray model(static_cast<qsizetype>(length), '\0');
+        if (sysctlbyname("hw.model", model.data(), &length, nullptr, 0) != 0) return {};
+        return QString::fromLatin1(model.constData()).trimmed();
+#else
+        // COMPUTERNAME and USERNAME are Windows environment names, so every other platform
+        // reported neither. Each part also honours its own setting: the username switch had
+        // no effect at all before, because both parts were gated on the computer one.
+        QString computer;
+        if (ua_include_computer) {
+            computer = QString::fromLocal8Bit(qgetenv("COMPUTERNAME"));
+            if (computer.isEmpty()) computer = QSysInfo::machineHostName();
+        }
+        QString user;
+        if (ua_include_username) {
+            for (const char *variable: {"USERNAME", "USER", "LOGNAME"}) {
+                user = QString::fromLocal8Bit(qgetenv(variable));
+                if (!user.isEmpty()) break;
+            }
+        }
+        if (computer.isEmpty()) return user;
         return user.isEmpty() ? computer : computer + "/" + user;
+#endif
     }
 
     QString DataStore::GetDeviceOS() {
+#ifdef Q_OS_MACOS
+        return QStringLiteral("macOS");
+#else
         QString os = QSysInfo::productType();
         if (!os.isEmpty()) os[0] = os[0].toUpper();
         return os;
+#endif
     }
 
     QString DataStore::GetOSVersion() {
@@ -522,14 +565,7 @@ namespace ProxorGui {
     }
 
     QString FindCoreAsset(const QString &name) {
-        QStringList search{};
-        search << PackageFilePath("config");
-        search << PackageRootPath();
-        search << "/usr/share/sing-geoip";
-        search << "/usr/share/sing-geosite";
-        search << "/usr/share/sing-box";
-        search << "/usr/lib/proxor";
-        search << "/usr/share/proxor";
+        const auto search = CoreAssetSearchPaths(CurrentPackageMode(), PackageRootPath());
         for (const auto &dir: search) {
             if (dir.isEmpty()) continue;
             QFileInfo asset(dir + "/" + name);
@@ -545,6 +581,51 @@ namespace ProxorGui {
         auto fi = QFileInfo(fn);
         if (fi.isSymLink()) return fi.symLinkTarget();
         return fn;
+    }
+
+    PackageMode CurrentPackageMode() {
+        // Nothing can change the install channel while the process runs, and this is
+        // called from FindCoreAsset on every asset lookup -- cache it once.
+        static const PackageMode mode = [] {
+            QString appImagePath;
+            QString nativeChannelMarkerPath;
+#ifdef Q_OS_LINUX
+            appImagePath = qEnvironmentVariable("APPIMAGE");
+            // The first form keeps a relocated prefix working; the second is the FHS
+            // default that the deb/rpm/arch packages actually install to.
+            const auto relocatedMarker =
+                QDir(PackageRootPath()).filePath(QStringLiteral("../share/proxor/package-channel"));
+            if (QFileInfo(relocatedMarker).isFile()) {
+                nativeChannelMarkerPath = relocatedMarker;
+            } else {
+                nativeChannelMarkerPath = QStringLiteral("/usr/share/proxor/package-channel");
+            }
+#endif
+            return DetectPackageMode(PackageRootPath(), qEnvironmentVariable("FLATPAK_ID"),
+                                      appImagePath, nativeChannelMarkerPath);
+        }();
+        return mode;
+    }
+
+    UpdaterLaunchProbe ProbeUpdaterLaunch() {
+        QFileInfo updater(PackageExecutablePath("updater"));
+        return {
+            updater.exists(),
+            updater.isExecutable(),
+            QFileInfo(PackageRootPath()).isWritable(),
+        };
+    }
+
+    bool UseInternalTun() {
+#ifdef Q_OS_LINUX
+        if (IsFlatpak(CurrentPackageMode())) return false;
+#endif
+#ifdef Q_OS_LINUX
+        // AppImage cannot add capabilities to its read-only core. It uses the
+        // separate privileged compatibility process instead.
+        if (qEnvironmentVariableIsSet("APPIMAGE")) return false;
+#endif
+        return dataStore->vpn_internal_tun;
     }
 
     short isAdminCache = -1;

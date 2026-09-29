@@ -55,7 +55,7 @@ shopt -s dotglob nullglob
 for path in "$SOURCE_DIR"/*; do
   name="$(basename "$path")"
   case "$name" in
-    config|*.log|*.dmp)
+    *.log|*.dmp)
       continue
       ;;
   esac
@@ -63,10 +63,30 @@ for path in "$SOURCE_DIR"/*; do
 done
 
 rm -f "$OUTPUT_ZIP_ABS"
+# A ZIP stores paths with forward slashes. Windows PowerShell's Compress-Archive and the
+# .NET Framework ZipFile both write backslashes instead, which turns every directory into
+# part of a file name, so those are only used through pwsh (.NET Core) and the result is
+# verified below rather than trusted.
 if command -v zip >/dev/null 2>&1; then
   ( cd "$STAGE_DIR" && zip -r "$OUTPUT_ZIP_ABS" proxor >/dev/null )
+elif command -v 7z >/dev/null 2>&1; then
+  ( cd "$STAGE_DIR" && 7z a -tzip -bso0 -bsp0 "$(to_windows_path "$OUTPUT_ZIP_ABS")" proxor >/dev/null )
+elif command -v pwsh >/dev/null 2>&1; then
+  pwsh -NoProfile -Command "Compress-Archive -Path '$(to_windows_path "$PACKAGE_ROOT")' -DestinationPath '$(to_windows_path "$OUTPUT_ZIP_ABS")' -Force"
 else
-  PACKAGE_ROOT_WIN="$(to_windows_path "$PACKAGE_ROOT")"
-  OUTPUT_ZIP_WIN="$(to_windows_path "$OUTPUT_ZIP_ABS")"
-  powershell.exe -NoProfile -Command "Compress-Archive -Path '$PACKAGE_ROOT_WIN\\*' -DestinationPath '$OUTPUT_ZIP_WIN' -Force"
+  printf '%s\n' 'no archiver that writes ZIP paths with forward slashes is available (zip, 7z or pwsh)' >&2
+  exit 1
 fi
+
+entries="$(
+  if command -v unzip >/dev/null 2>&1; then
+    unzip -Z1 "$OUTPUT_ZIP_ABS"
+  else
+    python3 -c 'import sys, zipfile; print("\n".join(zipfile.ZipFile(sys.argv[1]).namelist()))' "$OUTPUT_ZIP_ABS"
+  fi
+)"
+if grep -q '\\' <<<"$entries"; then
+  printf '%s\n' "$OUTPUT_ZIP_ABS stores backslash separators, so its directories are file names" >&2
+  exit 1
+fi
+grep -q '^proxor/' <<<"$entries" || { printf '%s\n' "$OUTPUT_ZIP_ABS has no proxor/ root" >&2; exit 1; }

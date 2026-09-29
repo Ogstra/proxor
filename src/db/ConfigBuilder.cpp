@@ -7,6 +7,7 @@
 #include <QApplication>
 #include <QFile>
 #include <QFileInfo>
+#include <QHostAddress>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QUrl>
@@ -78,6 +79,32 @@ namespace ProxorGui {
         QJsonArray addresses{"172.19.0.1/28"};
         if (includeIPv6) addresses += "fdfe:dcba:9876::1/126";
         return addresses;
+    }
+
+    QJsonArray BuildSshRouteExclusions() {
+        const auto fields = qEnvironmentVariable("SSH_CONNECTION").simplified().split(' ', Qt::SkipEmptyParts);
+        if (fields.isEmpty()) return {};
+
+        const QHostAddress clientAddress(fields.first());
+        if (clientAddress.protocol() == QAbstractSocket::IPv4Protocol)
+            return QJsonArray{clientAddress.toString() + "/32"};
+        if (clientAddress.protocol() == QAbstractSocket::IPv6Protocol)
+            return QJsonArray{clientAddress.toString() + "/128"};
+        return {};
+    }
+
+    QJsonArray BuildTunRouteExclusions() {
+        QJsonArray exclusions{
+            "10.0.0.0/8",      // RFC 1918
+            "172.16.0.0/12",   // RFC 1918
+            "192.168.0.0/16",  // RFC 1918
+            "100.64.0.0/10",   // carrier-grade NAT, commonly used by Tailscale/WireGuard
+            "169.254.0.0/16",  // IPv4 link-local
+            "fc00::/7",        // IPv6 unique local
+            "fe80::/10",       // IPv6 link-local
+        };
+        for (const auto &route : BuildSshRouteExclusions()) exclusions += route;
+        return exclusions;
     }
 
     QString QJsonArray2QStringCompact(const QJsonArray &array) {
@@ -166,11 +193,11 @@ namespace ProxorGui {
         }
 
         if (scheme == "http3") scheme = "h3";
-        if (scheme != "udp" && scheme != "tcp" && scheme != "tls" && scheme != "https" && scheme != "h3") {
+        if (scheme != "udp" && scheme != "tcp" && scheme != "tls" && scheme != "https" && scheme != "quic" && scheme != "h3") {
             scheme = "udp";
         }
 
-        dnsServer["type"] = scheme == "h3" ? "http3" : scheme;
+        dnsServer["type"] = scheme;
         dnsServer["server"] = server;
         if (port > 0) dnsServer["server_port"] = port;
         if (scheme == "https" || scheme == "h3") {
@@ -527,7 +554,7 @@ namespace ProxorGui {
         }
 
         // tun-in
-        if (dataStore->vpn_internal_tun && dataStore->spmode_vpn && !status->forTest) {
+        if (UseInternalTun() && dataStore->spmode_vpn && !status->forTest) {
             QJsonObject inboundObj;
             inboundObj["tag"] = "tun-in";
             inboundObj["type"] = "tun";
@@ -538,18 +565,18 @@ namespace ProxorGui {
             inboundObj["stack"] = Preset::SingBox::VpnImplementation.value(dataStore->vpn_implementation);
             inboundObj["strict_route"] = dataStore->vpn_strict_route;
             inboundObj["address"] = BuildTunAddressArray(dataStore->vpn_ipv6);
+            auto routeExclusions = BuildTunRouteExclusions();
 #ifdef Q_OS_WIN
             // Exclude Windows NCSI/NLA probe destinations from the TUN default route so they
             // travel over the real underlying adapter. Without this, Windows Network Location
             // Awareness marks the TUN network "No internet" (globe icon) because its HTTP/DNS
             // connectivity probes fail through the tunnel, and then shows an Ethernet icon
             // (wintun registers as Ethernet media type) instead of the real WiFi icon.
-            inboundObj["route_exclude_address"] = QJsonArray{
-                "13.107.4.52/32",    // www.msftconnecttest.com — primary NCSI HTTP probe
-                "23.103.160.10/32",  // legacy NCSI probe target
-                "131.107.255.255/32" // dns.msftncsi.com — expected NCSI DNS answer IP
-            };
+            routeExclusions += "13.107.4.52/32";    // www.msftconnecttest.com — primary NCSI HTTP probe
+            routeExclusions += "23.103.160.10/32";  // legacy NCSI probe target
+            routeExclusions += "131.107.255.255/32"; // dns.msftncsi.com — expected NCSI DNS answer IP
 #endif
+            if (!routeExclusions.isEmpty()) inboundObj["route_exclude_address"] = routeExclusions;
             status->inbounds += inboundObj;
         }
 
@@ -671,10 +698,12 @@ namespace ProxorGui {
             dnsServers += BuildTypedDnsServer("dns-remote", dataStore->routing->remote_dns, tagProxy, dataStore->routing->remote_dns_strategy);
 
         // Direct
-        const auto directDnsAddress = dataStore->vpn_internal_tun && dataStore->spmode_vpn && !status->forTest
+        const auto directDnsAddress = UseInternalTun() && dataStore->spmode_vpn && !status->forTest
                                           ? QStringLiteral("local")
                                           : dataStore->routing->direct_dns;
-        QJsonObject directObj = BuildTypedDnsServer("dns-direct", directDnsAddress, status->forTest ? QString{} : QStringLiteral("direct"), dataStore->routing->direct_dns_strategy);
+        // An empty direct outbound is the default dialer. sing-box rejects wrapping it
+        // in a DNS detour, so direct DNS must omit detour entirely.
+        QJsonObject directObj = BuildTypedDnsServer("dns-direct", directDnsAddress, {}, dataStore->routing->direct_dns_strategy);
         if (dataStore->routing->dns_final_out == "bypass") {
             dnsServers.prepend(directObj);
         } else {
@@ -693,12 +722,12 @@ namespace ProxorGui {
             };
 
         // Fakedns
-        if (dataStore->fake_dns && dataStore->vpn_internal_tun && dataStore->spmode_vpn && !status->forTest) {
+        if (dataStore->fake_dns && UseInternalTun() && dataStore->spmode_vpn && !status->forTest) {
             dnsServers += BuildTypedDnsServer("dns-fake", "fakeip");
         }
 
         // Underlying 100% Working DNS ?
-        dnsServers += BuildTypedDnsServer("dns-local", BOX_UNDERLYING_DNS, status->forTest ? QString{} : QStringLiteral("direct"));
+        dnsServers += BuildTypedDnsServer("dns-local", BOX_UNDERLYING_DNS);
 
         // Hosts mapping (user-defined hostname -> IP overrides)
         // Format per line: "host ip [skip_ssids_csv]". If current WiFi SSID matches any in
@@ -762,9 +791,11 @@ namespace ProxorGui {
         }
 
         // fakedns rule
-        if (dataStore->fake_dns && dataStore->vpn_internal_tun && dataStore->spmode_vpn && !status->forTest) {
+        if (dataStore->fake_dns && UseInternalTun() && dataStore->spmode_vpn && !status->forTest) {
             dnsRules += QJsonObject{
                 {"inbound", "tun-in"},
+                // FakeIP can only synthesize address records; preserve PTR and other DNS types.
+                {"query_type", QJsonArray{1, 28}},
                 {"server", "dns-fake"},
             };
         }
@@ -849,7 +880,7 @@ namespace ProxorGui {
         };
 
         // tun user rule
-        if (dataStore->vpn_internal_tun && dataStore->spmode_vpn && !status->forTest) {
+        if (UseInternalTun() && dataStore->spmode_vpn && !status->forTest) {
             auto match_out = dataStore->vpn_rule_white ? "proxy" : "bypass";
 
             QString process_name_rule = dataStore->vpn_rule_process.trimmed();
@@ -972,12 +1003,17 @@ namespace ProxorGui {
         const auto tunAddresses = QJsonArray2QStringCompact(BuildTunAddressArray(dataStore->vpn_ipv6));
         const auto dnsRemote = QJsonObject2QString(BuildTypedDnsServer("dns-remote", dataStore->routing->remote_dns, "proxor-socks", dataStore->routing->remote_dns_strategy), true);
         const auto dnsDirect = QJsonObject2QString(BuildTypedDnsServer("dns-direct", "local", {}, dataStore->routing->direct_dns_strategy), true);
-        const auto dnsLocal = QJsonObject2QString(BuildTypedDnsServer("dns-local", BOX_UNDERLYING_DNS, "direct"), true);
+        const auto dnsLocal = QJsonObject2QString(BuildTypedDnsServer("dns-local", BOX_UNDERLYING_DNS), true);
+        auto routeExclusions = BuildTunRouteExclusions();
+        routeExclusions += "13.107.4.52/32";
+        routeExclusions += "23.103.160.10/32";
+        routeExclusions += "131.107.255.255/32";
         // gen config
         auto configFn = ":/proxor/vpn/sing-box-vpn.json";
         if (QFile::exists("vpn/sing-box-vpn.json")) configFn = "vpn/sing-box-vpn.json";
         auto config = ReadFileText(configFn)
-                          .replace("%TUN_ADDRESSES%", tunAddresses)
+                           .replace("%TUN_ADDRESSES%", tunAddresses)
+                           .replace("%ROUTE_EXCLUDE_ADDRESSES%", QJsonArray2QStringCompact(routeExclusions))
                           .replace("%DNS_REMOTE_SERVER%", dnsRemote)
                           .replace("%DNS_DIRECT_SERVER%", dnsDirect)
                           .replace("%DNS_LOCAL_SERVER%", dnsLocal)
@@ -1000,16 +1036,15 @@ namespace ProxorGui {
         return QFileInfo(file).absoluteFilePath();
     }
 
-    QString WriteVPNLinuxScript(const QString &configPath) {
+    QString WriteVPNLinuxScript() {
 #ifdef Q_OS_WIN
         return {};
 #endif
-        // gen script
+        // The script receives the core and config as process arguments. Do not interpolate
+        // user-controlled paths into a shell script that will be executed by pkexec.
         auto scriptFn = ":/proxor/vpn/vpn-run-root.sh";
         if (QFile::exists("vpn/vpn-run-root.sh")) scriptFn = "vpn/vpn-run-root.sh";
-        auto script = ReadFileText(scriptFn)
-                          .replace("./proxor_core", FindProxorCoreRealPath())
-                          .replace("$CONFIG_PATH", configPath);
+        const auto script = ReadFileText(scriptFn);
         // write script
         QFile file2;
         file2.setFileName(QFileInfo(scriptFn).fileName());

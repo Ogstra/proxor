@@ -5,6 +5,7 @@
 #include "db/ConfigBuilder.hpp"
 #include "db/traffic/TrafficLooper.hpp"
 #include "rpc/gRPC.h"
+#include "main/PackagePolicy.hpp"
 #include "ui/widget/MessageBoxTimer.h"
 
 #include <QTimer>
@@ -14,6 +15,7 @@
 #include <QDesktopServices>
 #include <QMessageBox>
 #include <QDialogButtonBox>
+#include <QFileInfo>
 #include "dialog_update_available.h"
 
 // ext core
@@ -346,6 +348,10 @@ void MainWindow::stop_core_daemon() {
 
 void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
     if (ProxorGui::dataStore->prepare_exit) return;
+    if ((startup_tun_pending && !startup_tun_authorized) || startup_tun_failed) {
+        MW_show_log(tr("Profile start is deferred until Tun authorization succeeds."));
+        return;
+    }
 
     auto ents = get_now_selected_list();
     auto ent = (_id < 0 && !ents.isEmpty()) ? ents.first() : ProxorGui::profileManager->GetProfile(_id);
@@ -423,12 +429,16 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
         ProxorGui::dataStore->UpdateStartedId(ent->id);
         started_via_ssid_trigger = startedByWifiTrigger;
         running = ent;
-        syncWindowsHostsMapping(ProxorGui::dataStore->spmode_vpn && ProxorGui::dataStore->vpn_internal_tun);
+        syncWindowsHostsMapping(ProxorGui::dataStore->spmode_vpn && ProxorGui::UseInternalTun());
 
         runOnUiThread([=] {
             start_pending = false;
             refresh_status();
             refresh_proxy_list(ent->id);
+            if (ProxorGui::dataStore->spmode_vpn && !ProxorGui::UseInternalTun() && vpn_pid == 0) {
+                MW_show_log(tr("Proxy profile ready; starting Tun."));
+                StartVPNProcess();
+            }
         });
 
         return true;
@@ -617,6 +627,17 @@ void MainWindow::CheckUpdate(bool silent) {
     // on new thread...
 #ifndef NKR_NO_GRPC
 
+    const auto mode = ProxorGui::CurrentPackageMode();
+    const auto packageUpdate = DecidePackageUpdate(mode);
+    // No channel disables the version check today -- success criterion 7 is that it stays
+    // enabled everywhere -- but a future channel could opt out here without touching the
+    // rest of this function.
+    if (!packageUpdate.allowCheck) {
+        return;
+    }
+
+    if (startup_tun_pending || startup_tun_failed) return;
+
     // The core may not have finished starting up yet. The client may not exist,
     // and even once it does, Call() short-circuits with -1919 until the core
     // reports "grpc server listening" -- which NOT_OK would surface as an [Error].
@@ -634,6 +655,7 @@ void MainWindow::CheckUpdate(bool silent) {
     libcore::UpdateReq request;
     request.set_action(libcore::UpdateAction::Check);
     request.set_check_pre_release(ProxorGui::dataStore->check_include_pre);
+    request.set_channel(PackageModeName(mode).toStdString());
     auto response = ProxorGui_rpc::defaultClient->Update(&ok, request);
     if (!ok) return;
 
@@ -655,11 +677,17 @@ void MainWindow::CheckUpdate(bool silent) {
     }
 
     runOnUiThread([=] {
-        auto allow_updater = !ProxorGui::dataStore->flag_use_appdata;
+        // flag_use_appdata is forced on for an AppImage because it runs from a read-only
+        // FUSE mount, which says nothing about whether the user's .AppImage file itself
+        // can be replaced -- so the AppImage is the one exception to the appdata gate.
+        auto allowSelfUpdate = packageUpdate.allowDownload &&
+            (mode == PackageMode::AppImage || !ProxorGui::dataStore->flag_use_appdata);
         auto notePreRelease = response.is_pre_release() ? QObject::tr("Prerelease") : QObject::tr("Release");
         auto releasePageUrl = QUrl(response.release_url().c_str());
         QString releaseNote = response.release_note().c_str();
-        if (!allow_updater) {
+        const auto assetName = QString::fromUtf8(response.assets_name().c_str());
+        const auto guidance = UpdateGuidanceText(mode, assetName);
+        if (!allowSelfUpdate && guidance.isEmpty()) {
             releaseNote += QObject::tr("\n\n*Automatic installation is disabled in appdata mode.*");
         }
 
@@ -668,11 +696,15 @@ void MainWindow::CheckUpdate(bool silent) {
             response.assets_name().c_str(),
             notePreRelease,
             releaseNote,
-            allow_updater,
-            this);
+            allowSelfUpdate,
+            this,
+            guidance);
 
         connect(dlg, &QDialog::accepted, this, [=] {
-            if (dlg->chosenAction() == DialogUpdateAvailable::Download && allow_updater) {
+            if (dlg->chosenAction() == DialogUpdateAvailable::Download && allowSelfUpdate && packageUpdate.allowDownload) {
+                // Remembered here, not re-derived in onUpdateStaged(), so the AppImage
+                // completion handler can name the exact staged path without a second RPC.
+                staged_asset_name = QFileInfo(assetName).fileName();
                 updateProgressDialog = new UpdateProgressDialog(response.assets_name().c_str(), this);
                 connect(updateProgressDialog, &UpdateProgressDialog::downloadComplete, this, &MainWindow::onUpdateStaged);
                 updateProgressDialog->show();
@@ -682,6 +714,15 @@ void MainWindow::CheckUpdate(bool silent) {
                     bool ok2;
                     libcore::UpdateReq request2;
                     request2.set_action(libcore::UpdateAction::Download);
+                    // Empty everywhere except AppImage, which preserves today's
+                    // beside-the-install behaviour for Windows portable. The AppImage's
+                    // core process runs from inside the read-only FUSE mount, so the
+                    // download has to land beside $APPIMAGE instead -- the one directory
+                    // this channel is guaranteed to be able to write into.
+                    if (mode == PackageMode::AppImage) {
+                        const QFileInfo appImageInfo(qEnvironmentVariable("APPIMAGE"));
+                        request2.set_download_dir(appImageInfo.absolutePath().toStdString());
+                    }
                     auto response2 = ProxorGui_rpc::defaultClient->Update(&ok2, request2);
                     if (!ok2) return;
 

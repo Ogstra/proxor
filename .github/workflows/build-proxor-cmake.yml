@@ -1,171 +1,887 @@
 name: Proxor build matrix - cmake
 
 on:
+  push:
+    branches: [main, develop]
+    paths-ignore: ["**.md", ".planning/**", "docs/**"]
+  pull_request:
+    branches: [main, develop]
+    paths-ignore: ["**.md", ".planning/**", "docs/**"]
   workflow_dispatch:
     inputs:
       tag:
         description: "Release Tag"
-        required: true
+        required: false
       publish:
-        description: "Publish: If want ignore"
+        description: "Publish: set to y to publish a release"
         required: false
-      artifact-pack:
-        description: "artifact-pack: If want ignore"
+      prerelease:
+        description: "Publish as a prerelease: set to n for a stable release"
         required: false
+        default: "y"
+
+env:
+  # Keep in step with qtsdk/Qt used locally and with libs/download_proxor_qtsdk_win.sh
+  QT_VERSION: "6.7.2"
+  GO_VERSION: "1.26.1"
+  LINUXDEPLOY_VERSION: "1-alpha-20251107-1"
+  LINUXDEPLOY_SHA256: "c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d"
+  LINUXDEPLOY_QT_VERSION: "1-alpha-20250213-1"
+  LINUXDEPLOY_QT_SHA256: "15106be885c1c48a021198e7e1e9a48ce9d02a86dd0a1848f00bdbf3c1c92724"
+
 jobs:
+  stage-package-source:
+    name: Stage verified package source
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the exact recursive source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          submodules: "recursive"
+      - name: Verify and stage immutable source
+        shell: bash
+        run: |
+          bash packaging/source/tests/test-stage-recursive-source.sh
+          version="$(tr -d '\n' < VERSION.txt)"
+          packaging/source/stage-recursive-source.sh \
+            --repo "$GITHUB_WORKSPACE" --commit "$GITHUB_SHA" --version "$version" \
+            --output "$RUNNER_TEMP/source-stage"
+      - name: Upload verified source release input
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-assets-source
+          path: |
+            ${{ runner.temp }}/source-stage/proxor-*.tar.gz
+            ${{ runner.temp }}/source-stage/proxor-*.source-manifest
+          if-no-files-found: error
+
   build-go:
     strategy:
       matrix:
-        cross_os: [windows]
-        cross_arch: [amd64]
         include:
+          - cross_os: windows
+            cross_arch: amd64
+          - cross_os: linux
+            cross_arch: amd64
           - cross_os: public_res
             cross_arch: public_res
       fail-fast: false
     runs-on: ubuntu-latest
     steps:
       - name: Checking out sources
-        uses: actions/checkout@v4
-      - name: Go Status
-        run: git ls-files go | xargs cat | sha1sum > go_status
-      - name: Cache Common Download
-        id: cache-common
-        uses: actions/cache@v4
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          path: artifacts.tgz
-          key: CommonCache-${{ matrix.cross_os }}-${{ matrix.cross_arch }}-${{ hashFiles('libs/*.sh', 'go_status', '*.txt') }}
+          # go.work does `replace github.com/sagernet/sing-box => ./3rdparty/sing-box`,
+          # so the submodule IS the source. Without this the build has no sing-box at all.
+          submodules: "recursive"
       - name: Install Golang
-        if: steps.cache-common.outputs.cache-hit != 'true'
-        uses: actions/setup-go@v4
+        if: matrix.cross_os != 'public_res'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: ^1.22
+          go-version: ${{ env.GO_VERSION }}
           cache: false
       - name: Build golang parts
-        if: steps.cache-common.outputs.cache-hit != 'true'
         shell: bash
         run: |
-          [ ${{ matrix.cross_os }} == public_res ] || ./libs/get_source.sh
-          [ ${{ matrix.cross_os }} == public_res ] || GOOS=${{ matrix.cross_os }} GOARCH=${{ matrix.cross_arch }} ./libs/build_go.sh
-          [ ${{ matrix.cross_os }} == public_res ] || exit 0
-          ./libs/build_public_res.sh
+          if [ "${{ matrix.cross_os }}" == "public_res" ]; then
+            ./libs/build_public_res.sh
+          else
+            GOOS=${{ matrix.cross_os }} GOARCH=${{ matrix.cross_arch }} ./libs/build_go.sh
+          fi
       - name: Tar files
-        if: steps.cache-common.outputs.cache-hit != 'true'
         run: tar czvf artifacts.tgz ./deployment
       - name: Uploading Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: Proxor-${{ github.sha }}-Common-${{ matrix.cross_os }}-${{ matrix.cross_arch }}
           path: artifacts.tgz
+
+  test-go:
+    name: Go tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checking out sources
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          submodules: "recursive"
+      - name: Install Golang
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - name: Run Go tests
+        shell: bash
+        run: |
+          go test ./go/grpc_server/...
+          go test ./go/proxorlib/...
+          go test ./go/cmd/proxor_core/...
+          go test ./go/cmd/updater/...
+
   build-cpp:
     strategy:
       matrix:
         include:
-          - platform: windows-2022
+          - platform: windows-latest
             arch: x64
-            qt_version: "6.7"
+            qt_host: windows
+            qt_arch: win64_msvc2019_64
+            qt_tools: tools_opensslv3_x64
+          # ubuntu-22.04 on purpose, not ubuntu-latest: the AppImage inherits the build
+          # host's glibc. 22.04 is glibc 2.35, below Debian 12 (2.36) and 13 (2.41).
+          # Building on 24.04 (2.39) would produce something Debian 12 cannot run.
+          - platform: ubuntu-22.04
+            arch: x64
+            qt_host: linux
+            qt_arch: linux_gcc_64
+            qt_tools: ""
       fail-fast: false
-
     runs-on: ${{ matrix.platform }}
-    env:
-      ACTIONS_ALLOW_UNSECURE_COMMANDS: true
     steps:
       - name: Checking out sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           submodules: "recursive"
+      # Qt 6 will not configure on a bare runner without GL and xkb development headers.
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends             libgl1-mesa-dev libglu1-mesa-dev libxkbcommon-dev libxkbcommon-x11-dev             libxcb1-dev libxcb-cursor-dev libxcb-icccm4-dev libxcb-image0-dev             libxcb-keysyms1-dev libxcb-randr0-dev libxcb-render-util0-dev             libxcb-shape0-dev libxcb-xinerama0-dev libxcb-xkb-dev             libfontconfig1-dev libfreetype-dev
       - name: Install MSVC compiler
-        if: matrix.platform == 'windows-2022'
-        uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+        uses: egor-tensin/vs-shell@54e4148eac794e4580591c2e0b7750f14b7891fc # v2.2
         with:
-          # 14.1 is for vs2017, 14.2 is vs2019, following the upstream vcpkg build from Qv2ray-deps repo
-          toolset: 14.2
           arch: ${{ matrix.arch }}
-      # ========================================================================================================= Qt Install
-      - name: Windows - Download Custom Qt ${{ matrix.qt_version }} SDK
-        shell: bash
-        if: matrix.platform == 'windows-2022'
-        env:
-          DL_QT_VER: ${{ matrix.qt_version }}
-          GH_TOKEN: ${{ github.token }}
-        run: bash ./libs/download_proxor_qtsdk_win.sh
-      # ========================================================================================================= 编译与 Qt 无关的依赖
-      - name: Install ninja-build tool
-        uses: seanmiddleditch/gha-setup-ninja@v4
-      - name: Cache Download
+      # Official Qt via aqt instead of a self-hosted 7z. The previous approach depended on
+      # a qt-runtime-* release that was never published, which is why every run failed.
+      - name: Install Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: ${{ matrix.qt_host }}
+          target: desktop
+          arch: ${{ matrix.qt_arch }}
+          # No `modules:` -- Qt Svg is an essential module in Qt 6 and ships in the base
+          # install. Asking aqt for it fails with "packages ['qtsvg'] were not found".
+          # tools_opensslv3_x64 is Windows-only; Linux links the system OpenSSL.
+          tools: ${{ matrix.qt_tools }}
+          cache: true
+      # No ninja setup step: every GitHub-hosted image ships it, and the only
+      # setup action available still ran on the retired Node 20 runtime.
+      - name: Cache native dependencies
         id: cache-deps
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: libs/deps
-          key: DepsCache-${{ matrix.platform }}-${{ matrix.arch }}-${{ hashFiles('libs/build_deps_*.sh') }}-Qt${{ matrix.qt_version }}
-      - name: Build Dependencies
+          key: DepsCache-${{ matrix.platform }}-${{ matrix.arch }}-${{ hashFiles('libs/build_deps_*.sh') }}-Qt${{ env.QT_VERSION }}
+      - name: Build native dependencies
         shell: bash
         if: steps.cache-deps.outputs.cache-hit != 'true'
         run: ./libs/build_deps_all.sh
-      # ========================================================================================================= Generate MakeFile and Build
-      - name: Windows - Generate MakeFile and Build
+      - name: Generate MakeFile and Build
         shell: bash
-        if: matrix.platform == 'windows-2022'
-        env:
-          DL_QT_VER: ${{ matrix.qt_version }}
-          CC: cl.exe
-          CXX: cl.exe
         run: |
-          source libs/env_qtsdk.sh $PWD/qtsdk/Qt
-          mkdir build
-          cd build
+          if [ "${RUNNER_OS}" = "Windows" ]; then
+            export CC=cl.exe CXX=cl.exe
+          fi
+          mkdir -p build && cd build
           cmake -GNinja -DQT_VERSION_MAJOR=6 -DCMAKE_BUILD_TYPE=Release ..
-          ninja -j2
-          cd ..
-          ./libs/deploy_windows64.sh
-      # ========================================================================================================= Deployments
-      - name: Tar files
-        shell: bash
-        run: tar czvf artifacts.tgz ./deployment
-      - name: Uploading Artifact
-        uses: actions/upload-artifact@v4
+          ninja
+      - name: Uploading Artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: Proxor-${{ github.sha }}-${{ matrix.platform }}-${{ matrix.arch }}-Qt${{ matrix.qt_version }}
-          path: artifacts.tgz
-  publish:
-    name: Pack & Publish Release
-    if: github.event.inputs.artifact-pack != 'y'
-    runs-on: ubuntu-latest
-    needs:
-      - build-cpp
-      - build-go
+          name: Proxor-${{ github.sha }}-${{ matrix.platform }}-${{ matrix.arch }}-Qt${{ env.QT_VERSION }}
+          path: |
+            build/proxor.exe
+            build/app.exe
+            build/*.pdb
+      # On Linux the launcher target is WIN32-only and the GUI target keeps its default
+      # name, so the single artifact is build/proxor.
+      - name: Uploading Artifact (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Proxor-${{ github.sha }}-${{ matrix.platform }}-${{ matrix.arch }}-Qt${{ env.QT_VERSION }}
+          path: build/proxor
+          # One binary, nothing hidden to carry.
+          include-hidden-files: false
+  appimage:
+    name: Linux AppImage
+    needs: [build-cpp, build-go]
+    runs-on: ubuntu-22.04
     steps:
       - name: Checking out sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: Download Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: download-artifact
-      - name: Pack
+      - name: Stage build outputs
+        shell: bash
         run: |
-          curl -Lo - https://github.com/tcnksm/ghr/releases/download/v0.13.0/ghr_v0.13.0_linux_amd64.tar.gz | tar xzv
-          mv ghr*linux_amd64/ghr .
-          ####
-          source libs/env_deploy.sh
-          find . -name artifacts.tgz | xargs -n1 tar xvzf
-          cd deployment
-          cp -r public_res/* windows64
-          rm -rf windows64/config
-          rm -rf public_res *.pdb
-          ####
-          bash ../libs/package_release.sh windows64 $version_standalone-windows64.zip
-          rm -rf windows64
-      - name: Clean Up
-        run: |
-          cd deployment
-          rm -rf windows64
-          rm -rf public_res
-          rm -rf *.pdb
-      - name: Uploading Artifact
-        uses: actions/upload-artifact@v4
+          mkdir -p build deployment
+          cp download-artifact/Proxor-${{ github.sha }}-ubuntu-22.04-x64-Qt${{ env.QT_VERSION }}/proxor build/
+          chmod +x build/proxor
+          find download-artifact -name artifacts.tgz -exec tar xzf {} \;
+      - name: Install Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
         with:
-          name: Deployment-${{ github.sha }}
-          path: deployment
-      - name: Release
-        if: github.event.inputs.publish != 'y'
+          version: ${{ env.QT_VERSION }}
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          cache: true
+      - name: Install AppImage tooling
         run: |
-          ./ghr -delete -t "${{ github.token }}" -n "${{ github.event.inputs.tag }}" "${{ github.event.inputs.tag }}" deployment
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libfuse2 file desktop-file-utils xvfb xauth
+          curl -fsSLo linuxdeploy "https://github.com/linuxdeploy/linuxdeploy/releases/download/${LINUXDEPLOY_VERSION}/linuxdeploy-x86_64.AppImage"
+          echo "${LINUXDEPLOY_SHA256}  linuxdeploy" | sha256sum --check --status
+          curl -fsSLo linuxdeploy-plugin-qt "https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/${LINUXDEPLOY_QT_VERSION}/linuxdeploy-plugin-qt-x86_64.AppImage"
+          echo "${LINUXDEPLOY_QT_SHA256}  linuxdeploy-plugin-qt" | sha256sum --check --status
+          chmod +x linuxdeploy linuxdeploy-plugin-qt
+      - name: Assemble AppDir
+        shell: bash
+        run: ./libs/deploy_linux.sh
+      - name: Verify AppDir contents
+        shell: bash
+        run: |
+          test -x deployment/AppDir/usr/bin/proxor
+          test -x deployment/AppDir/usr/bin/proxor_core
+          test -f deployment/AppDir/usr/share/applications/proxor.desktop
+          test -f deployment/AppDir/usr/share/icons/hicolor/256x256/apps/proxor.png
+          test -s deployment/AppDir/usr/share/proxor/geoip.dat
+          test -s deployment/AppDir/usr/share/proxor/geosite.dat
+          test -s deployment/AppDir/usr/share/proxor/geoip.db
+          test -s deployment/AppDir/usr/share/proxor/geosite.db
+          desktop-file-validate deployment/AppDir/usr/share/applications/proxor.desktop
+      - name: Build AppImage
+        shell: bash
+        env:
+          QMAKE: ${{ env.QT_ROOT_DIR }}/bin/qmake
+          EXTRA_QT_PLUGINS: svg
+        run: |
+          export PATH="$PWD:$PATH"
+          source libs/env_deploy.sh
+          ./linuxdeploy --appdir deployment/AppDir --plugin qt --output appimage
+          mv Proxor*.AppImage "$version_standalone-linux64.AppImage" 2>/dev/null ||             mv ./*.AppImage "$version_standalone-linux64.AppImage"
+          ls -la ./*.AppImage
+      - name: Verify packaged AppImage
+        shell: bash
+        run: |
+          appimage="$(find . -maxdepth 1 -name '*.AppImage' -print -quit)"
+          test -n "$appimage"
+          "$appimage" --appimage-extract >/dev/null
+          test -x squashfs-root/usr/bin/proxor
+          test -x squashfs-root/usr/bin/proxor_core
+          test -s squashfs-root/usr/share/proxor/geosite.db
+          desktop-file-validate squashfs-root/usr/share/applications/proxor.desktop
+          set +e
+          xvfb-run -a timeout 10s "$appimage" -many
+          app_rc=$?
+          set -e
+           test "$app_rc" -eq 0 -o "$app_rc" -eq 124
+           rm -rf squashfs-root
+      # The AppImage is built on Ubuntu 22.04 to keep its glibc requirement below
+      # Debian 12. Test the completed artifact in that actual target too: extracted-run
+      # mode exercises its bundled Qt runtime without requiring FUSE in the container.
+      - name: Smoke test AppImage on Debian 12
+        shell: bash
+        run: |
+          appimage="$(find . -maxdepth 1 -name '*.AppImage' -print -quit)"
+          test -n "$appimage"
+          docker run --rm --volume "$PWD:/work:ro" --workdir /work debian:12-slim bash -ceu '
+            for attempt in 1 2 3; do
+              if apt-get update && apt-get install -y --no-install-recommends \
+                xvfb xauth \
+                libdbus-1-3 libegl1 libfontconfig1 libfreetype6 libgl1 libopengl0 \
+                libxkbcommon-x11-0 \
+                libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+                libxcb-randr0 libxcb-render-util0 libxcb-shape0 \
+                libxcb-xinerama0 libxcb-xkb1; then
+                break
+              fi
+              test "$attempt" -lt 3 || exit 1
+              rm -rf /var/lib/apt/lists/*
+              sleep 5
+            done
+            appimage="$(find . -maxdepth 1 -name "*.AppImage" -print -quit)"
+            set +e
+            APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a timeout 10s "$appimage" -many
+            app_rc=$?
+            set -e
+            test "$app_rc" -eq 0 -o "$app_rc" -eq 124
+          '
+      - name: Uploading AppImage
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Proxor-${{ github.sha }}-AppImage-x86_64
+          path: "*.AppImage"
+
+  package-policy-tests:
+    name: Package policy tests (${{ matrix.os }})
+    needs: [stage-package-source]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-22.04]
+    steps:
+      - name: Check out the exact recursive source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          submodules: "recursive"
+      - name: Verify package provenance
+        shell: bash
+        run: bash packaging/source/tests/test-stage-recursive-source.sh
+      - name: Verify dependency pins against the flatpak manifest
+        # No Linux-only guard, unlike its neighbors below: the pins and the
+        # flatpak manifest's copies are two records of the same fact, and this
+        # is the only thing that notices when one moves without the other.
+        # Running it on windows-latest also proves shasum -a 256 exists in Git
+        # Bash before build_deps_all.sh depends on it on that same runner.
+        shell: bash
+        run: bash libs/tests/test-dependency-pins.sh
+      - name: Verify action pins
+        # No OS guard either: the workflows are read by both runners, and
+        # running on windows-latest proves the checker works under Git Bash.
+        shell: bash
+        run: bash .github/tests/test-action-pins.sh
+      - name: Verify artifact uploads declare hidden files
+        shell: bash
+        run: bash .github/tests/test-artifact-hidden-files.sh
+      - name: Install Qt Core and Test
+        uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: ${{ runner.os == 'Windows' && 'windows' || 'linux' }}
+          target: desktop
+          arch: ${{ runner.os == 'Windows' && 'win64_msvc2019_64' || 'linux_gcc_64' }}
+          cache: true
+      - name: Verify release notes and asset staging
+        # The staging fixture renders the AUR and winget inputs with POSIX tools.
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          bash packaging/release/tests/test-release-notes.sh
+          bash packaging/release/tests/test-prepare-release-assets.sh
+      - name: Verify the Homebrew cask and tap bump
+        # Offline: renders the cask and bumps a local bare repository; needs POSIX tools and git.
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          bash packaging/homebrew/tests/test-render-cask.sh
+          bash packaging/homebrew/tests/test-bump-tap.sh
+      - name: Verify native root staging
+        # Guards the shared deb/rpm/arch staging helper; needs POSIX tools.
+        if: runner.os == 'Linux'
+        shell: bash
+        run: bash packaging/linux/tests/test-stage-native-root.sh
+      - name: Run package policy fixture
+        shell: bash
+        run: test/package_mode/run-tests.sh
+
+  package-windows:
+    name: Package Windows release assets
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    needs: [stage-package-source, build-cpp, build-go, test-go, appimage, package-policy-tests]
+    steps:
+      - name: Checking out sources
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          submodules: "recursive"
+      - name: Install Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: windows
+          target: desktop
+          arch: win64_msvc2019_64
+          tools: tools_opensslv3_x64
+          cache: true
+      - name: Install MSVC compiler
+        uses: egor-tensin/vs-shell@54e4148eac794e4580591c2e0b7750f14b7891fc # v2.2
+        with:
+          arch: x64
+      - name: Download Artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: download-artifact
+      - name: Stage build outputs
+        shell: bash
+        run: |
+          mkdir -p build
+          cp download-artifact/Proxor-${{ github.sha }}-windows-latest-x64-Qt${{ env.QT_VERSION }}/* build/
+          find download-artifact -name artifacts.tgz -exec tar xvzf {} \;
+      - name: Verify package source provenance
+        shell: bash
+        run: bash packaging/source/tests/test-stage-recursive-source.sh
+      - name: Deploy and package separate Windows channels
+        shell: bash
+        run: |
+          source libs/env_deploy.sh
+          release_version="${{ github.event.inputs.tag }}"
+          release_version="${release_version#v}"
+          test "$release_version" = "$(cat VERSION.txt)" || {
+            echo "Release tag must match VERSION.txt ($release_version != $(cat VERSION.txt))" >&2
+            exit 1
+           }
+           ./libs/deploy_windows64.sh
+           set -x
+           test -s deployment/windows64/proxor.exe
+          test -s deployment/windows64/proxor_core.exe
+          test -s deployment/windows64/updater.exe
+          test -s deployment/windows64/libcronet.dll
+          test -s deployment/windows64/config/runtime/app.exe
+          test -s deployment/windows64/config/runtime/Qt6Core.dll
+          test -s deployment/windows64/config/runtime/plugins/platforms/qwindows.dll
+          bash ./libs/package_release.sh "deployment/windows64" "deployment/$version_standalone-windows64.zip"
+          bash ./libs/package_winget.sh "deployment/windows64" "deployment/$version_standalone-winget-x64.zip"
+          # grep -q closes the pipe and unzip dies of SIGPIPE, which pipefail reports as a
+          # failure, so each archive is listed once into a variable and matched from there.
+          release_entries="$(unzip -Z1 "deployment/$version_standalone-windows64.zip")"
+          winget_entries="$(unzip -Z1 "deployment/$version_standalone-winget-x64.zip")"
+          grep -Eqi 'proxor\.exe' <<<"$release_entries"
+          ! grep -Eqi 'package-manager[\\/]+winget' <<<"$release_entries"
+          grep -Eqi 'config[\\/]+package-manager[\\/]+winget' <<<"$winget_entries"
+          winget_sha="$(sha256sum "deployment/$version_standalone-winget-x64.zip" | awk '{print $1}')"
+          bash packaging/winget/render-manifest.sh \
+            --version "$release_version" \
+            --url "https://github.com/Ogstra/proxor/releases/download/${{ github.event.inputs.tag }}/$version_standalone-winget-x64.zip" \
+            --sha256 "$winget_sha" \
+            --output deployment/winget-manifests
+          winget validate --manifest deployment/winget-manifests || test "$?" -eq 40
+          # winget validate accepts a manifest without it, but winget-pkgs review does not:
+          # a missing schema header is what got the first submission changes-requested.
+          for kind in version:Ogstra.Proxor installer:Ogstra.Proxor.installer defaultLocale:Ogstra.Proxor.locale.en-US; do
+            grep -qxF "# yaml-language-server: \$schema=https://aka.ms/winget-manifest.${kind%%:*}.1.12.0.schema.json" \
+              "deployment/winget-manifests/${kind#*:}.yaml"
+          done
+          # winget-pkgs validation resolves NestedInstallerFiles inside the archive, so a
+          # path that does not exist there fails there rather than here.
+          nested="$(sed -n 's/^ *- RelativeFilePath: *//p' deployment/winget-manifests/Ogstra.Proxor.installer.yaml)"
+          test -n "$nested"
+          grep -qxF "$nested" <<<"$winget_entries"
+          # A ZIP stores paths with forward slashes. Compress-Archive used to write
+          # backslashes, which makes every directory collapse into a file name.
+          ! grep -q '\\' <<<"$release_entries"
+          ! grep -q '\\' <<<"$winget_entries"
+      # Symbols are kept, not deleted. The previous workflow ran `rm -rf *.pdb` at this
+      # point, which would have discarded exactly what makes a crash from a shipped build
+      # diagnosable. See docs/Build_Windows.md.
+      - name: Package symbols
+        shell: bash
+        run: |
+          source libs/env_deploy.sh
+          mkdir -p symbols-stage
+          cp build/app.pdb build/app.exe build/proxor.pdb build/proxor.exe symbols-stage/ 2>/dev/null || true
+          {
+            echo "Proxor symbols"
+            echo "version:  $(cat VERSION.txt)"
+            echo "built:    $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo ""
+            echo "SHA256 identifies the exact build."
+            echo ""
+            (cd symbols-stage && sha256sum *)
+          } > symbols-stage/MANIFEST.txt
+          7z a -tzip "deployment/$version_standalone-symbols.zip" ./symbols-stage/*
+      - name: Upload immutable Windows release candidates
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-assets-windows
+          path: |
+            deployment/*-windows64.zip
+            deployment/*-winget-x64.zip
+            deployment/*-symbols.zip
+            deployment/winget-manifests/*.yaml
+          if-no-files-found: error
+
+  package-deb:
+    name: Build and smoke native Debian package
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
+    needs: [stage-package-source]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+      - name: Check out exact package definitions
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          submodules: recursive
+      - name: Install release Go toolchain
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - name: Download immutable source input
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-assets-source
+          path: source-input
+      - name: Build from staged source on Ubuntu 22.04
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\n' < VERSION.txt)"
+          tag="${{ github.event.inputs.tag }}"
+          if [ -n "$tag" ]; then test "${tag#v}" = "$version"; fi
+          test -f "source-input/proxor-$version.tar.gz"
+          test -f "source-input/proxor-$version.source-manifest"
+          mkdir -p "$RUNNER_TEMP/deb-work"
+          tar -xzf "source-input/proxor-$version.tar.gz" -C "$RUNNER_TEMP/deb-work"
+          go_root="$(go env GOROOT)"
+          test -x "$go_root/bin/go"
+          docker run --rm -v "$RUNNER_TEMP/deb-work:/work" -v "$go_root:/opt/proxor-go:ro" \
+            ubuntu@sha256:829f6df217bcbae2b371026e81711d1a787c61b2967ad09d015063663ebafbf7 \
+            bash -ceu '
+              export DEBIAN_FRONTEND=noninteractive
+              export PATH="/opt/proxor-go/bin:$PATH"
+              apt-get update
+              apt-get install -y --no-install-recommends build-essential cmake ninja-build git unzip \
+                debhelper devscripts qt6-base-dev libqt6svg6-dev libqt6widgets6 libgl1-mesa-dev libyaml-cpp-dev \
+                libprotobuf-dev protobuf-compiler pkg-config curl ca-certificates
+              go version
+              /work/proxor-*/packaging/debian/build-deb.sh --source-root /work/proxor-*
+            '
+      - name: Inspect installed package on Debian 12
+        shell: bash
+        run: packaging/debian/tests/test-deb-package.sh "$RUNNER_TEMP/deb-work/proxor_"*.deb
+      - name: Upload immutable Debian release asset
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-assets-deb
+          path: ${{ runner.temp }}/deb-work/proxor_*.deb
+          if-no-files-found: error
+
+  package-rpm:
+    name: Build and smoke native Fedora RPM
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
+    needs: [stage-package-source]
+    runs-on: ubuntu-latest
+    permissions: {contents: read}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          submodules: recursive
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-assets-source
+          path: source-input
+      - name: Build from immutable archive in Fedora
+        shell: bash
+        run: |
+          set -euo pipefail; mkdir -p "$RUNNER_TEMP/rpm-work"
+          cp source-input/proxor-*.tar.gz "$RUNNER_TEMP/rpm-work/"
+          docker run --rm -v "$PWD:/driver:ro" -v "$RUNNER_TEMP/rpm-work:/work" -w /work fedora@sha256:43b29f65a41eb9c35e1cd5323e3bdf3b655c2357a9f4f1ff2f9c2798e5045d80 bash -ceu '
+            dnf -y install rpm-build cmake ninja-build gcc-c++ golang qt6-qtbase-devel qt6-qtsvg-devel yaml-cpp-devel zxing-cpp-devel protobuf-devel curl
+            cp -a /driver/packaging /work/packaging; /work/packaging/rpm/build-rpm.sh --source-archive /work/proxor-*.tar.gz
+          '
+      - name: Smoke installed Fedora RPM
+        shell: bash
+        run: packaging/rpm/tests/test-rpm-package.sh "$RUNNER_TEMP/rpm-work/rpmbuild/RPMS/x86_64/proxor-"[0-9]*.rpm
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
+        with:
+          name: release-assets-rpm
+          path: ${{ runner.temp }}/rpm-work/rpmbuild/RPMS/x86_64/*.rpm
+          if-no-files-found: error
+
+  package-arch:
+    name: Build Arch source recipe
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
+    needs: [stage-package-source]
+    runs-on: ubuntu-latest
+    permissions: {contents: read}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          submodules: recursive
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-assets-source
+          path: source-input
+      - name: Install release Go toolchain
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - name: Render and validate the source recipe as builder
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\n' < VERSION.txt)"
+          test "${{ github.event.inputs.tag }}" = "v$version"
+          archive="source-input/proxor-$version.tar.gz"
+          sha="$(sha256sum "$archive" | awk '{print $1}')"
+          go_root="$(go env GOROOT)"
+          tag="${{ github.event.inputs.tag }}"
+          # su - resets the environment, so the values are substituted into the script
+          # here instead of being passed through as container variables.
+          cat > "$RUNNER_TEMP/render-recipe.sh" <<EOF
+          set -eu
+          export PATH="/opt/proxor-go/bin:\$PATH"
+          pacman -Syu --noconfirm --needed base-devel cmake ninja go namcap git protobuf qt6-base qt6-svg yaml-cpp zxing-cpp
+          useradd -m builder
+          cp -a /checkout/packaging /work/packaging
+          mkdir /work/aur /work/aur-release
+          chown -R builder:builder /work/packaging /work/aur /work/aur-release
+          su - builder -c 'export PATH=/opt/proxor-go/bin:\$PATH; go version; /work/packaging/arch/render-pkgbuild.sh --version $version --url file:///checkout/source-input/proxor-$version.tar.gz --sha256 $sha --output /work/aur'
+          su - builder -c 'export PATH=/opt/proxor-go/bin:\$PATH; go version; /work/packaging/arch/tests/test-aur-package.sh /work/aur'
+          # .SRCINFO needs makepkg, which only exists in this container, so render the
+          # recipe that ships with the release here too. Its URL is the release asset
+          # built from the archive validated above.
+          su - builder -c '/work/packaging/arch/render-pkgbuild.sh --version $version --url https://github.com/Ogstra/proxor/releases/download/$tag/proxor-$version.tar.gz --sha256 $sha --output /work/aur-release'
+          EOF
+          docker run --rm -v "$PWD:/checkout:ro" -v "$RUNNER_TEMP:/work" -v "$go_root:/opt/proxor-go:ro" archlinux:base bash /work/render-recipe.sh
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-assets-arch
+          path: |
+            ${{ runner.temp }}/aur-release/PKGBUILD
+            ${{ runner.temp }}/aur-release/.SRCINFO
+          # upload-artifact skips dotfiles unless told otherwise, and since PKGBUILD
+          # still matches, if-no-files-found never notices .SRCINFO went missing.
+          include-hidden-files: true
+          if-no-files-found: error
+
+  package-flatpak:
+    name: Build and smoke restricted Flatpak package
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
+    needs: [stage-package-source, build-go]
+    runs-on: ubuntu-latest
+    permissions: {contents: read}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          submodules: recursive
+      - name: Install release Go toolchain
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-assets-source
+          path: source-input
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: Proxor-${{ github.sha }}-Common-public_res-public_res
+          path: public-res-input
+      - name: Install Flatpak build tools and runtime
+        shell: bash
+        run: |
+          sudo apt-get update
+          # flatpak-builder splits debug info with eu-strip from elfutils.
+          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder xvfb elfutils
+          flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user --noninteractive flathub org.kde.Sdk//6.8 org.kde.Platform//6.8
+      - name: Prepare immutable Flatpak build inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\n' < VERSION.txt)"
+          test "${{ github.event.inputs.tag }}" = "v$version"
+          tar -xzf public-res-input/artifacts.tgz
+          bash packaging/flatpak/prepare-build-inputs.sh \
+            --source-archive "source-input/proxor-$version.tar.gz" \
+            --source-manifest "source-input/proxor-$version.source-manifest" \
+            --geodata deployment/public_res \
+            --output packaging/flatpak/.flatpak-input
+      - name: Validate restricted source contract
+        shell: bash
+        run: |
+          bash packaging/flatpak/generate-go-sources.sh --check
+          bash packaging/flatpak/tests/test-source-closure.sh
+          PROXOR_FLATPAK_FULL_TEST=1 \
+          PROXOR_FLATPAK_BUNDLE_OUTPUT="$RUNNER_TEMP/proxor-$(tr -d '\n' < VERSION.txt).flatpak" \
+            bash packaging/flatpak/tests/test-flatpak-package.sh
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-assets-flatpak
+          path: ${{ runner.temp }}/proxor-*.flatpak
+          if-no-files-found: error
+
+  package-macos:
+    name: Build macOS arm64 app
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
+    # Only for the geodata artifact, so macOS ships the same geodata as Windows and Linux;
+    # build_macos.sh builds its own darwin core.
+    needs: [build-go]
+    # macos-15, not the moving "latest" label (macOS 26): Homebrew bottles target the OS they were built
+    # on, so this image sets the app's floor at macOS 15, which the cask declares as
+    # depends_on macos: :sequoia. macos-14 is being retired.
+    runs-on: macos-15
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      # CMake reads it for the GUI; build_macos.sh also writes it to LSMinimumSystemVersion,
+      # and package_macos.sh fails if any bundled Mach-O needs a newer macOS.
+      MACOSX_DEPLOYMENT_TARGET: "15.0"
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+      HOMEBREW_NO_ANALYTICS: "1"
+    steps:
+      - name: Check out the exact recursive source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          submodules: recursive
+      - name: Install release Go toolchain
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - name: Install Homebrew dependencies
+        shell: bash
+        run: |
+          brew install qtbase qtsvg yaml-cpp zxing-cpp protobuf
+          brew list --versions qtbase qtsvg yaml-cpp zxing-cpp protobuf abseil
+      - name: Download the release geodata
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: Proxor-${{ github.sha }}-Common-public_res-public_res
+          path: public-res-input
+      - name: Build Proxor.app
+        shell: bash
+        env:
+          TAG: ${{ github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\n' < VERSION.txt)"
+          if [ -n "$TAG" ]; then test "${TAG#v}" = "$version"; fi
+          tar -xzf public-res-input/artifacts.tgz
+          test -s deployment/public_res/geosite.db
+          # The source tracks a recent SDK; prefer the newest Xcode on the image when present.
+          if [ -d /Applications/Xcode_26.3.app ]; then export DEVELOPER_DIR=/Applications/Xcode_26.3.app/Contents/Developer; fi
+          xcrun --show-sdk-version
+          ./libs/build_macos.sh
+      - name: Package and verify the release zip
+        shell: bash
+        run: ./libs/package_macos.sh
+      - name: Smoke launch
+        shell: bash
+        run: |
+          app="deployment/macos-arm64/Proxor.app/Contents/MacOS/Proxor"
+          "$app" -many -appdata "$RUNNER_TEMP/proxor-smoke" >"$RUNNER_TEMP/smoke.log" 2>&1 &
+          pid=$!
+          sleep 10
+          if ! kill -0 "$pid" 2>/dev/null; then
+            cat "$RUNNER_TEMP/smoke.log"
+            echo "Proxor exited within 10 seconds of starting" >&2
+            exit 1
+          fi
+          kill "$pid" || true
+          pkill -f 'Proxor.app/Contents/MacOS/proxor_core' || true
+      - name: Upload immutable macOS release asset
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-assets-macos
+          path: deployment/proxor-*-macos-arm64.zip
+          if-no-files-found: error
+      # Untagged runs never reach publish-release, so this copy cannot collide with the
+      # release asset above; it exists so a build can be installed and checked before a release.
+      - name: Upload macOS preview build
+        if: github.event.inputs.tag == ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Proxor-${{ github.sha }}-macos-arm64-preview
+          path: deployment/proxor-*-macos-arm64.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-release:
+    name: Publish verified release assets
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'y' && github.event.inputs.tag != ''
+    needs: [stage-package-source, appimage, package-windows, package-deb, package-rpm, package-arch, package-flatpak, package-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          submodules: recursive
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: release-input
+      - name: Create source-first GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag }}
+          PRERELEASE: ${{ github.event.inputs.prerelease }}
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\n' < VERSION.txt)"
+          test "$TAG" = "v$version"
+          mkdir -p release-stage
+          packaging/release/prepare-release-assets.sh prepare-source-release --input release-input --version "$version" --output release-stage
+          # Releases are prereleases unless a stable one is asked for explicitly, so an
+          # empty or defaulted input never publishes a stable release by accident.
+          args=()
+          if [ "$PRERELEASE" != n ]; then args+=(--prerelease); fi
+          # The in-app changelog window renders this body, so it is authored against
+          # docs/Release_Notes_Format.md rather than generated from commit subjects.
+          notes="packaging/release/notes/$TAG.md"
+          test -s "$notes"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" "release-stage/proxor-$version.tar.gz" --target "$GITHUB_SHA" --title "$TAG" --notes-file "$notes" "${args[@]}"
+          else
+            gh release upload "$TAG" "release-stage/proxor-$version.tar.gz" --clobber
+            # A re-run must not leave a release the previous run marked differently.
+            if [ "$PRERELEASE" != n ]; then
+              gh release edit "$TAG" --prerelease
+            else
+              gh release edit "$TAG" --prerelease=false
+            fi
+          fi
+          source_url="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/$TAG" --jq '.assets[] | select(.name == "proxor-'"$version"'.tar.gz") | .browser_download_url')"
+          test -n "$source_url"
+          packaging/release/prepare-release-assets.sh prepare-final-assets --input release-input --version "$version" --output release-stage --public-source-url "$source_url"
+          (cd release-stage && shasum -a 256 -c SHA256SUMS)
+          gh release upload "$TAG" release-stage/*.zip release-stage/*.AppImage release-stage/*.deb release-stage/*.rpm release-stage/*.flatpak release-stage/SHA256SUMS --clobber
+      - name: Keep the AUR and winget recipes for their package repositories
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-recipes
+          path: release-stage/recipes
+          include-hidden-files: true
+          if-no-files-found: error
+
+  bump-homebrew-tap:
+    name: Bump the Homebrew tap
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'y' && github.event.inputs.tag != ''
+    needs: [publish-release]
+    runs-on: ubuntu-latest
+    # The only publishing credential this workflow touches, confined to this job and its
+    # environment: a fine-grained token with contents:write on Ogstra/homebrew-tap only.
+    # The cask is re-derived from the published zip and SHA256SUMS, never from a build artifact.
+    environment: homebrew-publication
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the release commit
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+      - name: Point the cask at the published macOS zip
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TAG: ${{ github.event.inputs.tag }}
+        run: packaging/homebrew/bump-tap.sh --tag "$TAG" --work "$RUNNER_TEMP/homebrew"

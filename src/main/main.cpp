@@ -3,6 +3,8 @@
 #include <QApplication>
 #include <QDir>
 #include <QMessageBox>
+#include <QFileInfo>
+#include <QIcon>
 #include <QStandardPaths>
 #include <QLocalSocket>
 #include <QLocalServer>
@@ -43,18 +45,33 @@ int main(int argc, char* argv[]) {
 #endif
     QApplication::setQuitOnLastWindowClosed(false);
     QApplication a(argc, argv);
+#ifdef Q_OS_LINUX
+    QGuiApplication::setDesktopFileName(QStringLiteral("proxor"));
+#endif
+    // The tray icon is initialized later; set this now so Linux taskbars identify the
+    // first top-level window even while the proxy is inactive.
+    QApplication::setWindowIcon(QIcon(QStringLiteral(":/proxor/proxor.png")));
 
     // Clean
     const auto packageRoot = ProxorGui::PackageRootPath();
+    // An AppImage runs from a read-only FUSE mount, and a per-machine install can sit under
+    // a read-only prefix. Portable mode keeps its working directory beside the executable,
+    // so these housekeeping writes -- and later the config directory itself -- fail with
+    // "No permissions to write ...". Decide once, here, and degrade instead of dying.
+    const bool packageRootWritable = QFileInfo(packageRoot).isWritable();
     QDir::setCurrent(packageRoot);
-    if (QFile::exists("updater.old")) {
-        QFile::remove("updater.old");
-    }
-#ifndef Q_OS_WIN
-    if (!QFile::exists("updater")) {
-        QFile::link("launcher", "updater");
-    }
+    if (packageRootWritable) {
+        if (QFile::exists("updater.old")) {
+            QFile::remove("updater.old");
+        }
+        // macOS has no launcher or updater, and the package root is inside the signed
+        // .app, so the symlink would dangle and invalidate the bundle seal.
+#if !defined(Q_OS_WIN) && !defined(Q_OS_MACOS)
+        if (!QFile::exists("updater")) {
+            QFile::link("launcher", "updater");
+        }
 #endif
+    }
 
     // Flags
     const auto commandLineArguments = QCoreApplication::arguments();
@@ -77,6 +94,10 @@ int main(int argc, char* argv[]) {
     ProxorGui::dataStore->flag_debug = true;
 #endif
 
+    // Falling back here rather than at the flag parsing above keeps an explicit -appdata
+    // authoritative: this only forces the fallback when portable mode is impossible.
+    if (!packageRootWritable) ProxorGui::dataStore->flag_use_appdata = true;
+
     // dirs & clean
     auto wd = QDir(packageRoot);
     if (ProxorGui::dataStore->flag_use_appdata) {
@@ -95,6 +116,12 @@ int main(int argc, char* argv[]) {
     // Before anything can log: until this existed the log lived only in the in-app
     // widget, so a crash took its own explanation with it.
     ProxorGui_log::Init();
+
+    // Not debug-only: this is the only end-to-end assertion the native package tests
+    // can make that detection actually read the installed marker, by grepping the
+    // installed app's own log for this exact line inside a deb/rpm test container.
+    ProxorGui_log::Write(ProxorGui_log::Level::Info,
+                          "Install channel: " + PackageModeName(ProxorGui::CurrentPackageMode()));
 
     // dispatchers
     DS_cores = new QThread;

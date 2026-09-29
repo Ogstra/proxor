@@ -19,6 +19,9 @@
 #include <QSemaphore>
 #include <QMutex>
 #include <atomic>
+#include <functional>
+#include <memory>
+#include <utility>
 
 #include "GroupSort.hpp"
 
@@ -35,11 +38,20 @@ namespace ProxorGui_sys {
     class CoreProcess;
 }
 
+#ifdef Q_OS_MACOS
+namespace ProxorMac {
+    class StatusItem;
+}
+#endif
+
 QT_BEGIN_NAMESPACE
 namespace Ui {
     class MainWindow;
 }
 class QLabel;
+#ifdef Q_OS_MACOS
+class QMenu;
+#endif
 QT_END_NAMESPACE
 
 class MainWindow : public QMainWindow {
@@ -169,6 +181,10 @@ private slots:
 private:
     Ui::MainWindow *ui;
     QSystemTrayIcon *tray;
+#ifdef Q_OS_MACOS
+    ProxorMac::StatusItem *mac_status_item = nullptr;
+    QMenu *mac_tray_menu = nullptr;
+#endif
     QShortcut *shortcut_ctrl_f = new QShortcut(QKeySequence("Ctrl+F"), this);
     QShortcut *shortcut_ctrl_v = new QShortcut(QKeySequence("Ctrl+V"), this);
     QShortcut *shortcut_ctrl_a = new QShortcut(QKeySequence("Ctrl+A"), this);
@@ -176,11 +192,14 @@ private:
     QShortcut *shortcut_ctrl_s = new QShortcut(QKeySequence("Ctrl+S"), this);
     QShortcut *shortcut_esc = new QShortcut(QKeySequence("Esc"), this);
     //
-    ProxorGui_sys::CoreProcess *core_process;
+    ProxorGui_sys::CoreProcess *core_process = nullptr;
     WifiMonitor *wifi_monitor = nullptr;
     qint64 vpn_pid = 0;
     //
     bool update_staged = false;
+    QString staged_asset_name; // base name of the asset requested for Download, so
+                                // onUpdateStaged() can derive the AppImage staged path
+                                // without a second RPC
     QPointer<UpdateProgressDialog> updateProgressDialog;
     ProxyListModel *proxyListModel = nullptr;
     QLabel *m_quotaLabel = nullptr;
@@ -194,6 +213,14 @@ private:
     std::shared_ptr<ProxorGui::ProxyEntity> running;
     bool start_pending = false;
     bool started_via_ssid_trigger = false;
+    bool startup_tun_pending = false;
+    bool startup_tun_authorized = false;
+    bool startup_tun_failed = false;
+    int startup_deferred_profile_id = -1;
+    std::function<void()> startup_network_work;
+    bool application_was_inactive = false;
+    bool subscription_resume_check_pending = false;
+    qint64 subscription_timer_last_tick_ms = 0;
     QString auto_start_consumed_ssid;
     QString traffic_update_cache;
     QTime last_test_time;
@@ -243,9 +270,15 @@ private:
 
     bool StartVPNProcess();
 
+    void authorizeStartupTun();
+    void completeStartupTunAuthorization();
+    void failStartupTunAuthorization();
+    void resumeDeferredStartupProfile();
+
     void syncWindowsHostsMapping(bool enable);
 
     void update_connection_statistics_polling_state();
+    void queue_resume_subscription_check();
 
     // grpc and ...
 

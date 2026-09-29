@@ -113,7 +113,7 @@ For sing-box, it sets inbound.domain_strategy</string>
           <item>
            <widget class="QPushButton" name="load_save">
             <property name="text">
-             <string>Mange route set</string>
+             <string>Manage route set</string>
             </property>
            </widget>
           </item>

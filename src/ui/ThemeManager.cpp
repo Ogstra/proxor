@@ -1,6 +1,7 @@
 #include <QStyle>
 #include <QApplication>
 #include <QComboBox>
+#include <QDir>
 #include <QEvent>
 #include <QWidget>
 #include <QFile>
@@ -8,6 +9,8 @@
 #include <QPalette>
 #include <QStyleFactory>
 #include <QStyleHints>
+#include <QSettings>
+#include <QStandardPaths>
 #include <QTextStream>
 #include <QTimer>
 #include <QColor>
@@ -150,10 +153,27 @@ QPalette makeArcDarkPalette() {
 
 bool systemPrefersDark() {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
-    return qApp->styleHints()->colorScheme() == Qt::ColorScheme::Dark;
-#else
-    return QPalette().color(QPalette::Window).lightness() < 128;
+    const auto scheme = qApp->styleHints()->colorScheme();
+    if (scheme == Qt::ColorScheme::Dark) return true;
+    if (scheme == Qt::ColorScheme::Light) return false;
 #endif
+
+#ifdef Q_OS_LINUX
+    const auto gtkTheme = qEnvironmentVariable("GTK_THEME");
+    if (gtkTheme.contains(QLatin1String("dark"), Qt::CaseInsensitive)) return true;
+
+    const auto configRoot = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+    for (const auto &version : {QStringLiteral("gtk-4.0"), QStringLiteral("gtk-3.0")}) {
+        QSettings gtk(QDir(configRoot).filePath(version + QStringLiteral("/settings.ini")), QSettings::IniFormat);
+        if (gtk.value(QStringLiteral("Settings/gtk-application-prefer-dark-theme")).toBool()) return true;
+        if (gtk.value(QStringLiteral("Settings/gtk-theme")).toString().contains(QLatin1String("dark"), Qt::CaseInsensitive)) return true;
+    }
+
+    QSettings kde(QDir(configRoot).filePath(QStringLiteral("kdeglobals")), QSettings::IniFormat);
+    if (kde.value(QStringLiteral("General/ColorScheme")).toString().contains(QLatin1String("dark"), Qt::CaseInsensitive)) return true;
+#endif
+
+    return qApp->palette().color(QPalette::Window).lightness() < 128;
 }
 
 QPalette paletteForMode(const QString &requestedMode) {
@@ -300,7 +320,9 @@ void reloadWidgetStyleState(bool repolish, bool fusionMetrics) {
 
 QList<ThemeManager::ThemeOption> ThemeManager::AvailableThemes() const {
     QList<ThemeOption> themes;
+#ifndef Q_OS_MACOS
     themes.append({QStringLiteral("System"), QStringLiteral("System")});
+#endif
 
     const auto sysName = system_style_name.toLower();
     for (const auto &key : QStyleFactory::keys()) {
@@ -308,6 +330,10 @@ QList<ThemeManager::ThemeOption> ThemeManager::AvailableThemes() const {
             continue;
         if (key.toLower() == QStringLiteral("fusion"))
             continue;  // Fusion is used as QDarkStyle base, skip to avoid confusion
+#ifdef Q_OS_MACOS
+        if (key.compare(QStringLiteral("Windows"), Qt::CaseInsensitive) == 0)
+            continue;  // "Windows Classic" makes no sense on macOS
+#endif
         QString displayName = key;
         if (key.compare(QStringLiteral("Windows"), Qt::CaseInsensitive) == 0) {
             displayName = QStringLiteral("Windows Classic");
@@ -324,7 +350,7 @@ QList<ThemeManager::ThemeOption> ThemeManager::AvailableThemes() const {
     return themes;
 }
 
-QString ThemeManager::NormalizeTheme(const QString &theme) const {
+static QString normalizeThemeBase(const QString &theme) {
     auto normalizedTheme = theme.trimmed();
     extractThemeMode(&normalizedTheme);
     if (normalizedTheme.isEmpty()) {
@@ -357,6 +383,13 @@ QString ThemeManager::NormalizeTheme(const QString &theme) const {
         return QStringLiteral("System");
     }
 
+#ifdef Q_OS_MACOS
+    // A stored Windows Classic theme lands on the default theme.
+    if (lowerTheme == QStringLiteral("windows")) {
+        return QStringLiteral("System");
+    }
+#endif
+
     // Check if it is a valid QStyleFactory key (case-insensitive match)
     for (const auto &key : QStyleFactory::keys()) {
         if (key.toLower() == lowerTheme) {
@@ -365,6 +398,16 @@ QString ThemeManager::NormalizeTheme(const QString &theme) const {
     }
 
     return QStringLiteral("System");
+}
+
+QString ThemeManager::NormalizeTheme(const QString &theme) const {
+    const auto normalized = normalizeThemeBase(theme);
+#ifdef Q_OS_MACOS
+    // The System (native macOS) theme is not ready yet: it is hidden on macOS and every
+    // stored or default System theme runs as Fusion, which follows the OS light/dark mode.
+    if (normalized == QStringLiteral("System")) return QStringLiteral("Fusion");
+#endif
+    return normalized;
 }
 
 void ThemeManager::ApplyTheme(const QString &theme, bool force) {
@@ -391,7 +434,15 @@ void ThemeManager::ApplyTheme(const QString &theme, bool force) {
     // setPalette keeps setStyle from resetting it to the style's standard palette.
     if (lowerTheme == "system") {
         qApp->setStyleSheet("");
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
+        // The native style reads the OS light/dark setting itself.
         qApp->setPalette(QPalette());
+#else
+        // Platform plugins report ColorScheme::Unknown even when GTK/KDE is dark, so the
+        // palette is resolved here: an explicitly requested mode wins, and without one the
+        // system preference is detected. It has to be set before the style polishes.
+        qApp->setPalette(paletteForMode(requestedMode));
+#endif
         qApp->setStyle(this->system_style_name);
     } else if (lowerTheme == "fusion") {
         qApp->setStyleSheet("");
@@ -448,6 +499,29 @@ void ThemeManager::ApplyTheme(const QString &theme, bool force) {
         qApp->installEventFilter(this);
         event_filter_installed = true;
     }
+
+#ifdef Q_OS_MACOS
+    // The native macos style and the default palette already follow the OS light/dark
+    // setting, but Proxor's own themeChanged listeners (log colors, table theme, settings
+    // navigation QSS) only refresh on ApplyTheme, so re-apply System when the OS flips.
+    static bool color_scheme_connected = false;
+    if (!color_scheme_connected) {
+        color_scheme_connected = true;
+        QObject::connect(qApp->styleHints(), &QStyleHints::colorSchemeChanged, this, [this](Qt::ColorScheme) {
+            if (applying) return;
+            // Fusion without an explicit Light/Dark mode resolves its palette from the OS
+            // setting at apply time, so it has to be re-applied when the OS flips too.
+            auto themeName = current_theme.trimmed();
+            const auto mode = extractThemeMode(&themeName);
+            const auto normalized = NormalizeTheme(themeName);
+            const bool followsOs = normalized == QStringLiteral("System") ||
+                                   (normalized == QStringLiteral("Fusion") &&
+                                    (mode.isEmpty() || mode == QStringLiteral("system")));
+            if (!followsOs) return;
+            QTimer::singleShot(0, this, [this] { ApplyTheme(current_theme, true); });
+        });
+    }
+#endif
 
 #ifdef Q_OS_WIN
     title_bar_dark = resolvedIsDark(lowerTheme, requestedMode);

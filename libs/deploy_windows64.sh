@@ -1,17 +1,26 @@
 #!/bin/bash
-set -e
+set -eu
 
 source libs/env_deploy.sh
-DEST=$DEPLOYMENT/windows64
-rm -rf $DEST
-mkdir -p $DEST
+DEST="$DEPLOYMENT/windows64"
+
+# CI extracts the Go artifact to the same destination this script assembles.
+# Preserve those files before replacing the Qt deployment tree.
+GO_STAGE="$(mktemp -d "${TMPDIR:-/tmp}/proxor-go.XXXXXX")"
+trap 'rm -rf "$GO_STAGE"' EXIT
+if [ -d "$DEST" ]; then
+  cp -a "$DEST/." "$GO_STAGE/"
+fi
+rm -rf "$DEST"
+mkdir -p "$DEST"
 
 #### copy exe ####
-cp $BUILD/proxor.exe $DEST
-mkdir -p $DEST/config/runtime
-cp $BUILD/app.exe $DEST/config/runtime/
-cp $SRC_ROOT/go/cmd/proxor_core/proxor_core.exe $DEST
-cp $SRC_ROOT/go/cmd/updater/updater.exe $DEST
+cp "$BUILD/proxor.exe" "$DEST"
+mkdir -p "$DEST/config/runtime"
+cp "$BUILD/app.exe" "$DEST/config/runtime/"
+cp "${GO_STAGE}/proxor_core.exe" "$DEST" 2>/dev/null || cp "$SRC_ROOT/go/cmd/proxor_core/proxor_core.exe" "$DEST"
+cp "${GO_STAGE}/updater.exe" "$DEST" 2>/dev/null || cp "$SRC_ROOT/go/cmd/updater/updater.exe" "$DEST"
+cp "${GO_STAGE}/libcronet.dll" "$DEST" 2>/dev/null || true
 
 #### deploy qt & DLL runtime ####
 pushd $DEST/config/runtime
@@ -20,9 +29,45 @@ rm -rf translations
 rm -rf libEGL.dll libGLESv2.dll Qt6Pdf.dll
 rm -f dxcompiler.dll dxil.dll
 
-if [ "$DL_QT_VER" != "5.15" ]; then
-  cp $SRC_ROOT/qtsdk/Qt/bin/libcrypto-3-x64.dll .
-  cp $SRC_ROOT/qtsdk/Qt/bin/libssl-3-x64.dll .
+if [ "${DL_QT_VER:-}" != "5.15" ]; then
+  # The bundled qtsdk ships OpenSSL in its bin/. Official Qt builds (what CI installs
+  # via aqt) do not, so accept an explicit override and fall back to searching the Qt
+  # prefix. Keeps the local and CI paths on the same script instead of forking them.
+  OPENSSL_SEARCH_DIRS=(
+    "${PROXOR_OPENSSL_DIR:-}"
+    "$SRC_ROOT/qtsdk/Qt/bin"
+    "${QT_ROOT_DIR:-}/bin"
+    "${IQTA_TOOLS:-}/OpenSSLv3/Win_x64/bin"
+  )
+  openssl_found=""
+  for d in "${OPENSSL_SEARCH_DIRS[@]}"; do
+    [ -n "$d" ] || continue
+    if [ -f "$d/libcrypto-3-x64.dll" ] && [ -f "$d/libssl-3-x64.dll" ]; then
+      cp "$d/libcrypto-3-x64.dll" "$d/libssl-3-x64.dll" .
+      openssl_found="$d"
+      break
+    fi
+  done
+  # Last resort: aqt's tool layout has changed before, so search rather than give up.
+  if [ -z "$openssl_found" ]; then
+    for root in "${IQTA_TOOLS:-}" "${QT_ROOT_DIR:-}"; do
+      [ -n "$root" ] && [ -d "$root" ] || continue
+      cand=$(find "$root" -name libcrypto-3-x64.dll -print -quit 2>/dev/null || true)
+      if [ -n "$cand" ] && [ -f "$(dirname "$cand")/libssl-3-x64.dll" ]; then
+        cp "$cand" "$(dirname "$cand")/libssl-3-x64.dll" .
+        openssl_found=$(dirname "$cand")
+        break
+      fi
+    done
+  fi
+
+  if [ -z "$openssl_found" ]; then
+    echo "ERROR: libcrypto-3-x64.dll / libssl-3-x64.dll not found." >&2
+    echo "Searched: ${OPENSSL_SEARCH_DIRS[*]}" >&2
+    echo "Set PROXOR_OPENSSL_DIR to the directory containing them." >&2
+    exit 1
+  fi
+  echo "OpenSSL runtime taken from: $openssl_found"
 fi
 
 MSVC_REDIST_DIR=""
@@ -76,4 +121,4 @@ if [ -d "$DEPLOYMENT/public_res" ]; then
   done
 fi
 
-cp $BUILD/*.pdb $DEPLOYMENT
+cp "$BUILD"/*.pdb "$DEPLOYMENT" 2>/dev/null || true

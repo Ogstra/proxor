@@ -21,6 +21,25 @@ DialogManageGroups::DialogManageGroups(QWidget *parent) : QDialog(parent), ui(ne
     ui->listView->horizontalHeader()->setSectionResizeMode(GroupListModel::EditColumn, QHeaderView::ResizeToContents);
     ui->listView->horizontalHeader()->setSectionResizeMode(GroupListModel::RemoveColumn, QHeaderView::ResizeToContents);
     ui->listView->verticalHeader()->setDefaultSectionSize(28);
+#ifdef Q_OS_MACOS
+    {
+        // Sized columns instead of five equal stretched ones and two empty header stubs: the text
+        // columns share what is left, the three action columns are as wide as their labels.
+        auto *hdr = ui->listView->horizontalHeader();
+        hdr->setStretchLastSection(false);
+        hdr->setSectionResizeMode(GroupListModel::NameColumn, QHeaderView::Interactive);
+        hdr->resizeSection(GroupListModel::NameColumn, 170);
+        hdr->setSectionResizeMode(GroupListModel::UrlColumn, QHeaderView::Stretch);
+        hdr->setSectionResizeMode(GroupListModel::InfoColumn, QHeaderView::Interactive);
+        hdr->resizeSection(GroupListModel::InfoColumn, 190);
+        for (const int col : {int(GroupListModel::UpdateColumn), int(GroupListModel::EditColumn), int(GroupListModel::RemoveColumn)}) {
+            hdr->setSectionResizeMode(col, QHeaderView::Fixed);
+            hdr->resizeSection(col, col == GroupListModel::EditColumn ? 56 : 72);
+        }
+        ui->listView->verticalHeader()->setDefaultSectionSize(30);
+        ui->listView->setSelectionBehavior(QAbstractItemView::SelectRows);
+    }
+#endif
 
     reload_groups();
     connect(ProxorGui_sub::groupUpdater, &ProxorGui_sub::GroupUpdater::asyncUpdateCallback, this, [=](int gid) {

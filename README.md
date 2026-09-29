@@ -2,7 +2,7 @@
 
 Qt-based proxy client for managing sing-box profiles, subscriptions, routing, and system proxy integration.
 
-Current version: `1.6.4`
+Current version: `1.6.11`
 
 <img width="717" height="559" alt="image" src="https://github.com/user-attachments/assets/d9b86402-7301-4e4e-971b-fef3ff2db247" />
 
@@ -46,10 +46,16 @@ Current version: `1.6.4`
 
 If the application reports missing runtime DLLs, install the [Microsoft Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe).
 
+### macOS
+
+Apple Silicon Macs running macOS 15 or later install Proxor with Homebrew: `brew install --cask ogstra/tap/proxor`, and update it with `brew upgrade --cask proxor`. The app is ad-hoc signed and not notarized; the cask clears the quarantine flag. See [Build on macOS](docs/Build_macOS.md).
+
 ### Linux
 
-Linux packaging and deployment vary by distribution. Use the local build and runtime guides in [`docs/`](docs/readme.md) instead of old third-party package references.
-Linux remains manual-build only for now. `.deb`, AppImage, and CI-produced Linux release artifacts are not currently supported.
+Linux releases provide the retained x86_64 AppImage plus native Debian/Ubuntu `.deb`, Fedora
+RPM, source AUR `proxor`, and a restricted GitHub Flatpak bundle. Use the package manager that
+installed Proxor for upgrades; Flatpak cannot provide TUN or host system-proxy changes. See the
+[Linux runtime guide](docs/Run_Linux.md) and [publication handoff](packaging/PUBLISHING.md).
 
 ## Dependencies
 

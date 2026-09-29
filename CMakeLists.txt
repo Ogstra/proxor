@@ -6,7 +6,7 @@ if (POLICY CMP0077)
     cmake_policy(SET CMP0077 NEW)
 endif ()
 
-project(proxor VERSION 1.6.4 LANGUAGES CXX)
+project(proxor VERSION 1.6.11 LANGUAGES CXX)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(PROXOR_SRC_DIR "${CMAKE_SOURCE_DIR}/src")
@@ -29,7 +29,9 @@ endif ()
 
 # Find Qt
 set(PROXOR_LOCAL_QT_DIR "${CMAKE_SOURCE_DIR}/qtsdk/Qt")
-if (EXISTS "${PROXOR_LOCAL_QT_DIR}/lib/cmake")
+# qtsdk/Qt is the Windows MSVC Qt SDK and must never be used on macOS, even when it
+# happens to exist on disk (e.g. a shared checkout also used for Windows builds).
+if (NOT APPLE AND EXISTS "${PROXOR_LOCAL_QT_DIR}/lib/cmake")
     list(PREPEND CMAKE_PREFIX_PATH "${PROXOR_LOCAL_QT_DIR}")
 endif ()
 
@@ -58,6 +60,8 @@ endif ()
 #### Platform Variables ####
 if (WIN32)
     include("cmake/windows/windows.cmake")
+elseif (APPLE)
+    include("cmake/macos/macos.cmake")
 else ()
     include("cmake/linux/linux.cmake")
 endif ()
@@ -142,6 +146,11 @@ else ()
     set(SQLITECPP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     set(SQLITECPP_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(SQLITECPP_RUN_CPPLINT OFF CACHE BOOL "" FORCE)
+    # Also off: SQLiteCpp auto-detects cppcheck and adds a target that lints the
+    # vendored dependency on every build. Useless here, and it hard-fails the build on
+    # machines whose cppcheck cannot locate its own std.cfg -- which is the case on the
+    # GitHub Windows runners (the Strawberry Perl build has a bogus FILESDIR).
+    set(SQLITECPP_RUN_CPPCHECK OFF CACHE BOOL "" FORCE)
     set(BUILD_SHARED_LIBS OFF)
     add_subdirectory(3rdparty/SQLiteCpp)
     list(APPEND NKR_EXTERNAL_TARGETS SQLiteCpp)
@@ -164,6 +173,8 @@ set(PROJECT_SOURCES
 
         src/main/main.cpp
         src/main/ProxorGui.cpp
+        src/main/PackageMode.cpp
+        src/main/PackagePolicy.cpp
         src/main/ProxorGui_Utils.cpp
         src/main/HTTPRequestHelper.cpp
 
@@ -348,6 +359,18 @@ if (WIN32)
         set_property(TARGET proxor APPEND_STRING PROPERTY LINK_FLAGS " /MANIFESTUAC:\"level='requireAdministrator' uiAccess='false'\"")
         set_property(TARGET ${PROXOR_GUI_TARGET} APPEND_STRING PROPERTY LINK_FLAGS " /MANIFESTUAC:\"level='requireAdministrator' uiAccess='false'\"")
     endif ()
+endif ()
+
+if (APPLE)
+    set_target_properties(${PROXOR_GUI_TARGET} PROPERTIES
+            MACOSX_BUNDLE TRUE
+            OUTPUT_NAME "Proxor"
+            MACOSX_BUNDLE_BUNDLE_NAME "Proxor"
+            MACOSX_BUNDLE_GUI_IDENTIFIER "io.github.Ogstra.Proxor"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "${NKR_VERSION}"
+            MACOSX_BUNDLE_BUNDLE_VERSION "${NKR_VERSION}"
+            MACOSX_BUNDLE_ICON_FILE "proxor.icns"
+    )
 endif ()
 
 # Target Link

@@ -31,10 +31,22 @@
 #include <QTimer>
 
 namespace {
+// On Windows the native style resolves light and dark from the OS setting itself, so the
+// System theme has no mode to choose and the row is greyed out there. Every other platform
+// reports that setting unreliably, so the mode stays selectable and Proxor applies the
+// palette it asks for.
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
+constexpr bool kSystemThemeFollowsOsMode = true;
+#else
+constexpr bool kSystemThemeFollowsOsMode = false;
+#endif
+
 int ThemeModeIndexForTheme(const QString &themeName) {
-    if (themeManager->NormalizeTheme(themeName) == QStringLiteral("System")) return 0;
+    // The suffix is read first: "System|Dark" carries a mode even though it normalizes to
+    // the System theme.
     if (themeName.endsWith(QStringLiteral("|Light"), Qt::CaseInsensitive)) return 1;
     if (themeName.endsWith(QStringLiteral("|Dark"), Qt::CaseInsensitive)) return 2;
+    if (themeManager->NormalizeTheme(themeName) == QStringLiteral("System")) return 0;
     if (themeName.endsWith(QStringLiteral("|System"), Qt::CaseInsensitive)) return 0;
     const auto normalized = themeManager->NormalizeTheme(themeName);
     if (normalized == QStringLiteral("FusionLight")) return 1;
@@ -63,6 +75,9 @@ QString ResolveThemeSelection(const QString &comboTheme, int modeIndex) {
         return QStringLiteral("Fusion");
     }
     if (comboTheme == QStringLiteral("System")) {
+        if (kSystemThemeFollowsOsMode) return QStringLiteral("System");
+        if (modeIndex == 1) return QStringLiteral("System|Light");
+        if (modeIndex == 2) return QStringLiteral("System|Dark");
         return QStringLiteral("System");
     }
     if (comboTheme == QStringLiteral("QDarkStyle") || comboTheme == QStringLiteral("FusionArcDark")) {
@@ -75,8 +90,10 @@ QString ResolveThemeSelection(const QString &comboTheme, int modeIndex) {
 
 void RefreshThemeModeOptions(QComboBox *themeCombo, QComboBox *modeCombo) {
     const auto themeKey = themeCombo->currentData().toString();
-    const bool systemModeOnly = themeKey.compare(QStringLiteral("System"), Qt::CaseInsensitive) == 0 ||
-                                themeKey.compare(QStringLiteral("Windows"), Qt::CaseInsensitive) == 0;
+    // These follow the OS setting only where the OS reports it to the native style.
+    const bool systemModeOnly = kSystemThemeFollowsOsMode &&
+                                (themeKey.compare(QStringLiteral("System"), Qt::CaseInsensitive) == 0 ||
+                                 themeKey.compare(QStringLiteral("Windows"), Qt::CaseInsensitive) == 0);
     const bool darkModeOnly = themeKey.compare(QStringLiteral("QDarkStyle"), Qt::CaseInsensitive) == 0 ||
                               themeKey.compare(QStringLiteral("FusionArcDark"), Qt::CaseInsensitive) == 0;
 
@@ -94,6 +111,16 @@ void RefreshThemeModeOptions(QComboBox *themeCombo, QComboBox *modeCombo) {
 }
 
 QString SettingsListStyleForTheme(const QString &themeName) {
+#ifdef Q_OS_MACOS
+    if (themeManager->NormalizeTheme(themeName) == QStringLiteral("System")) {
+        // Sidebar-like navigation that follows light/dark through palette roles.
+        return QStringLiteral(
+            "QListWidget{background:transparent;border:none;outline:0;}"
+            "QListWidget::item{padding:5px 12px;margin:1px 6px;border-radius:6px;}"
+            "QListWidget::item:selected{background:palette(highlight);color:palette(highlighted-text);}"
+        );
+    }
+#endif
     QString style = QStringLiteral("QListWidget::item{padding:4px 10px;}");
     if (themeManager->NormalizeTheme(themeName) != QStringLiteral("System")) {
         style += QStringLiteral(
@@ -360,6 +387,23 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     D_LOAD_BOOL(ua_include_hwid)
     D_LOAD_BOOL(ua_include_computer)
     D_LOAD_BOOL(ua_include_username)
+#ifdef Q_OS_MACOS
+    // On macOS X-Device-Model is always the hardware model identifier, so these two options
+    // have no effect there. Hidden rather than left lying; their stored values are kept.
+    ui->ua_include_computer->setVisible(false);
+    ui->ua_include_username->setVisible(false);
+#endif
+#ifdef Q_OS_MACOS
+    {
+        // Menu-bar icon: colored (status colors) or monochrome template glyph. macOS only; applied
+        // live through the UpdateDataStore message handled in MainWindow.
+        auto *trayColored = new QCheckBox(tr("Colored menu bar icon"), ui->tray_icon_box);
+        trayColored->setObjectName(QStringLiteral("tray_icon_colored"));
+        trayColored->setToolTip(tr("Off: a monochrome icon that follows the light/dark menu bar."));
+        trayColored->setChecked(ProxorGui::dataStore->tray_icon_colored);
+        ui->horizontalLayout_tray_icon->insertWidget(1, trayColored);
+    }
+#endif
     D_LOAD_BOOL(sub_use_proxy)
     D_LOAD_BOOL(sub_clear)
     D_LOAD_BOOL(sub_insecure)
@@ -482,6 +526,11 @@ void DialogBasicSettings::accept() {
     D_SAVE_BOOL(ua_include_hwid)
     D_SAVE_BOOL(ua_include_computer)
     D_SAVE_BOOL(ua_include_username)
+#ifdef Q_OS_MACOS
+    if (auto *trayColored = findChild<QCheckBox *>(QStringLiteral("tray_icon_colored"))) {
+        ProxorGui::dataStore->tray_icon_colored = trayColored->isChecked();
+    }
+#endif
     D_SAVE_BOOL(sub_use_proxy)
     D_SAVE_BOOL(sub_clear)
     D_SAVE_BOOL(sub_insecure)

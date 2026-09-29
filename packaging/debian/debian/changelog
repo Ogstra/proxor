@@ -1,0 +1,5 @@
+proxor (@VERSION@-1) unstable; urgency=medium
+
+  * Native Debian package built from the verified Proxor source archive.
+
+ -- Proxor maintainers <maintainers@ogstra.github.io>  @DATE@

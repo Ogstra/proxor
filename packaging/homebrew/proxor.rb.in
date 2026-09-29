@@ -1,0 +1,42 @@
+cask "proxor" do
+  version "@VERSION@"
+  sha256 "@SHA256@"
+
+  url "https://github.com/Ogstra/proxor/releases/download/v#{version}/proxor-#{version}-macos-arm64.zip"
+  name "Proxor"
+  desc "Proxy client with a Qt GUI, built on the sing-box core"
+  homepage "https://github.com/Ogstra/proxor"
+
+  # Tracks prereleases too: every Proxor release is currently a prerelease.
+  livecheck do
+    url :url
+    regex(/^v?(\d+(?:\.\d+)+)$/i)
+    strategy :github_releases do |json, regex|
+      json.filter_map do |release|
+        next if release["draft"]
+
+        match = release["tag_name"]&.match(regex)
+        match[1] if match
+      end
+    end
+  end
+
+  auto_updates false
+  depends_on arch: :arm64
+  depends_on macos: :sequoia
+
+  app "Proxor.app"
+
+  # Ad-hoc signed, not notarized: Homebrew quarantines the download, so clear the flag or
+  # Gatekeeper refuses to open it. (--no-quarantine no longer exists in Homebrew 7.)
+  postflight_steps do
+    run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{appdir}}/Proxor.app"]
+  end
+
+  uninstall quit: "io.github.Ogstra.Proxor"
+
+  zap trash: [
+    "~/Library/Preferences/io.github.Ogstra.Proxor.plist",
+    "~/Library/Preferences/proxor",
+  ]
+end
