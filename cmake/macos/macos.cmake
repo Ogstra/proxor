@@ -9,6 +9,12 @@ set(PLATFORM_SOURCES
     src/ui/mac/MacLookCommon.h
     src/ui/mac/MacDialogs.h
     src/ui/mac/MacDialogs.cpp
+    src/sys/macos/MacHelperPolicy.h
+    src/sys/macos/MacHelperPolicy.cpp
+    src/sys/macos/MacHelperClient.h
+    src/sys/macos/MacHelperClient.cpp
+    src/sys/macos/MacHelperInstaller.h
+    src/sys/macos/MacHelperInstaller.cpp
     assets/macos/proxor.icns
 )
 # App icon (Dock, Finder, Launchpad): copied into Contents/Resources and named in Info.plist.
