@@ -157,7 +157,10 @@ while True:
 fi
 
 # ---- STEP 5: system proxy ----------------------------------------------------------------------
-scutil --proxy >"$WORK/before"
+# Compared without `<Kind>Enable : 0` lines: a service that never had a proxy has no such key, and
+# networksetup can only set it to 0 (never delete it), so absent and 0 are the same state.
+norm_proxy() { scutil --proxy | grep -Ev '^[[:space:]]*[A-Za-z]*Enable[[:space:]]*:[[:space:]]*0[[:space:]]*$' || true; }
+norm_proxy >"$WORK/before"
 chmod 644 "$WORK/before"
 proxy_shown() {
   local t
@@ -166,7 +169,7 @@ proxy_shown() {
     grep -Eq "HTTPPort[[:space:]]*:[[:space:]]*$PROXY_PORT" <<<"$t" &&
     grep -Eq "SOCKSPort[[:space:]]*:[[:space:]]*$PROXY_PORT" <<<"$t"
 }
-proxy_restored() { [ "$(scutil --proxy)" = "$(cat "$WORK/before")" ]; }
+proxy_restored() { [ "$(norm_proxy)" = "$(cat "$WORK/before")" ]; }
 stop_holder() {
   pkill -f "$WORK/helper_client.py sysproxy-apply" 2>/dev/null || true
   if [ -n "$HOLD_PID" ]; then wait "$HOLD_PID" 2>/dev/null || true; fi
@@ -203,7 +206,7 @@ if [ "$APPLY_RC" = 4 ]; then
 else
   wait_until 10 proxy_shown || { scutil --proxy >&2; fail "scutil --proxy does not show 127.0.0.1:$PROXY_PORT after apply"; }
   as_runner "${CLIENT[@]}" sysproxy-restore || fail "sysproxy-restore failed"
-  wait_until 10 proxy_restored || { diff "$WORK/before" <(scutil --proxy) >&2 || true; fail "scutil --proxy differs from the pre-test state after restore"; }
+  wait_until 10 proxy_restored || { diff "$WORK/before" <(norm_proxy) >&2 || true; fail "scutil --proxy differs from the pre-test state after restore"; }
   stop_holder
 
   as_runner "${CLIENT[@]}" sysproxy-cycle --port "$PROXY_PORT" --before "$WORK/before" || fail "sysproxy-cycle failed"
@@ -223,7 +226,7 @@ else
   [ -n "$HELPER_PID" ] || fail "cannot find the helper pid"
   kill -9 "$HELPER_PID"
   stop_holder
-  wait_until 40 proxy_restored || { diff "$WORK/before" <(scutil --proxy) >&2 || true; fail "system proxy not restored after the helper was killed"; }
+  wait_until 40 proxy_restored || { diff "$WORK/before" <(norm_proxy) >&2 || true; fail "system proxy not restored after the helper was killed"; }
   wait_until 10 bash -c "[ -S '$SOCK' ]" || fail "helper did not come back after kill -9"
   as_runner "${CLIENT[@]}" hello >/dev/null || fail "restarted helper does not answer"
   step 5 "system proxy (apply, restore, stop-start cycle, lease close, kill -9 recovery)"

@@ -137,8 +137,14 @@ def wait_for(pred, timeout, step=0.25):
     return pred()
 
 
+def norm_proxy(text):
+    """Drop `<Kind>Enable : 0` lines: a service that never had a proxy has no such key, and
+    networksetup can only set it to 0 (never delete it), so absent and 0 are the same state."""
+    return "".join(l for l in text.splitlines(True) if not re.match(r"^\s*\w*Enable\s*:\s*0\s*$", l))
+
+
 def scutil_proxy():
-    return sh("scutil", "--proxy")
+    return norm_proxy(sh("scutil", "--proxy"))
 
 
 def shows_proxy(text, port):
@@ -247,7 +253,7 @@ def cmd_sysproxy_restore(_args):
 
 def cmd_sysproxy_cycle(args):
     """The GUI's profile Stop -> Start on ONE connection (lease): apply, restore, apply, restore."""
-    before = open(args.before, encoding="utf-8").read()
+    before = norm_proxy(open(args.before, encoding="utf-8").read())
     c, _ = connect_and_hello()
 
     def fail(what):
