@@ -320,7 +320,9 @@ void reloadWidgetStyleState(bool repolish, bool fusionMetrics) {
 
 QList<ThemeManager::ThemeOption> ThemeManager::AvailableThemes() const {
     QList<ThemeOption> themes;
+#ifndef Q_OS_MACOS
     themes.append({QStringLiteral("System"), QStringLiteral("System")});
+#endif
 
     const auto sysName = system_style_name.toLower();
     for (const auto &key : QStyleFactory::keys()) {
@@ -348,7 +350,7 @@ QList<ThemeManager::ThemeOption> ThemeManager::AvailableThemes() const {
     return themes;
 }
 
-QString ThemeManager::NormalizeTheme(const QString &theme) const {
+static QString normalizeThemeBase(const QString &theme) {
     auto normalizedTheme = theme.trimmed();
     extractThemeMode(&normalizedTheme);
     if (normalizedTheme.isEmpty()) {
@@ -382,7 +384,7 @@ QString ThemeManager::NormalizeTheme(const QString &theme) const {
     }
 
 #ifdef Q_OS_MACOS
-    // A stored Windows Classic theme lands on System (the native macOS look).
+    // A stored Windows Classic theme lands on the default theme.
     if (lowerTheme == QStringLiteral("windows")) {
         return QStringLiteral("System");
     }
@@ -396,6 +398,16 @@ QString ThemeManager::NormalizeTheme(const QString &theme) const {
     }
 
     return QStringLiteral("System");
+}
+
+QString ThemeManager::NormalizeTheme(const QString &theme) const {
+    const auto normalized = normalizeThemeBase(theme);
+#ifdef Q_OS_MACOS
+    // The System (native macOS) theme is not ready yet: it is hidden on macOS and every
+    // stored or default System theme runs as Fusion, which follows the OS light/dark mode.
+    if (normalized == QStringLiteral("System")) return QStringLiteral("Fusion");
+#endif
+    return normalized;
 }
 
 void ThemeManager::ApplyTheme(const QString &theme, bool force) {
@@ -496,7 +508,16 @@ void ThemeManager::ApplyTheme(const QString &theme, bool force) {
     if (!color_scheme_connected) {
         color_scheme_connected = true;
         QObject::connect(qApp->styleHints(), &QStyleHints::colorSchemeChanged, this, [this](Qt::ColorScheme) {
-            if (applying || NormalizeTheme(current_theme) != QStringLiteral("System")) return;
+            if (applying) return;
+            // Fusion without an explicit Light/Dark mode resolves its palette from the OS
+            // setting at apply time, so it has to be re-applied when the OS flips too.
+            auto themeName = current_theme.trimmed();
+            const auto mode = extractThemeMode(&themeName);
+            const auto normalized = NormalizeTheme(themeName);
+            const bool followsOs = normalized == QStringLiteral("System") ||
+                                   (normalized == QStringLiteral("Fusion") &&
+                                    (mode.isEmpty() || mode == QStringLiteral("system")));
+            if (!followsOs) return;
             QTimer::singleShot(0, this, [this] { ApplyTheme(current_theme, true); });
         });
     }
