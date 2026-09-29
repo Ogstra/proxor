@@ -46,14 +46,25 @@ service. macOS releases are prereleases, so expect rough edges and report them.
   it installs is a root-owned copy of `proxor_core` checked against its SHA-256, so the running
   service never executes anything user-writable, but only approve the prompt for a Proxor.app you
   installed yourself (Homebrew or the release zip).
-- **System Proxy follows the connection.** Stopping the profile (Stop, or the toolbar button) puts
-  your previous proxy settings back while System Proxy stays on, and starting a profile points the
-  Mac at Proxor again. Restart Proxy and switching profiles do not touch the settings. Quitting
-  Proxor restores them.
-- **Tun at launch.** If Tun cannot start at launch while it is remembered, Proxor does not connect
-  until Tun works or you turn Tun Mode off ("Tun could not start: ... Turn off Tun Mode to connect
-  without it."). If the service is missing (for example after an upgrade), Proxor connects without
-  Tun and says so; it never asks for a password at launch.
+- **Defaults.** Like on Windows, Tun Mode is on by default on macOS and System Proxy is off. This
+  applies to new configurations only: an existing configuration keeps the modes it remembers (it
+  is not migrated), and turning Tun Mode on once makes it remembered from then on. Neither an
+  error, a stopped service nor a declined install ever turns Tun Mode off for you; only your own
+  switch (or Remove) does.
+- **Tun and System Proxy follow the connection.** Stopping the profile (Stop, or the toolbar
+  button) pauses both: Tun stops routing and your previous proxy settings come back, while both
+  switches stay on. Starting a profile resumes them. Restart Proxy and switching profiles do not
+  touch them, and a quick Stop then Start does nothing in between. The switches respond
+  immediately (the service works in the background). Quitting Proxor restores your proxy settings.
+- **Tun at launch.** When Tun (or System Proxy) is remembered and the service is missing, outdated
+  or does not accept this user yet, which is the case on the first launch and after every
+  `brew upgrade` (Homebrew removes the service), Proxor connects without Tun right away and then
+  asks once to install the service (one administrator password prompt). If you press Cancel, or
+  the install fails, it stays connected without Tun and says so; Tun can be turned on later from
+  the toolbar or from Settings > Tun settings. It asks at most once per launch, and asks again at
+  the next launch. If the service IS installed but Tun cannot start at launch while it is
+  remembered, Proxor does not connect until Tun works or you turn Tun Mode off ("Tun could not
+  start: ... Turn off Tun Mode to connect without it.").
 - **Homebrew.** `brew uninstall --cask proxor` removes the service, and so does
   `brew upgrade --cask proxor` (Homebrew runs the old version's uninstall steps on upgrade). Both
   ask for your administrator password in the terminal, even if you never used Tun; this is an
