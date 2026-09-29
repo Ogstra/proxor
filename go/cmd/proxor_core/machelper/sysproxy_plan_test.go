@@ -226,9 +226,6 @@ func TestApplyPlan(t *testing.T) {
 		{"-setwebproxy", "Wi-Fi", "127.0.0.1", "2080"},
 		{"-setsecurewebproxy", "Wi-Fi", "127.0.0.1", "2080"},
 		{"-setsocksfirewallproxy", "Wi-Fi", "127.0.0.1", "2080"},
-		{"-setwebproxystate", "Wi-Fi", "on"},
-		{"-setsecurewebproxystate", "Wi-Fi", "on"},
-		{"-setsocksfirewallproxystate", "Wi-Fi", "on"},
 		{"-setproxybypassdomains", "Wi-Fi", "127.0.0.1", "localhost", "*.local"},
 		{"-setautoproxystate", "Wi-Fi", "off"},
 		{"-setproxyautodiscovery", "Wi-Fi", "off"},
@@ -236,9 +233,6 @@ func TestApplyPlan(t *testing.T) {
 		{"-setwebproxy", "USB 10/100/1000 LAN", "127.0.0.1", "2080"},
 		{"-setsecurewebproxy", "USB 10/100/1000 LAN", "127.0.0.1", "2080"},
 		{"-setsocksfirewallproxy", "USB 10/100/1000 LAN", "127.0.0.1", "2080"},
-		{"-setwebproxystate", "USB 10/100/1000 LAN", "on"},
-		{"-setsecurewebproxystate", "USB 10/100/1000 LAN", "on"},
-		{"-setsocksfirewallproxystate", "USB 10/100/1000 LAN", "on"},
 		{"-setproxybypassdomains", "USB 10/100/1000 LAN", "127.0.0.1", "localhost", "*.local"},
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -254,8 +248,10 @@ func TestApplyPlanPerServiceIsSingleServiceArgv(t *testing.T) {
 	}
 }
 
+var testAppliedBypass = []string{"127.0.0.1", "localhost", "*.local"}
+
 func TestRestorePlan(t *testing.T) {
-	got := RestorePlan(testSnapshot())
+	got := RestorePlan(testSnapshot(), testAppliedBypass)
 	want := [][]string{
 		// Wi-Fi: web had no server recorded -> only the state; secure had one -> server+port then state
 		{"-setwebproxystate", "Wi-Fi", "off"},
@@ -266,13 +262,12 @@ func TestRestorePlan(t *testing.T) {
 		{"-setautoproxyurl", "Wi-Fi", "http://wpad.example/proxy.pac"},
 		{"-setautoproxystate", "Wi-Fi", "on"},
 		{"-setproxyautodiscovery", "Wi-Fi", "on"},
-		// USB: everything empty/off, bypass list recorded empty -> Empty keyword
+		// USB: everything off, PAC/WPAD were off so Apply never touched them,
+		// bypass list recorded empty -> Empty keyword
 		{"-setwebproxystate", "USB 10/100/1000 LAN", "off"},
 		{"-setsecurewebproxystate", "USB 10/100/1000 LAN", "off"},
 		{"-setsocksfirewallproxystate", "USB 10/100/1000 LAN", "off"},
 		{"-setproxybypassdomains", "USB 10/100/1000 LAN", "Empty"},
-		{"-setautoproxystate", "USB 10/100/1000 LAN", "off"},
-		{"-setproxyautodiscovery", "USB 10/100/1000 LAN", "off"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("RestorePlan mismatch\n got: %q\nwant: %q", got, want)
@@ -281,7 +276,7 @@ func TestRestorePlan(t *testing.T) {
 
 func TestRestorePlanEmptyBypassUsesEmptyKeyword(t *testing.T) {
 	found := false
-	for _, argv := range RestorePlan(Snapshot{Services: []ServiceSnapshot{{Name: "X"}}}) {
+	for _, argv := range RestorePlan(Snapshot{Services: []ServiceSnapshot{{Name: "X"}}}, testAppliedBypass) {
 		if argv[0] == "-setproxybypassdomains" {
 			found = true
 			if !reflect.DeepEqual(argv, []string{"-setproxybypassdomains", "X", "Empty"}) {
@@ -291,6 +286,91 @@ func TestRestorePlanEmptyBypassUsesEmptyKeyword(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("no bypass restore emitted")
+	}
+}
+
+func planHas(plan [][]string, cmd string) bool {
+	for _, a := range plan {
+		if a[0] == cmd {
+			return true
+		}
+	}
+	return false
+}
+
+func TestApplyPlanNoRedundantStateOn(t *testing.T) {
+	for _, argv := range ApplyPlan(testSnapshot(), 2080, DefaultBypass()) {
+		switch argv[0] {
+		case "-setwebproxystate", "-setsecurewebproxystate", "-setsocksfirewallproxystate":
+			t.Fatalf("redundant state write %q (the set* commands already turn the proxy on)", argv)
+		}
+	}
+	plan := ApplyPlan(Snapshot{Services: []ServiceSnapshot{{Name: "P", AutoURLEnabled: true, AutoDiscovery: true}}}, 1, DefaultBypass())
+	if !planHas(plan, "-setproxybypassdomains") || !planHas(plan, "-setautoproxystate") || !planHas(plan, "-setproxyautodiscovery") {
+		t.Fatalf("bypass and PAC/WPAD-off entries must stay: %q", plan)
+	}
+}
+
+func TestRestorePlanSkipsUntouched(t *testing.T) {
+	applied := DefaultBypass()
+
+	// everything off, recorded bypass equal to the applied one
+	off := RestorePlan(Snapshot{AppliedBypass: applied, Services: []ServiceSnapshot{{Name: "S", Bypass: DefaultBypass()}}}, applied)
+	for _, c := range []string{"-setautoproxyurl", "-setautoproxystate", "-setproxyautodiscovery", "-setproxybypassdomains"} {
+		if planHas(off, c) {
+			t.Fatalf("%s must be skipped for an untouched service: %q", c, off)
+		}
+	}
+	if len(off) != 3 {
+		t.Fatalf("all-off service = %d writes, want 3 (the state triple): %q", len(off), off)
+	}
+
+	// recorded servers add up to 3 set writes on top of the states
+	srv := ServiceSnapshot{Name: "S", Web: ProxyState{Server: "1.1.1.1", Port: 1}, Secure: ProxyState{Server: "1.1.1.1", Port: 1}, Socks: ProxyState{Server: "1.1.1.1", Port: 1}, Bypass: []string{"a"}}
+	if got := RestorePlan(Snapshot{Services: []ServiceSnapshot{srv}}, applied); len(got) != 7 {
+		t.Fatalf("all-off + servers + differing bypass = %d writes, want 7: %q", len(got), got)
+	}
+
+	// PAC on: URL then state on
+	pac := RestorePlan(Snapshot{Services: []ServiceSnapshot{{Name: "S", AutoURL: "http://p/x.pac", AutoURLEnabled: true, Bypass: applied}}}, applied)
+	if !reflect.DeepEqual(pac[len(pac)-2:], [][]string{{"-setautoproxyurl", "S", "http://p/x.pac"}, {"-setautoproxystate", "S", "on"}}) {
+		t.Fatalf("PAC restore = %q", pac)
+	}
+	if planHas(pac, "-setproxyautodiscovery") {
+		t.Fatalf("WPAD was off: %q", pac)
+	}
+
+	// PAC configured but disabled: Apply never turned it off, so nothing to write
+	if got := RestorePlan(Snapshot{Services: []ServiceSnapshot{{Name: "S", AutoURL: "http://p/x.pac", Bypass: applied}}}, applied); planHas(got, "-setautoproxyurl") || planHas(got, "-setautoproxystate") {
+		t.Fatalf("disabled PAC must not be written: %q", got)
+	}
+
+	// WPAD on (the owner's Wi-Fi)
+	wpad := RestorePlan(Snapshot{Services: []ServiceSnapshot{{Name: "S", AutoDiscovery: true, Bypass: applied}}}, applied)
+	if !reflect.DeepEqual(wpad[len(wpad)-1], []string{"-setproxyautodiscovery", "S", "on"}) || planHas(wpad, "-setautoproxystate") {
+		t.Fatalf("WPAD restore = %q", wpad)
+	}
+}
+
+func TestRestorePlanBypassNilVersusEmpty(t *testing.T) {
+	svc := ServiceSnapshot{Name: "S", Bypass: []string{}}
+	// old snapshot without the applied list (nil): restore bypass unconditionally, also when empty
+	if got := RestorePlan(Snapshot{Services: []ServiceSnapshot{svc}}, nil); !planHas(got, "-setproxybypassdomains") {
+		t.Fatalf("nil applied bypass must always write the bypass: %q", got)
+	}
+	svc.Bypass = DefaultBypass()
+	if got := RestorePlan(Snapshot{Services: []ServiceSnapshot{svc}}, nil); !planHas(got, "-setproxybypassdomains") {
+		t.Fatalf("nil applied bypass must always write the bypass: %q", got)
+	}
+	// non-nil applied list equal to the recorded one: skipped
+	if got := RestorePlan(Snapshot{Services: []ServiceSnapshot{svc}}, DefaultBypass()); planHas(got, "-setproxybypassdomains") {
+		t.Fatalf("equal lists must skip the write: %q", got)
+	}
+	// order-sensitive compare
+	rev := append([]string(nil), DefaultBypass()...)
+	rev[0], rev[1] = rev[1], rev[0]
+	if got := RestorePlan(Snapshot{Services: []ServiceSnapshot{svc}}, rev); !planHas(got, "-setproxybypassdomains") {
+		t.Fatalf("a different order must write: %q", got)
 	}
 }
 

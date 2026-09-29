@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // simSvc is one simulated network service, mirroring what networksetup keeps.
@@ -40,6 +41,49 @@ type simNet struct {
 	onSet    func(args []string) // runs before the first -set* call takes effect
 	setSeen  bool
 	fail     func(args []string) *simFailure
+
+	// concurrency instrumentation (all guarded by mu)
+	delay       time.Duration         // slept per Run, outside the state lock
+	inflight    int                   // Run calls currently executing
+	maxInflight int                   // high-water mark of inflight
+	svcInflight map[string]int        // per-service Run calls currently executing
+	overlap     []string              // services that saw two overlapping Run calls
+	writes      map[string][][]string // per-service -set* argv, in start order
+}
+
+// resetLog clears the call and write logs and the concurrency counters.
+func (n *simNet) resetLog() {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.calls = nil
+	n.writes = map[string][][]string{}
+	n.overlap = nil
+	n.maxInflight = 0
+}
+
+// failFirstWrite makes the first -set* call for service fail once.
+func (n *simNet) failFirstWrite(service string, f simFailure) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	done := false
+	n.fail = func(args []string) *simFailure {
+		if !done && strings.HasPrefix(args[0], "-set") && len(args) > 1 && args[1] == service {
+			done = true
+			return &f
+		}
+		return nil
+	}
+}
+
+func newSimNet4() *simNet {
+	n := newSimNet()
+	n.add("Thunderbolt Bridge", "bridge0", &simSvc{bypass: []string{"foo.example"}})
+	n.add("iPhone USB", "en7", &simSvc{
+		web:            ProxyState{Enabled: true, Server: "9.9.9.9", Port: 8080},
+		autoURL:        "http://pac.example/x.pac",
+		autoURLEnabled: true,
+	})
+	return n
 }
 
 func newSimNet() *simNet {
@@ -100,8 +144,49 @@ func (n *simNet) touched(service string) bool {
 }
 
 func (n *simNet) Run(args ...string) (string, error) {
+	svc := ""
+	if len(args) > 1 {
+		svc = args[1]
+	}
 	n.mu.Lock()
-	defer n.mu.Unlock()
+	n.inflight++
+	if n.inflight > n.maxInflight {
+		n.maxInflight = n.inflight
+	}
+	if n.svcInflight == nil {
+		n.svcInflight = map[string]int{}
+	}
+	if len(args) > 1 {
+		if n.svcInflight[svc]++; n.svcInflight[svc] > 1 {
+			n.overlap = append(n.overlap, svc)
+		}
+		if strings.HasPrefix(args[0], "-set") {
+			if n.writes == nil {
+				n.writes = map[string][][]string{}
+			}
+			n.writes[svc] = append(n.writes[svc], append([]string(nil), args...))
+		}
+	}
+	delay := n.delay
+	n.mu.Unlock()
+
+	if delay > 0 {
+		time.Sleep(delay) // a slow networksetup process; the state lock is NOT held
+	}
+
+	n.mu.Lock()
+	defer func() {
+		n.inflight--
+		if len(args) > 1 {
+			n.svcInflight[svc]--
+		}
+		n.mu.Unlock()
+	}()
+	return n.exec(args)
+}
+
+// exec runs one command against the simulated state; n.mu is held.
+func (n *simNet) exec(args []string) (string, error) {
 	n.calls = append(n.calls, append([]string(nil), args...))
 	if len(args) == 0 {
 		return "", errors.New("no args")
@@ -696,5 +781,261 @@ func TestSnapshotStoreSaveFailsWhenDirMissing(t *testing.T) {
 	}
 	if n.countPrefix("-set") != 0 {
 		t.Fatal("no writes without a persisted snapshot")
+	}
+}
+
+// ---- gap 1 (uat-round-1): concurrent per-service work, minimal restore ----
+
+func TestApplyRestoreRoundTrip(t *testing.T) {
+	proxy := func(en bool) ProxyState { return ProxyState{Enabled: en, Server: "4.4.4.4", Port: 8080} }
+	cases := []struct {
+		name   string
+		svc    simSvc
+		bypass []string // Apply argument; nil = default list
+	}{
+		{"all off", simSvc{}, nil},
+		{"pac on", simSvc{autoURL: "http://p/x.pac", autoURLEnabled: true}, nil},
+		{"pac configured but off", simSvc{autoURL: "http://p/x.pac"}, nil},
+		{"wpad on", simSvc{discovery: true}, nil},
+		{"recorded servers disabled", simSvc{web: proxy(false), secure: proxy(false), socks: proxy(false)}, nil},
+		{"recorded servers enabled", simSvc{web: proxy(true), secure: proxy(true), socks: proxy(true)}, nil},
+		{"custom bypass", simSvc{bypass: []string{"*.corp", "10.1.0.0/16"}}, []string{"127.0.0.1", "localhost"}},
+		{"bypass equal to default", simSvc{bypass: DefaultBypass()}, nil},
+	}
+	for _, c := range cases {
+		for _, recover := range []bool{false, true} {
+			name := c.name + "/restore"
+			if recover {
+				name = c.name + "/recover"
+			}
+			t.Run(name, func(t *testing.T) {
+				n := &simNet{svcs: map[string]*simSvc{}, disabled: map[string]bool{}}
+				svc := c.svc
+				n.add("Only", "en0", &svc)
+				orig := n.clone()
+				m, store := newManager(t, n)
+				if _, _, err := m.Apply(2080, c.bypass); err != nil {
+					t.Fatal(err)
+				}
+				if n.svcs["Only"].web != (ProxyState{Enabled: true, Server: "127.0.0.1", Port: 2080}) {
+					t.Fatalf("not applied: %+v", n.svcs["Only"])
+				}
+				if recover {
+					m = &ProxyManager{Cmd: n, Store: store}
+					if err := m.RecoverAtStart(); err != nil {
+						t.Fatal(err)
+					}
+				} else if err := m.Restore(); err != nil {
+					t.Fatal(err)
+				}
+				assertRestored(t, orig, n.clone())
+			})
+		}
+	}
+}
+
+func TestApplyPersistsAppliedBypassBeforeWrite(t *testing.T) {
+	n := newSimNet()
+	m, store := newManager(t, n)
+	var seen *Snapshot
+	n.onSet = func([]string) { seen, _ = store.Load() }
+	if _, _, err := m.Apply(2080, []string{"127.0.0.1", "a.example"}); err != nil {
+		t.Fatal(err)
+	}
+	if seen == nil || !reflect.DeepEqual(seen.AppliedBypass, []string{"127.0.0.1", "a.example"}) {
+		t.Fatalf("applied bypass not persisted before the first write: %+v", seen)
+	}
+	// re-apply while applied with another list: the disk copy must hold it before the first write
+	seen = nil
+	n.setSeen = false
+	if _, _, err := m.Apply(2080, []string{"127.0.0.1", "b.example"}); err != nil {
+		t.Fatal(err)
+	}
+	if seen == nil || !reflect.DeepEqual(seen.AppliedBypass, []string{"127.0.0.1", "b.example"}) {
+		t.Fatalf("re-apply must update the applied bypass before writing: %+v", seen)
+	}
+}
+
+func TestRestoreSkipsNoopWrites(t *testing.T) {
+	n := newSimNet4()
+	m, _ := newManager(t, n)
+	if _, _, err := m.Apply(2080, nil); err != nil {
+		t.Fatal(err)
+	}
+	n.resetLog()
+	if err := m.Restore(); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(n.writes["USB 10/100/1000 LAN"]); got > 4 {
+		t.Fatalf("all-off service restored with %d writes: %q", got, n.writes["USB 10/100/1000 LAN"])
+	}
+	for _, w := range n.writes["USB 10/100/1000 LAN"] {
+		switch w[0] {
+		case "-setautoproxyurl", "-setautoproxystate", "-setproxyautodiscovery":
+			t.Fatalf("untouched PAC/WPAD written back: %q", w)
+		}
+	}
+}
+
+func TestApplyConcurrentAcrossServices(t *testing.T) {
+	const delay = 20 * time.Millisecond
+	n := newSimNet4()
+	n.delay = delay
+	m, _ := newManager(t, n)
+	start := time.Now()
+	applied, failed, err := m.Apply(2080, []string{"127.0.0.1", "localhost"})
+	elapsed := time.Since(start)
+	if err != nil || len(failed) != 0 {
+		t.Fatalf("applied=%v failed=%v err=%v", applied, failed, err)
+	}
+	want := []string{"Wi-Fi", "USB 10/100/1000 LAN", "Thunderbolt Bridge", "iPhone USB"}
+	if !reflect.DeepEqual(applied, want) {
+		t.Fatalf("applied = %v, want service order %v", applied, want)
+	}
+	seq := time.Duration(len(n.calls)) * delay
+	if elapsed >= seq*6/10 {
+		t.Fatalf("Apply took %v for %d calls (sequential would be %v): not concurrent", elapsed, len(n.calls), seq)
+	}
+	if n.maxInflight < 2 {
+		t.Fatalf("max concurrent Run = %d, want > 1", n.maxInflight)
+	}
+	for _, name := range want {
+		s := n.svcs[name]
+		p := ProxyState{Enabled: true, Server: "127.0.0.1", Port: 2080}
+		if s.web != p || s.secure != p || s.socks != p || !reflect.DeepEqual(s.bypass, []string{"127.0.0.1", "localhost"}) || s.autoURLEnabled || s.discovery {
+			t.Errorf("%s final state = %+v", name, *s)
+		}
+	}
+	if len(n.overlap) != 0 {
+		t.Fatalf("writes of one service overlapped: %v", n.overlap)
+	}
+}
+
+func TestPerServiceOrderPreserved(t *testing.T) {
+	n := newSimNet4()
+	n.delay = 3 * time.Millisecond
+	m, store := newManager(t, n)
+	bypass := []string{"127.0.0.1", "localhost"}
+	n.resetLog()
+	if _, _, err := m.Apply(2080, bypass); err != nil {
+		t.Fatal(err)
+	}
+	snap, err := store.Load()
+	if err != nil || snap == nil {
+		t.Fatalf("load: %v %v", snap, err)
+	}
+	for _, svc := range snap.Services {
+		want := ApplyPlan(Snapshot{Services: []ServiceSnapshot{svc}}, 2080, bypass)
+		if got := n.writes[svc.Name]; !reflect.DeepEqual(got, want) {
+			t.Errorf("%s apply order\n got: %q\nwant: %q", svc.Name, got, want)
+		}
+	}
+	if len(n.overlap) != 0 {
+		t.Fatalf("writes of one service overlapped in time: %v", n.overlap)
+	}
+	n.resetLog()
+	if err := m.Restore(); err != nil {
+		t.Fatal(err)
+	}
+	for _, svc := range snap.Services {
+		want := RestorePlan(Snapshot{Services: []ServiceSnapshot{svc}}, snap.AppliedBypass)
+		if got := n.writes[svc.Name]; !reflect.DeepEqual(got, want) {
+			t.Errorf("%s restore order\n got: %q\nwant: %q", svc.Name, got, want)
+		}
+	}
+	if len(n.overlap) != 0 {
+		t.Fatalf("restore writes of one service overlapped in time: %v", n.overlap)
+	}
+}
+
+func TestRestoreConcurrentAcrossServices(t *testing.T) {
+	const delay = 20 * time.Millisecond
+	for _, recover := range []bool{false, true} {
+		name := "restore"
+		if recover {
+			name = "recover"
+		}
+		t.Run(name, func(t *testing.T) {
+			n := newSimNet4()
+			orig := n.clone()
+			m, store := newManager(t, n)
+			if _, _, err := m.Apply(2080, nil); err != nil {
+				t.Fatal(err)
+			}
+			n.resetLog()
+			n.delay = delay
+			start := time.Now()
+			var err error
+			if recover {
+				err = (&ProxyManager{Cmd: n, Store: store}).RecoverAtStart()
+			} else {
+				err = m.Restore()
+			}
+			elapsed := time.Since(start)
+			if err != nil {
+				t.Fatal(err)
+			}
+			seq := time.Duration(len(n.calls)) * delay
+			if elapsed >= seq*6/10 {
+				t.Fatalf("took %v for %d calls (sequential would be %v): not concurrent", elapsed, len(n.calls), seq)
+			}
+			if n.maxInflight < 2 {
+				t.Fatalf("max concurrent Run = %d, want > 1", n.maxInflight)
+			}
+			if len(n.overlap) != 0 {
+				t.Fatalf("writes of one service overlapped: %v", n.overlap)
+			}
+			assertRestored(t, orig, n.clone())
+		})
+	}
+}
+
+func TestConcurrentWriteFailureRetriedSequentially(t *testing.T) {
+	n := newSimNet4()
+	n.failFirstWrite("Thunderbolt Bridge", simFailure{out: "** Error: preferences locked\n", err: errors.New("exit status 1")})
+	m, _ := newManager(t, n)
+	applied, failed, err := m.Apply(2080, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(failed) != 0 || !reflect.DeepEqual(applied, []string{"Wi-Fi", "USB 10/100/1000 LAN", "Thunderbolt Bridge", "iPhone USB"}) {
+		t.Fatalf("a transient failure must be retried: applied=%v failed=%v", applied, failed)
+	}
+	if got := n.svcs["Thunderbolt Bridge"].web; got != (ProxyState{Enabled: true, Server: "127.0.0.1", Port: 2080}) {
+		t.Fatalf("retried service not applied: %+v", got)
+	}
+
+	// failing twice: reported, with its error, and the others stay applied
+	n2 := newSimNet4()
+	n2.fail = func(args []string) *simFailure {
+		if len(args) > 1 && args[0] == "-setsecurewebproxy" && args[1] == "iPhone USB" {
+			return &simFailure{out: "** Error: preferences locked\n", err: errors.New("exit status 1")}
+		}
+		return nil
+	}
+	m2, _ := newManager(t, n2)
+	applied, failed, err = m2.Apply(2080, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(applied) != 3 || len(failed) != 1 || !strings.HasPrefix(failed[0], "iPhone USB: ") || !strings.Contains(failed[0], "preferences locked") {
+		t.Fatalf("applied=%v failed=%q", applied, failed)
+	}
+}
+
+func TestRestoreFailureRetriedSequentially(t *testing.T) {
+	n := newSimNet4()
+	orig := n.clone()
+	m, _ := newManager(t, n)
+	if _, _, err := m.Apply(2080, nil); err != nil {
+		t.Fatal(err)
+	}
+	n.failFirstWrite("iPhone USB", simFailure{out: "** Error: preferences locked\n", err: errors.New("exit status 1")})
+	if err := m.Restore(); err != nil {
+		t.Fatalf("a transient restore failure must be retried: %v", err)
+	}
+	assertRestored(t, orig, n.clone())
+	if m.Applied() {
+		t.Fatal("fully restored")
 	}
 }
