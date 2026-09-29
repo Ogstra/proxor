@@ -11,7 +11,7 @@ url="https://github.com/Ogstra/proxor/releases/download/v1.2.3/proxor-1.2.3.tar.
 mkdir -p "$tmp/in/release-assets-arch"
 printf 'source=("proxor-1.2.3.tar.gz::%s")\nsha256sums=(%s)\n' "$url" "$sha" > "$tmp/in/release-assets-arch/PKGBUILD"
 printf '\tsource = proxor-1.2.3.tar.gz::%s\n\tsha256sums = %s\n' "$url" "$sha" > "$tmp/in/release-assets-arch/.SRCINFO"
-for asset in proxor-1.2.3-windows64.zip proxor-1.2.3-winget-x64.zip proxor-1.2.3-symbols.zip proxor-1.2.3.AppImage \
+for asset in proxor-1.2.3-windows64.zip proxor-1.2.3-winget-x64.zip proxor-1.2.3-macos-arm64.zip proxor-1.2.3-symbols.zip proxor-1.2.3.AppImage \
   proxor-1.2.3.deb proxor-1.2.3.rpm proxor-1.2.3.flatpak; do
   mkdir -p "$tmp/in/$asset.d"; printf '%s' "$asset" > "$tmp/in/$asset.d/$asset"
 done
@@ -39,7 +39,17 @@ test -f "$tmp/final/recipes/winget-manifests/Ogstra.Proxor.yaml"
 test ! -e "$tmp/final/aur"
 test ! -e "$tmp/final/winget-manifests"
 grep -q 'proxor-1.2.3.flatpak' "$tmp/final/SHA256SUMS"
+test -f "$tmp/final/proxor-1.2.3-macos-arm64.zip"
+grep -q 'proxor-1.2.3-macos-arm64.zip' "$tmp/final/SHA256SUMS"
 ! grep -q recipes "$tmp/final/SHA256SUMS"
+
+# A release without the macOS zip would leave the Homebrew cask pointing at nothing.
+mv "$tmp/in/proxor-1.2.3-macos-arm64.zip.d" "$tmp/macos-aside"
+if err="$("$script" prepare-final-assets --input "$tmp/in" --version 1.2.3 --output "$tmp/final-no-macos" --public-source-url "$url" 2>&1)"; then
+  echo 'a release without the macOS zip must be refused' >&2; exit 1
+fi
+grep -qF 'missing *-macos-arm64.zip' <<<"$err"
+mv "$tmp/macos-aside" "$tmp/in/proxor-1.2.3-macos-arm64.zip.d"
 
 # Two release assets with the same name would silently overwrite each other.
 mkdir -p "$tmp/in/duplicate"; printf y > "$tmp/in/duplicate/proxor-1.2.3.deb"
