@@ -307,3 +307,20 @@ func TestValidatedOptionsCreate(t *testing.T) {
 		t.Fatalf("normalized options do not create: %v", err)
 	}
 }
+
+// The config the root CI integration (test/macos-helper/ci-integration.sh) sends: it must pass
+// the same validator the helper runs, so a validator change cannot silently break that job.
+func TestValidateCITunConfig(t *testing.T) {
+	raw, err := os.ReadFile("../../../../test/macos-helper/tun-test-config.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := strings.ReplaceAll(string(raw), "%PORT%", "21080")
+	_, opts, err := ValidateTunConfig([]byte(cfg), 21080)
+	if err != nil {
+		t.Fatalf("CI tun config rejected: %v", err)
+	}
+	if got := tunOf(t, opts).RouteAddress; len(got) != 1 {
+		t.Fatalf("route_address = %v, want exactly the TEST-NET-2 route", got)
+	}
+}

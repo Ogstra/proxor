@@ -1,0 +1,20 @@
+{
+  "log": {"level": "info"},
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "address": ["172.19.0.1/30"],
+      "mtu": 1500,
+      "auto_route": true,
+      "strict_route": false,
+      "stack": "system",
+      "route_address": ["198.51.100.0/24"]
+    }
+  ],
+  "outbounds": [
+    {"type": "socks", "tag": "proxor-socks", "server": "127.0.0.1", "server_port": %PORT%},
+    {"type": "direct", "tag": "direct"}
+  ],
+  "route": {"final": "proxor-socks", "auto_detect_interface": true}
+}
