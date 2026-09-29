@@ -270,6 +270,13 @@ func (c *testClient) send(line string) {
 	}
 }
 
+// sendIgnoringClose is for peers the server rejects: it may close the connection
+// before this write lands, which is the behaviour under test, not a failure.
+func (c *testClient) sendIgnoringClose(line string) {
+	c.c.SetWriteDeadline(time.Now().Add(2 * time.Second))
+	_, _ = io.WriteString(c.c, line+"\n")
+}
+
 func (c *testClient) recv() map[string]any {
 	c.t.Helper()
 	c.c.SetReadDeadline(time.Now().Add(2 * time.Second))
@@ -317,7 +324,7 @@ func TestServerRejectsUnknownPeer(t *testing.T) {
 	h.nextID.Store(777)
 	c := h.dial()
 	// The server must not read or answer anything for a foreign uid.
-	c.send(`{"id":1,"cmd":"hello","protocol":1}`)
+	c.sendIgnoringClose(`{"id":1,"cmd":"hello","protocol":1}`)
 	c.expectClosed()
 	if got := h.log.snapshot(); len(got) != 0 {
 		t.Fatalf("no fake may be touched, got %v", got)
@@ -329,7 +336,7 @@ func TestServerRejectsPeerUIDError(t *testing.T) {
 		h.srv.PeerUID = func(net.Conn) (uint32, error) { return 0, errors.New("no cred") }
 	})
 	c := h.dial()
-	c.send(`{"id":1,"cmd":"hello","protocol":1}`)
+	c.sendIgnoringClose(`{"id":1,"cmd":"hello","protocol":1}`)
 	c.expectClosed()
 }
 
