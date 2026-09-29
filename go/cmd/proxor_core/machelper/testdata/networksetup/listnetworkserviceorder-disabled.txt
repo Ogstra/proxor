@@ -1,0 +1,9 @@
+An asterisk (*) denotes that a network service is disabled.
+(1) Wi-Fi
+(Hardware Port: Wi-Fi, Device: en0)
+
+(*) Old Dock/Hub
+(Hardware Port: USB 10/100 LAN, Device: en7)
+
+(3) AX88179 USB 3.0/2.0 LAN
+(Hardware Port: AX88179 USB 3.0/2.0 LAN, Device: en8)

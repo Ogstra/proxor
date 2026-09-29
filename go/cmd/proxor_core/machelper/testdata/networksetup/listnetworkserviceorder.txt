@@ -1,0 +1,31 @@
+An asterisk (*) denotes that a network service is disabled.
+(1) USB 10/100/1000 LAN
+(Hardware Port: USB 10/100/1000 LAN, Device: en10)
+
+(2) Thunderbolt Bridge
+(Hardware Port: Thunderbolt Bridge, Device: bridge0)
+
+(3) Wi-Fi
+(Hardware Port: Wi-Fi, Device: en0)
+
+(4) iPhone USB
+(Hardware Port: iPhone USB, Device: en11)
+
+(5) VPN-VPS Local
+(Hardware Port: com.wireguard.macos, Device: )
+
+(6) VPN-VPS Full Exit Node
+(Hardware Port: com.wireguard.macos, Device: )
+
+(7) v2RayTun
+(Hardware Port: com.databridges.privacy.v2RayTun, Device: )
+
+(8) Happ
+(Hardware Port: su.ffg.happ, Device: )
+
+(9) Tailscale
+(Hardware Port: io.tailscale.ipn.macsys, Device: )
+
+(10) Shadowrocket
+(Hardware Port: com.liguangming.Shadowrocket, Device: )
+
