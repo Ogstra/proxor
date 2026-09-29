@@ -13,6 +13,8 @@ set(PLATFORM_SOURCES
     src/sys/macos/MacHelperPolicy.cpp
     src/sys/macos/MacHelperClient.h
     src/sys/macos/MacHelperClient.cpp
+    src/sys/macos/MacHelperService.h
+    src/sys/macos/MacHelperService.cpp
     src/sys/macos/MacHelperInstaller.h
     src/sys/macos/MacHelperInstaller.cpp
     assets/macos/proxor.icns
