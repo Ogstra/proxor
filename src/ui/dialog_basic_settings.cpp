@@ -393,6 +393,17 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     ui->ua_include_computer->setVisible(false);
     ui->ua_include_username->setVisible(false);
 #endif
+#ifdef Q_OS_MACOS
+    {
+        // Menu-bar icon: colored (status colors) or monochrome template glyph. macOS only; applied
+        // live through the UpdateDataStore message handled in MainWindow.
+        auto *trayColored = new QCheckBox(tr("Colored menu bar icon"), ui->tray_icon_box);
+        trayColored->setObjectName(QStringLiteral("tray_icon_colored"));
+        trayColored->setToolTip(tr("Off: a monochrome icon that follows the light/dark menu bar."));
+        trayColored->setChecked(ProxorGui::dataStore->tray_icon_colored);
+        ui->horizontalLayout_tray_icon->insertWidget(1, trayColored);
+    }
+#endif
     D_LOAD_BOOL(sub_use_proxy)
     D_LOAD_BOOL(sub_clear)
     D_LOAD_BOOL(sub_insecure)
@@ -515,6 +526,11 @@ void DialogBasicSettings::accept() {
     D_SAVE_BOOL(ua_include_hwid)
     D_SAVE_BOOL(ua_include_computer)
     D_SAVE_BOOL(ua_include_username)
+#ifdef Q_OS_MACOS
+    if (auto *trayColored = findChild<QCheckBox *>(QStringLiteral("tray_icon_colored"))) {
+        ProxorGui::dataStore->tray_icon_colored = trayColored->isChecked();
+    }
+#endif
     D_SAVE_BOOL(sub_use_proxy)
     D_SAVE_BOOL(sub_clear)
     D_SAVE_BOOL(sub_insecure)

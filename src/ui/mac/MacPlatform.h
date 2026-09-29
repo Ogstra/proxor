@@ -15,6 +15,12 @@ public:
     StatusItem &operator=(const StatusItem &) = delete;
     void setMenu(QMenu *menu);            // statusItem.menu = menu->toNSMenu()
     void setIcon(const QIcon &icon);      // QIcon -> NSImage fitted to the status bar thickness, Retina-aware
+    // true (default): the status-colored icon as is. false: a monochrome template image (black
+    // glyph + alpha only) that macOS tints for light/dark menu bars. State stays readable there:
+    // saturated (colored) parts are drawn solid, the unsaturated/white parts of the idle icon are
+    // drawn as a faint ghost, so "running" = both arcs solid, "stopped" = one solid, one faint.
+    // Re-renders the last icon immediately.
+    void setColored(bool colored);
     void setToolTip(const QString &text); // statusItem.button.toolTip
     void setVisible(bool visible);        // statusItem.visible
     [[nodiscard]] bool isVisible() const;

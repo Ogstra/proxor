@@ -33,6 +33,55 @@ namespace ProxorMac {
 
 struct StatusItem::Impl {
     NSStatusItem *item = nil;
+    QIcon icon;
+    bool colored = true;
+
+    // Template variant of a colored icon: only the alpha channel matters to AppKit, so the
+    // result is black. Saturated pixels (the colored arcs) stay fully opaque; unsaturated ones
+    // (the white arc of the idle icon) keep 38% of their alpha as a "ghost", which is what
+    // separates the idle glyph from the running one (both arcs solid).
+    static QImage monochrome(const QImage &src) {
+        QImage img = src.convertToFormat(QImage::Format_ARGB32);
+        for (int y = 0; y < img.height(); ++y) {
+            auto *line = reinterpret_cast<QRgb *>(img.scanLine(y));
+            for (int x = 0; x < img.width(); ++x) {
+                const QRgb px = line[x];
+                const int a = qAlpha(px);
+                if (a == 0) continue;
+                const int mx = qMax(qRed(px), qMax(qGreen(px), qBlue(px)));
+                const int mn = qMin(qRed(px), qMin(qGreen(px), qBlue(px)));
+                const int outA = (mx - mn) > 60 ? a : (a * 38) / 100;
+                line[x] = qRgba(0, 0, 0, outA);
+            }
+        }
+        return img;
+    }
+
+    void render() {
+        if (icon.isNull()) return;
+        const qreal thickness = NSStatusBar.systemStatusBar.thickness;
+        const int h = qMax(1, static_cast<int>(thickness - 4));
+        qreal dpr = qApp ? qApp->devicePixelRatio() : 1.0;
+        QPixmap pm = icon.pixmap(QSize(h, h), dpr);
+        if (pm.isNull()) return;
+
+        QImage image = pm.toImage();
+        if (!colored) image = monochrome(image);
+        CGImageRef cg = image.toCGImage();
+        if (!cg) return;
+
+        const qreal pmDpr = pm.devicePixelRatio() > 0 ? pm.devicePixelRatio() : 1.0;
+        NSSize size = NSMakeSize(pm.width() / pmDpr, pm.height() / pmDpr);
+        NSImage *nsImage = [[NSImage alloc] initWithCGImage:cg size:size];
+        CGImageRelease(cg);
+
+        // `template` is a C++ keyword, so the AppKit property is set with bracket syntax.
+        // Colored: the color is Proxor's running/idle indicator, so it must not be tinted.
+        [nsImage setTemplate:colored ? NO : YES];
+        item.button.image = nsImage;
+        item.button.imageScaling = NSImageScaleProportionallyDown;
+        [nsImage release];
+    }
 };
 
 StatusItem::StatusItem() : d(new Impl) {
@@ -55,27 +104,14 @@ void StatusItem::setMenu(QMenu *menu) {
 }
 
 void StatusItem::setIcon(const QIcon &icon) {
-    const qreal thickness = NSStatusBar.systemStatusBar.thickness;
-    const int h = qMax(1, static_cast<int>(thickness - 4));
-    qreal dpr = qApp ? qApp->devicePixelRatio() : 1.0;
-    QPixmap pm = icon.pixmap(QSize(h, h), dpr);
-    if (pm.isNull()) return;
+    d->icon = icon;
+    d->render();
+}
 
-    CGImageRef cg = pm.toImage().toCGImage();
-    if (!cg) return;
-
-    const qreal pmDpr = pm.devicePixelRatio() > 0 ? pm.devicePixelRatio() : 1.0;
-    NSSize size = NSMakeSize(pm.width() / pmDpr, pm.height() / pmDpr);
-    NSImage *nsImage = [[NSImage alloc] initWithCGImage:cg size:size];
-    CGImageRelease(cg);
-
-    // Keep it colored: the color is Proxor's running/idle indicator, not a
-    // monochrome menu-bar glyph. `template` is a C++ keyword, so this property
-    // (declared as `template` in AppKit) has to be set with bracket syntax.
-    [nsImage setTemplate:NO];
-    d->item.button.image = nsImage;
-    d->item.button.imageScaling = NSImageScaleProportionallyDown;
-    [nsImage release];
+void StatusItem::setColored(bool colored) {
+    if (d->colored == colored) return;
+    d->colored = colored;
+    d->render();
 }
 
 void StatusItem::setToolTip(const QString &text) {

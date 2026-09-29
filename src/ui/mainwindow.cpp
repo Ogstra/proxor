@@ -1043,6 +1043,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         mac_tray_menu->addAction(action);
     }
     mac_status_item = new ProxorMac::StatusItem;
+    mac_status_item->setColored(ProxorGui::dataStore->tray_icon_colored);
     mac_status_item->setIcon(Icon::GetTrayIcon(Icon::NONE));
     mac_status_item->setMenu(mac_tray_menu);
     mac_status_item->setVisible(true);
@@ -1690,6 +1691,11 @@ void MainWindow::dialog_message_impl(const QString &sender, const QString &info)
         refresh_status();
     }
     if (info.contains("UpdateDataStore")) {
+#ifdef Q_OS_MACOS
+        // The colored/monochrome menu-bar icon setting applies without a restart.
+        icon_status = -1;
+        refresh_status();
+#endif
         auto suggestRestartProxy = ProxorGui::dataStore->Save();
         if (info.contains("RouteChanged")) {
             suggestRestartProxy = true;
@@ -2379,6 +2385,7 @@ void MainWindow::refresh_status(const QString &traffic_update) {
 #ifdef Q_OS_MACOS
         if (mac_status_item) {
             mac_status_item->setToolTip(make_title(true));
+            mac_status_item->setColored(ProxorGui::dataStore->tray_icon_colored);
             if (icon_status_new != icon_status) mac_status_item->setIcon(Icon::GetTrayIcon(icon_status_new));
         }
 #endif
