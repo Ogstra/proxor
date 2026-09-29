@@ -9,7 +9,10 @@ set(PLATFORM_SOURCES
     src/ui/mac/MacLookCommon.h
     src/ui/mac/MacDialogs.h
     src/ui/mac/MacDialogs.cpp
+    assets/macos/proxor.icns
 )
+# App icon (Dock, Finder, Launchpad): copied into Contents/Resources and named in Info.plist.
+set_source_files_properties(assets/macos/proxor.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 find_library(CORE_FOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
 find_library(CORE_SERVICES_FRAMEWORK CoreServices REQUIRED)
 find_library(APPKIT_FRAMEWORK AppKit REQUIRED)

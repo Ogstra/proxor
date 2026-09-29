@@ -369,6 +369,7 @@ if (APPLE)
             MACOSX_BUNDLE_GUI_IDENTIFIER "io.github.Ogstra.Proxor"
             MACOSX_BUNDLE_SHORT_VERSION_STRING "${NKR_VERSION}"
             MACOSX_BUNDLE_BUNDLE_VERSION "${NKR_VERSION}"
+            MACOSX_BUNDLE_ICON_FILE "proxor.icns"
     )
 endif ()
 
