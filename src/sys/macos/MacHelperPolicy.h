@@ -65,3 +65,24 @@ QString MacTunFailureText(const QString &reason);
 
 // Same list as Go machelper.DefaultBypass.
 QStringList MacDefaultProxyBypass();
+
+// A user stop pauses System Proxy / Tun only after this grace period; a start inside it cancels
+// the pause, so a quick stop -> start never touches the helper.
+constexpr int kMacPauseGraceMs = 750;
+
+enum class MacStartupInstallAction { None, Prompt, LogOnly };
+
+struct MacStartupInstallDecision {
+    MacStartupInstallAction action;
+    MacHelperEnableAction enableAction; // for ConfirmAndInstall when action == Prompt
+    QString feature;                    // "Tun Mode", "System Proxy" or "Tun Mode and System Proxy"
+    QString logLine;                    // LogOnly: why nothing is prompted
+};
+
+// Startup with a remembered Tun / System Proxy: one install prompt per session when the service
+// is missing, outdated or not authorized for this user; everything else only logs.
+MacStartupInstallDecision DecideMacStartupInstall(bool rememberedTun, bool rememberedSystemProxy,
+                                                  MacHelperState state, bool promptedThisSession);
+
+// Text shown when the startup install prompt was declined or failed.
+QString MacStartupInstallDeclinedText(bool tun, bool systemProxy);

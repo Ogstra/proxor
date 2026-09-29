@@ -105,3 +105,12 @@ QStringList MacDefaultProxyBypass() {
             QStringLiteral("169.254.0.0/16"), QStringLiteral("10.0.0.0/8"),     QStringLiteral("172.16.0.0/12"),
             QStringLiteral("192.168.0.0/16"), QStringLiteral("100.64.0.0/10")};
 }
+
+// RED stubs (50-16 task 1)
+MacStartupInstallDecision DecideMacStartupInstall(bool, bool, MacHelperState, bool) {
+    return {MacStartupInstallAction::None, MacHelperEnableAction::Proceed, QString(), QString()};
+}
+
+QString MacStartupInstallDeclinedText(bool, bool) {
+    return QString();
+}

@@ -47,6 +47,16 @@ private slots:
 
     void tunFailureTextNamesReasonAndWayOut();
     void defaultBypassList();
+
+    void startupInstallNothingRememberedIsNone();
+    void startupInstallReadyIsNone();
+    void startupInstallPromptsWhenServiceMissingOrStale();
+    void startupInstallPromptsOncePerSession();
+    void startupInstallNotRunningOnlyLogs();
+    void startupInstallFeatureNamesWhatIsRemembered();
+    void freshConfigPromptsForTun();
+    void startupInstallDeclinedText();
+    void pauseGraceIsShort();
 };
 
 void MacHelperPolicyTest::protocolVersionIsOne() {
@@ -231,6 +241,84 @@ void MacHelperPolicyTest::defaultBypassList() {
                                QStringLiteral("10.0.0.0/8"),   QStringLiteral("172.16.0.0/12"),
                                QStringLiteral("192.168.0.0/16"), QStringLiteral("100.64.0.0/10")};
     QCOMPARE(MacDefaultProxyBypass(), expected);
+}
+
+void MacHelperPolicyTest::startupInstallNothingRememberedIsNone() {
+    for (const auto state : kAllStates) {
+        for (const bool prompted : {false, true}) {
+            QCOMPARE(DecideMacStartupInstall(false, false, state, prompted).action, MacStartupInstallAction::None);
+        }
+    }
+}
+
+void MacHelperPolicyTest::startupInstallReadyIsNone() {
+    QCOMPARE(DecideMacStartupInstall(true, true, MacHelperState::Ready, false).action, MacStartupInstallAction::None);
+    QCOMPARE(DecideMacStartupInstall(true, false, MacHelperState::Ready, true).action, MacStartupInstallAction::None);
+    QCOMPARE(DecideMacStartupInstall(false, true, MacHelperState::Ready, false).action, MacStartupInstallAction::None);
+}
+
+void MacHelperPolicyTest::startupInstallPromptsWhenServiceMissingOrStale() {
+    for (const auto state :
+         {MacHelperState::NotInstalled, MacHelperState::Outdated, MacHelperState::NotAuthorized}) {
+        const auto d = DecideMacStartupInstall(true, false, state, false);
+        QCOMPARE(d.action, MacStartupInstallAction::Prompt);
+        QCOMPARE(d.enableAction, DecideMacHelperEnable(state));
+        const auto sp = DecideMacStartupInstall(false, true, state, false);
+        QCOMPARE(sp.action, MacStartupInstallAction::Prompt);
+        QCOMPARE(sp.enableAction, DecideMacHelperEnable(state));
+    }
+}
+
+void MacHelperPolicyTest::startupInstallPromptsOncePerSession() {
+    for (const auto state :
+         {MacHelperState::NotInstalled, MacHelperState::Outdated, MacHelperState::NotAuthorized}) {
+        const auto d = DecideMacStartupInstall(true, true, state, true);
+        QCOMPARE(d.action, MacStartupInstallAction::LogOnly);
+        QVERIFY(!d.logLine.isEmpty());
+    }
+}
+
+void MacHelperPolicyTest::startupInstallNotRunningOnlyLogs() {
+    const auto d = DecideMacStartupInstall(true, false, MacHelperState::InstalledNotRunning, false);
+    QCOMPARE(d.action, MacStartupInstallAction::LogOnly);
+    QCOMPARE(d.logLine, DecideMacTunStartup(true, MacHelperState::InstalledNotRunning).logLine);
+    QVERIFY(!d.logLine.isEmpty());
+    const auto sp = DecideMacStartupInstall(false, true, MacHelperState::InstalledNotRunning, false);
+    QCOMPARE(sp.action, MacStartupInstallAction::LogOnly);
+    QVERIFY(!sp.logLine.isEmpty());
+}
+
+void MacHelperPolicyTest::startupInstallFeatureNamesWhatIsRemembered() {
+    QCOMPARE(DecideMacStartupInstall(true, false, MacHelperState::NotInstalled, false).feature,
+             QStringLiteral("Tun Mode"));
+    QCOMPARE(DecideMacStartupInstall(false, true, MacHelperState::NotInstalled, false).feature,
+             QStringLiteral("System Proxy"));
+    QCOMPARE(DecideMacStartupInstall(true, true, MacHelperState::NotInstalled, false).feature,
+             QStringLiteral("Tun Mode and System Proxy"));
+}
+
+void MacHelperPolicyTest::freshConfigPromptsForTun() {
+    // DataStore default remember_spmode is {"vpn"}: a fresh config remembers Tun with no service.
+    const auto d = DecideMacStartupInstall(true, false, MacHelperState::NotInstalled, false);
+    QCOMPARE(d.action, MacStartupInstallAction::Prompt);
+    QCOMPARE(d.feature, QStringLiteral("Tun Mode"));
+    QCOMPARE(d.enableAction, MacHelperEnableAction::AskInstall);
+}
+
+void MacHelperPolicyTest::startupInstallDeclinedText() {
+    const auto tun = MacStartupInstallDeclinedText(true, false);
+    QVERIFY(tun.contains(QStringLiteral("without Tun")));
+    QVERIFY(tun.contains(QStringLiteral("Settings > Tun settings")));
+    QVERIFY(!tun.contains(QStringLiteral("deferred")));
+    QVERIFY(!tun.endsWith(QStringLiteral("..")));
+    const auto sp = MacStartupInstallDeclinedText(false, true);
+    QVERIFY(sp.contains(QStringLiteral("System Proxy")));
+    QVERIFY(!sp.contains(QStringLiteral("deferred")));
+    QVERIFY(!sp.endsWith(QStringLiteral("..")));
+}
+
+void MacHelperPolicyTest::pauseGraceIsShort() {
+    QCOMPARE(kMacPauseGraceMs, 750);
 }
 
 QTEST_APPLESS_MAIN(MacHelperPolicyTest)

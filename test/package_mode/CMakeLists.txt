@@ -78,3 +78,15 @@ target_include_directories(mac_helper_service_test PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos)
 target_link_libraries(mac_helper_service_test PRIVATE Qt6::Core Qt6::Network Qt6::Test)
 add_test(NAME mac_helper_service_test COMMAND mac_helper_service_test)
+
+# Grace-period pause/resume coordinator for Tun and System Proxy (Qt Core only, QTimer): behavior
+# test with fake hooks, on every CI runner, even though production only links it on APPLE.
+add_executable(mac_mode_coordinator_test
+    mac_mode_coordinator_test.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos/MacModeCoordinator.h
+    ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos/MacModeCoordinator.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos/MacHelperPolicy.cpp)
+target_include_directories(mac_mode_coordinator_test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos)
+target_link_libraries(mac_mode_coordinator_test PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME mac_mode_coordinator_test COMMAND mac_mode_coordinator_test)
