@@ -87,6 +87,10 @@ if ! grep -qxF 'Proxor.app/Contents/MacOS/Proxor' <<<"$entries"; then
   echo "ERROR: zip does not contain Proxor.app/Contents/MacOS/Proxor" >&2
   exit 1
 fi
+if ! grep -qxF 'Proxor.app/Contents/Resources/helper/helper-install.sh' <<<"$entries"; then
+  echo "ERROR: zip does not contain Proxor.app/Contents/Resources/helper/helper-install.sh" >&2
+  exit 1
+fi
 link_info="$(zipinfo "$zip" 'Proxor.app/Contents/MacOS/geosite.db')"
 if ! grep -q '^l' <<<"$link_info"; then
   echo "ERROR: geosite.db is not stored as a symlink" >&2
@@ -100,6 +104,8 @@ trap 'rm -rf "$check"' EXIT
 codesign --verify --deep --strict --verbose=2 "$check/Proxor.app"
 test -x "$check/Proxor.app/Contents/MacOS/Proxor"
 test -x "$check/Proxor.app/Contents/MacOS/proxor_core"
+test -x "$check/Proxor.app/Contents/Resources/helper/helper-install.sh"
+test -x "$check/Proxor.app/Contents/Resources/helper/helper-uninstall.sh"
 test -L "$check/Proxor.app/Contents/MacOS/geosite.db"
 test -s "$check/Proxor.app/Contents/MacOS/geosite.db"
 main_refs="$(otool -L "$check/Proxor.app/Contents/MacOS/Proxor")"
