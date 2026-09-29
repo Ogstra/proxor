@@ -1,7 +1,7 @@
 // src/ui/mac/MacPlatform.h — macOS-only helpers. Include only under #ifdef Q_OS_MACOS.
 #pragma once
 #include <functional>
-class QIcon; class QMenu; class QObject; class QString;
+class QIcon; class QMenu; class QObject; class QString; class QWidget;
 namespace ProxorMac {
 // App-owned NSStatusItem, used on macOS instead of QSystemTrayIcon's status item.
 // Qt 6.11's QCocoaSystemTrayIcon::emitActivated() reads NSApp.currentEvent.clickCount
@@ -37,4 +37,8 @@ void InstallQuitInterceptor(QObject *owner, std::function<void()> onQuit);
 // -[NSApp terminate:], which sends one more *spontaneous* QEvent::Quit; once this has been called the
 // interceptor lets every Quit through so the process can actually exit instead of looping.
 void AllowQuit();
+// Pops `menu` up as a native NSMenu just below `anchor` (a widget of a visible window) and returns
+// when it is dismissed. Replaces QMenu::popup for toolbar buttons so the menu looks and behaves
+// like the menu-bar menus (rounded, shortcuts, submenu arrows).
+void PopupMenu(QMenu *menu, QWidget *anchor);
 }

@@ -4,6 +4,9 @@ enable_language(OBJCXX)
 set(PLATFORM_SOURCES
     src/ui/mac/MacPlatform.h
     src/ui/mac/MacPlatform.mm
+    src/ui/mac/MacLook.h
+    src/ui/mac/MacLook.cpp
+    src/ui/mac/MacLookCommon.h
 )
 find_library(CORE_FOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
 find_library(CORE_SERVICES_FRAMEWORK CoreServices REQUIRED)

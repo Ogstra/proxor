@@ -44,6 +44,7 @@
 
 #ifdef Q_OS_MACOS
 #include "ui/mac/MacPlatform.h"
+#include "ui/mac/MacLook.h"
 #endif
 
 #include <QClipboard>
@@ -578,9 +579,19 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     // cannot be suppressed via QSS on the Windows platform style.
     auto attachMenuOnClick = [](QToolButton *btn, QMenu *menu) {
         btn->setFocusPolicy(Qt::NoFocus);
+#ifdef Q_OS_MACOS
+        // Pop the menu up as a native NSMenu, like the menu-bar menus (the Qt-drawn popup had square
+        // corners, no shortcuts, and on the Settings button did not show at all, leaving it pressed).
+        QObject::connect(btn, &QToolButton::clicked, btn, [btn, menu]() {
+            ProxorMac::PopupMenu(menu, btn);
+            btn->setDown(false);
+            btn->update();
+        });
+#else
         QObject::connect(btn, &QToolButton::clicked, btn, [btn, menu]() {
             menu->popup(btn->mapToGlobal(QPoint(0, btn->height())));
         });
+#endif
         QObject::connect(menu, &QMenu::aboutToHide, btn, [btn]() {
             btn->setDown(false);
             btn->update();
@@ -721,38 +732,17 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     }, this, 0);
 #ifdef Q_OS_MACOS
     {
-        // Same height math as the block above, only for the non-System themes; System resets
-        // it so the native size hints win. Re-evaluated on theme changes in both directions.
-        auto applyStackedHeights = [this](const QString &themeName) {
-            const bool isSystem = (themeManager->NormalizeTheme(themeName) == QStringLiteral("System"));
-            if (isSystem) {
-                for (QWidget *w : {static_cast<QWidget *>(ui->toolButton_url_test),
-                                   static_cast<QWidget *>(ui->toolButton_update_subscription),
-                                   static_cast<QWidget *>(ui->checkBox_VPN),
-                                   static_cast<QWidget *>(ui->checkBox_SystemProxy)}) {
-                    w->setMinimumHeight(0);
-                    w->setMaximumHeight(QWIDGETSIZE_MAX);
-                }
-                return;
+        // The four widgets now live in the QToolBar built by ProxorMac::PolishMainWindow (the two push
+        // buttons as real QPushButtons), where their native size hints must win under every theme.
+        // The Windows-tuned forced heights are therefore always reset on macOS.
+        auto applyStackedHeights = [this](const QString &) {
+            for (QWidget *w : {static_cast<QWidget *>(ui->toolButton_url_test),
+                               static_cast<QWidget *>(ui->toolButton_update_subscription),
+                               static_cast<QWidget *>(ui->checkBox_VPN),
+                               static_cast<QWidget *>(ui->checkBox_SystemProxy)}) {
+                w->setMinimumHeight(0);
+                w->setMaximumHeight(QWIDGETSIZE_MAX);
             }
-            const int referenceHeight = qMax(ui->toolButton_program->height(), ui->toolButton_program->sizeHint().height());
-            const int stackedSpacing = ui->verticalLayout_url_sub->spacing();
-            const int stackedAvailableHeight = qMax(2, referenceHeight - stackedSpacing);
-            const int topButtonHeight = stackedAvailableHeight / 2;
-            const int bottomButtonHeight = stackedAvailableHeight - topButtonHeight;
-            ui->toolButton_url_test->setMinimumHeight(topButtonHeight);
-            ui->toolButton_url_test->setMaximumHeight(topButtonHeight);
-            ui->toolButton_update_subscription->setMinimumHeight(bottomButtonHeight);
-            ui->toolButton_update_subscription->setMaximumHeight(bottomButtonHeight);
-
-            const int checkboxSpacing = ui->verticalLayout_4->spacing();
-            const int checkboxAvailableHeight = qMax(2, referenceHeight - checkboxSpacing);
-            const int topCheckboxHeight = checkboxAvailableHeight / 2;
-            const int bottomCheckboxHeight = checkboxAvailableHeight - topCheckboxHeight;
-            ui->checkBox_VPN->setMinimumHeight(topCheckboxHeight);
-            ui->checkBox_VPN->setMaximumHeight(topCheckboxHeight);
-            ui->checkBox_SystemProxy->setMinimumHeight(bottomCheckboxHeight);
-            ui->checkBox_SystemProxy->setMaximumHeight(bottomCheckboxHeight);
         };
         setTimeout([this, applyStackedHeights] { applyStackedHeights(ProxorGui::dataStore->theme); }, this, 0);
         connect(themeManager, &ThemeManager::themeChanged, this, applyStackedHeights);
@@ -1278,6 +1268,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         startupWork();
     }
 
+#ifdef Q_OS_MACOS
+    ProxorMac::PolishMainWindow(this);
+#endif
     if (!ProxorGui::dataStore->flag_tray) show();
 
     // Restore spmode after the window has entered the event loop so prompts

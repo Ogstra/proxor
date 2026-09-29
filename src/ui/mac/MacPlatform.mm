@@ -22,6 +22,7 @@
 #include <QCoreApplication>
 #include <QEvent>
 #include <QIcon>
+#include <QWidget>
 #include <QImage>
 #include <QMenu>
 #include <QObject>
@@ -158,6 +159,16 @@ void InstallQuitInterceptor(QObject *owner, std::function<void()> onQuit) {
 
 void AllowQuit() {
     g_allowQuit = true;
+}
+
+void PopupMenu(QMenu *menu, QWidget *anchor) {
+    if (!menu || !anchor || !anchor->window()) return;
+    NSMenu *nsMenu = menu->toNSMenu();
+    NSView *view = reinterpret_cast<NSView *>(anchor->window()->winId());
+    if (!nsMenu || !view) return;
+    // QNSView is flipped, so view coordinates run top-down like Qt's.
+    const QPoint p = anchor->mapTo(anchor->window(), QPoint(0, anchor->height() + 2));
+    [nsMenu popUpMenuPositioningItem:nil atLocation:NSMakePoint(p.x(), p.y()) inView:view];
 }
 
 }
