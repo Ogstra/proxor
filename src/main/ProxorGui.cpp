@@ -21,6 +21,10 @@
 #endif
 #include <unistd.h>
 #endif
+#ifdef Q_OS_MACOS
+#include <sys/types.h>
+#include <sys/sysctl.h>
+#endif
 
 namespace ProxorGui_ConfigItem {
 
@@ -342,8 +346,13 @@ namespace ProxorGui {
         QString version = SubStrBefore(NKR_VERSION, "-");
         if (!version.contains(".")) version = "2.0";
         QString platform = QSysInfo::productType(); // "windows", "macos", "linux"
+#ifdef Q_OS_MACOS
+        // The panel's canonical OS name is "macOS"; capitalising productType() gave "Macos".
+        platform = QStringLiteral("macOS");
+#else
         // Capitalize first letter
         if (!platform.isEmpty()) platform[0] = platform[0].toUpper();
+#endif
         return QStringLiteral("Proxor/%1/%2").arg(platform, version);
     }
 
@@ -360,6 +369,16 @@ namespace ProxorGui {
     }
 
     QString DataStore::GetDeviceModel() const {
+#ifdef Q_OS_MACOS
+        // Always the hardware model identifier (e.g. "Mac15,6"), which the panel resolves to a
+        // marketing name by exact match. No computer name or username is appended, so
+        // ua_include_computer / ua_include_username do not apply on macOS.
+        size_t length = 0;
+        if (sysctlbyname("hw.model", nullptr, &length, nullptr, 0) != 0 || length < 2) return {};
+        QByteArray model(static_cast<qsizetype>(length), '\0');
+        if (sysctlbyname("hw.model", model.data(), &length, nullptr, 0) != 0) return {};
+        return QString::fromLatin1(model.constData()).trimmed();
+#else
         // COMPUTERNAME and USERNAME are Windows environment names, so every other platform
         // reported neither. Each part also honours its own setting: the username switch had
         // no effect at all before, because both parts were gated on the computer one.
@@ -377,12 +396,17 @@ namespace ProxorGui {
         }
         if (computer.isEmpty()) return user;
         return user.isEmpty() ? computer : computer + "/" + user;
+#endif
     }
 
     QString DataStore::GetDeviceOS() {
+#ifdef Q_OS_MACOS
+        return QStringLiteral("macOS");
+#else
         QString os = QSysInfo::productType();
         if (!os.isEmpty()) os[0] = os[0].toUpper();
         return os;
+#endif
     }
 
     QString DataStore::GetOSVersion() {

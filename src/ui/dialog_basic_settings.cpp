@@ -387,6 +387,12 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     D_LOAD_BOOL(ua_include_hwid)
     D_LOAD_BOOL(ua_include_computer)
     D_LOAD_BOOL(ua_include_username)
+#ifdef Q_OS_MACOS
+    // On macOS X-Device-Model is always the hardware model identifier, so these two options
+    // have no effect there. Hidden rather than left lying; their stored values are kept.
+    ui->ua_include_computer->setVisible(false);
+    ui->ua_include_username->setVisible(false);
+#endif
     D_LOAD_BOOL(sub_use_proxy)
     D_LOAD_BOOL(sub_clear)
     D_LOAD_BOOL(sub_insecure)
