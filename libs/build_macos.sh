@@ -5,10 +5,13 @@
 # script/deploy_macos.sh. Layout matters: ProxorGui::PackageExecutablePath()
 # resolves proxor_core next to the running GUI binary, i.e.
 # Proxor.app/Contents/MacOS/proxor_core, and ConfigBuilder looks for geodata
-# in the same directory.
+# in the same directory. The geodata files live in Contents/Resources/ and are
+# reached through relative symlinks in Contents/MacOS/ (see the assemble step).
 #
 # Env knobs: SKIP_GO=1 (reuse an already-built core), BUILD_DIR (override the
-# CMake build tree), MACDEPLOYQT (override the macdeployqt binary to use).
+# CMake build tree), MACDEPLOYQT (override the macdeployqt binary to use),
+# MACOSX_DEPLOYMENT_TARGET (minimum macOS, e.g. 15.0; CI sets it, empty = the
+# SDK default).
 set -euo pipefail
 
 source libs/env_deploy.sh
@@ -69,7 +72,8 @@ fi
 # CMAKE_PREFIX_PATH.
 cmake -S "$SRC_ROOT" -B "$BUILD_DIR" -GNinja \
   -DCMAKE_BUILD_TYPE=Release -DQT_VERSION_MAJOR=6 \
-  -DNKR_DISABLE_LIBS=ON -DCMAKE_PREFIX_PATH="$BREW_PREFIX"
+  -DNKR_DISABLE_LIBS=ON -DCMAKE_PREFIX_PATH="$BREW_PREFIX" \
+  -DCMAKE_OSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-}"
 cmake --build "$BUILD_DIR"
 if [ ! -f "$BUILD_DIR/Proxor.app/Contents/MacOS/Proxor" ]; then
   echo "ERROR: $BUILD_DIR/Proxor.app/Contents/MacOS/Proxor not found after build." >&2
@@ -93,12 +97,18 @@ if [ ! -f "$DEPLOYMENT/public_res/geosite.db" ]; then
   echo "Downloading geodata..."
   "$SRC_ROOT/libs/build_public_res.sh"
 fi
+# Data files placed in Contents/MacOS are treated as nested code by `codesign --deep`, and
+# their signatures live in xattrs that zip/unzip (Homebrew's extraction) drop. Seal them as
+# resources and keep the lookup path next to the executable alive with relative symlinks.
+mkdir -p "$APP/Contents/Resources"
 for name in geoip.dat geosite.dat geoip.db geosite.db; do
   if [ ! -f "$DEPLOYMENT/public_res/$name" ]; then
     echo "ERROR: Missing geodata asset: $DEPLOYMENT/public_res/$name" >&2
     exit 1
   fi
-  cp "$DEPLOYMENT/public_res/$name" "$APP/Contents/MacOS/"
+  cp "$DEPLOYMENT/public_res/$name" "$APP/Contents/Resources/$name"
+  chmod 0644 "$APP/Contents/Resources/$name"
+  ln -sf "../Resources/$name" "$APP/Contents/MacOS/$name"
 done
 
 #### Qt deployment ####
@@ -175,6 +185,15 @@ if [ "$USED_PLUGIN_FALLBACK" != "1" ]; then
   done < <(find "$APP/Contents/Frameworks" "$APP/Contents/PlugIns" -type f -print0 2>/dev/null)
 fi
 
+#### minimum macOS ####
+# The CMake default Info.plist template may leave LSMinimumSystemVersion empty. Info.plist is
+# sealed by the signature, so this must run before codesign.
+if [ -n "${MACOSX_DEPLOYMENT_TARGET:-}" ]; then
+  plist="$APP/Contents/Info.plist"
+  /usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion $MACOSX_DEPLOYMENT_TARGET" "$plist" 2>/dev/null \
+    || /usr/libexec/PlistBuddy -c "Add :LSMinimumSystemVersion string $MACOSX_DEPLOYMENT_TARGET" "$plist"
+fi
+
 #### sign ####
 # Run last: every earlier step modifies the bundle, and arm64 requires a valid
 # signature on every Mach-O it contains.
@@ -185,6 +204,8 @@ codesign --verify --deep --strict --verbose=2 "$APP"
 test -x "$APP/Contents/MacOS/Proxor"
 test -x "$APP/Contents/MacOS/proxor_core"
 test -f "$APP/Contents/MacOS/geosite.db"
+test -L "$APP/Contents/MacOS/geosite.db"
+test -f "$APP/Contents/Resources/geosite.db"
 
 if [ "$USED_PLUGIN_FALLBACK" != "1" ]; then
   BAD_REFS=$(otool -L "$APP/Contents/MacOS/Proxor" | grep -E "/opt/homebrew|$BREW_PREFIX" || true)
