@@ -30,8 +30,9 @@ PROXY_PORT=18080
 
 PY="$(command -v python3)"
 export PYTHONDONTWRITEBYTECODE=1
-# World-readable copies, so the `nobody` check can run the client too.
-WORK="$(mktemp -d)"
+# World-readable copies, so the runner user and `nobody` can run the client. Under /tmp on purpose:
+# root's $TMPDIR (/var/folders/...) is a 0700 directory nobody else can enter.
+WORK="$(mktemp -d /tmp/proxor-ci.XXXXXX)"
 chmod 755 "$WORK"
 cp "$HERE/helper_client.py" "$WORK/helper_client.py"
 chmod 644 "$WORK/helper_client.py"
