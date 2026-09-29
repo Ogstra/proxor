@@ -42,6 +42,7 @@ namespace ProxorGui_sys {
 namespace ProxorMac {
     class StatusItem;
 }
+#include "sys/macos/MacHelperPolicy.h"
 #endif
 
 QT_BEGIN_NAMESPACE
@@ -184,6 +185,9 @@ private:
 #ifdef Q_OS_MACOS
     ProxorMac::StatusItem *mac_status_item = nullptr;
     QMenu *mac_tray_menu = nullptr;
+    QString mac_tun_failure_reason;
+    bool mac_spmode_restoring = false;
+    void macInstallHelperThen(const QString &feature, MacHelperEnableAction action, std::function<void()> onReady);
 #endif
     QShortcut *shortcut_ctrl_f = new QShortcut(QKeySequence("Ctrl+F"), this);
     QShortcut *shortcut_ctrl_v = new QShortcut(QKeySequence("Ctrl+V"), this);

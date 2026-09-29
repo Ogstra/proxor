@@ -617,6 +617,10 @@ namespace ProxorGui {
     }
 
     bool UseInternalTun() {
+#ifdef Q_OS_MACOS
+        // macOS: the Tun instance runs in the root helper (two-process mode); the user core never runs as root.
+        return false;
+#endif
 #ifdef Q_OS_LINUX
         if (IsFlatpak(CurrentPackageMode())) return false;
 #endif

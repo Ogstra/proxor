@@ -46,6 +46,8 @@
 #include "ui/mac/MacPlatform.h"
 #include "ui/mac/MacLook.h"
 #include "ui/mac/MacDialogs.h"
+#include "sys/macos/MacHelperClient.h"
+#include "sys/macos/MacHelperInstaller.h"
 #endif
 
 #include <QClipboard>
@@ -1051,11 +1053,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     connect(ui->actionShow_window, &QAction::triggered, this, [=] { tray->activated(QSystemTrayIcon::ActivationReason::Trigger); });
     //
     connect(ui->checkBox_VPN, &QCheckBox::clicked, this, [=](bool checked) { proxor_set_spmode_vpn(checked); });
-#ifdef Q_OS_MACOS
-    ui->checkBox_VPN->setEnabled(false);
-    ui->checkBox_VPN->setToolTip(tr("Tun mode is not available on macOS yet."));
-    ui->menu_spmode_vpn->setEnabled(false);
-#endif
     connect(ui->checkBox_SystemProxy, &QCheckBox::clicked, this, [=](bool checked) { proxor_set_spmode_system_proxy(checked); });
     connect(ui->menu_spmode, &QMenu::aboutToShow, this, [=]() {
         ui->menu_spmode_disabled->setChecked(!(ProxorGui::dataStore->spmode_system_proxy || ProxorGui::dataStore->spmode_vpn));
@@ -1162,10 +1159,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     const bool restore_system_proxy = ProxorGui::dataStore->remember_spmode.contains("system_proxy");
 #ifdef Q_OS_MACOS
-    // Tun is not available on macOS yet: a remembered Tun (e.g. a config carried over from
-    // another platform) must not hold every profile start behind an authorization that
-    // can never succeed there.
-    const bool restore_vpn = false;
+    // Restore a remembered Tun only when the installed helper answers (MacHelperPolicy). A missing,
+    // stopped, foreign-user or outdated helper must never hold profile starts or prompt at startup.
+    // Fresh configs land here too: DataStore defaults remember_spmode to {"vpn"}.
+    const bool mac_remembered_vpn = ProxorGui::dataStore->remember_spmode.contains("vpn") || ProxorGui::dataStore->flag_restart_tun_on;
+    const auto mac_helper_state = (mac_remembered_vpn || restore_system_proxy) ? MacHelper()->state(1000) : MacHelperState::NotInstalled;
+    const auto mac_tun_startup = DecideMacTunStartup(mac_remembered_vpn, mac_helper_state);
+    const bool restore_vpn = mac_tun_startup.setStartupTunPending;
+    if (!mac_tun_startup.logLine.isEmpty()) setTimeout([=] { MW_show_log(mac_tun_startup.logLine); }, this, 0);
 #else
     const bool restore_vpn = ProxorGui::dataStore->remember_spmode.contains("vpn") || ProxorGui::dataStore->flag_restart_tun_on;
 #endif
@@ -1276,6 +1277,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     // like the Tun admin warning are shown the same way as manual activation.
     if (ProxorGui::dataStore->remember_enable || ProxorGui::dataStore->flag_restart_tun_on || restore_vpn) {
         setTimeout([=] {
+#ifdef Q_OS_MACOS
+            mac_spmode_restoring = true;
+#endif
             if (restore_system_proxy) {
                 proxor_set_spmode_system_proxy(true, false);
             }
@@ -1287,6 +1291,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
                     failStartupTunAuthorization();
                 }
             }
+#ifdef Q_OS_MACOS
+            mac_spmode_restoring = false;
+#endif
         }, this, 0);
     }
 }
@@ -2122,13 +2129,27 @@ void MainWindow::proxor_set_spmode_system_proxy(bool enable, bool save) {
     refresh_status();
 }
 
-void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
 #ifdef Q_OS_MACOS
-    if (enable) {
-        MessageBoxWarning(software_name, tr("Tun mode is not available on macOS yet."));
-        proxor_set_spmode_FAILED
-    }
+void MainWindow::macInstallHelperThen(const QString &feature, MacHelperEnableAction action, std::function<void()> onReady) {
+    MW_show_log(tr("Waiting for the administrator password prompt to install the Proxor service..."));
+    MacHelperInstaller::ConfirmAndInstall(this, feature, action, [this, feature, onReady = std::move(onReady)](MacAdminScriptResult result) {
+        switch (result.outcome) {
+        case MacAdminScriptOutcome::Ok:
+            MW_show_log(tr("Proxor service installed."));
+            onReady();
+            break;
+        case MacAdminScriptOutcome::Cancelled:
+            MessageBoxWarning(software_name, tr("%1 was not turned on: the Proxor service was not installed.").arg(feature));
+            break;
+        case MacAdminScriptOutcome::Failed:
+            MessageBoxWarning(software_name, tr("The Proxor service could not be installed: %1").arg(result.reason));
+            break;
+        }
+    });
+}
 #endif
+
+void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
     // A Flatpak sandbox has no TUN device, so asking is a guaranteed failure
     // dialog; refuse before even trying. Distinguish the startup restore path
     // from a manual toggle only for the wording the policy layer may use.
@@ -2150,11 +2171,25 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
     // Turning Tun off means there is no tunnel left to wait for, so startup work that was
     // held back by a failed authorization -- the subscription update after an update
     // restart, for one -- can finally run.
+#ifdef Q_OS_MACOS
+    if (!enable && startup_tun_failed && !startup_network_work) {
+        startup_tun_failed = false;
+        mac_tun_failure_reason.clear();
+        if (!ProxorGui::dataStore->prepare_exit) {
+            MW_show_log(tr("Tun Mode turned off; starting the profile without Tun."));
+            resumeDeferredStartupProfile();
+        }
+    }
+#endif
     if (!enable && startup_tun_failed && startup_network_work) {
         startup_tun_failed = false;
         MW_show_log(tr("Tun mode turned off; running the startup work that was waiting for it."));
         auto startupWork = std::move(startup_network_work);
         startupWork();
+#ifdef Q_OS_MACOS
+        mac_tun_failure_reason.clear();
+        if (!ProxorGui::dataStore->prepare_exit) resumeDeferredStartupProfile();
+#endif
     }
     if (enable != ProxorGui::dataStore->spmode_vpn) {
         if (enable) {
@@ -2191,6 +2226,25 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
                     proxor_set_spmode_FAILED
                 }
             } else {
+#ifdef Q_OS_MACOS
+                const auto macState = MacHelper()->state(1000);
+                const auto macAction = DecideMacHelperEnable(macState);
+                if (macAction != MacHelperEnableAction::Proceed) {
+                    if (startup_tun_pending) { // should be impossible (startup gated), but never deadlock
+                        startup_tun_pending = false;
+                        startup_tun_authorized = false;
+                        MW_show_log(DecideMacTunStartup(true, macState).logLine);
+                        if (!ProxorGui::dataStore->prepare_exit) resumeDeferredStartupProfile();
+                        if (startup_network_work) {
+                            auto w = std::move(startup_network_work);
+                            w();
+                        }
+                        proxor_set_spmode_FAILED
+                    }
+                    macInstallHelperThen(tr("Tun Mode"), macAction, [this] { proxor_set_spmode_vpn(true); });
+                    proxor_set_spmode_FAILED // the check box stays off until the service is installed
+                }
+#endif
 #ifdef Q_OS_LINUX
                 if (!Linux_HavePkexec()) {
                     MessageBoxWarning(software_name, tr("Tun mode needs pkexec. Install PolicyKit and try again."));
