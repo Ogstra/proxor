@@ -35,8 +35,9 @@ type Server struct {
 	HandshakeTimeout time.Duration // default 5 s
 	Logf             func(format string, args ...any)
 
-	mu   sync.Mutex // serialises tun_* / sysproxy_* / uninstall across connections
-	down bool       // set by Shutdown; guarded by mu
+	mu     sync.Mutex // serialises tun_* / sysproxy_* / uninstall / lease release across connections
+	down   bool       // set by Shutdown/uninstall; guarded by mu
+	leases leaseTable // who owns Tun and the system proxy (lease.go)
 }
 
 func (s *Server) logf(format string, args ...any) {
@@ -68,36 +69,48 @@ func (s *Server) Serve(l net.Listener) error {
 	}
 }
 
-// Shutdown stops Tun and restores the system proxy (SIGTERM path).
+// Shutdown stops Tun, restores the system proxy and drops every connection
+// (SIGTERM path). Leases are cleared first, so the closing connections do not
+// repeat the cleanup.
 func (s *Server) Shutdown() {
 	s.mu.Lock()
 	s.down = true
-	s.stopTunLocked()
-	s.restoreProxyLocked()
+	conns := s.leases.shutdown()
+	if err := s.teardownLocked(); err != nil {
+		s.logf("shutdown: %v", err)
+	}
 	s.mu.Unlock()
+	for _, c := range conns {
+		_ = c.Close()
+	}
 }
 
-// stopTunLocked and restoreProxyLocked must be called with s.mu held.
-func (s *Server) stopTunLocked() error {
-	if s.Tun == nil || !s.Tun.Running() {
-		return nil
+// teardownLocked stops Tun (if we started it or it is running) and restores
+// the system proxy. Must be called with s.mu held. Proxy ownership is kept if
+// the restore fails so a later release retries it.
+func (s *Server) teardownLocked() error {
+	var errs []error
+	prev := s.leases.takeTun()
+	if prev != nil || s.Tun.Running() {
+		if err := s.Tun.Stop(); err != nil {
+			errs = append(errs, fmt.Errorf("stop tun: %w", err))
+		}
 	}
-	return s.Tun.Stop()
-}
-
-func (s *Server) restoreProxyLocked() error {
-	if s.Proxy == nil {
-		return nil
+	if err := s.Proxy.Restore(); err != nil {
+		errs = append(errs, fmt.Errorf("restore system proxy: %w", err))
+	} else {
+		s.leases.clearProxy()
 	}
-	return s.Proxy.Restore()
+	return errors.Join(errs...)
 }
 
 // session is one authenticated-or-not client connection.
 type session struct {
-	srv  *Server
-	conn net.Conn
-	uid  uint32
-	wmu  sync.Mutex // replies and events come from different goroutines
+	srv   *Server
+	conn  net.Conn
+	uid   uint32
+	lease *lease
+	wmu   sync.Mutex // replies and events come from different goroutines
 }
 
 func (c *session) write(v any) error {
@@ -109,6 +122,10 @@ func (c *session) write(v any) error {
 
 func (s *Server) handle(nc net.Conn) {
 	defer nc.Close()
+	if !s.leases.addConn(nc) {
+		return // shutting down
+	}
+	defer s.leases.removeConn(nc)
 
 	uid, err := s.PeerUID(nc)
 	if err != nil {
@@ -142,8 +159,15 @@ func (s *Server) handle(nc net.Conn) {
 	if err := c.write(c.helloReply(req.ID)); err != nil {
 		return
 	}
-	s.logf("uid %d: connected", uid)
-	defer s.logf("uid %d: disconnected", uid)
+	c.lease = s.leases.newLease(c.write)
+	s.logf("uid %d: connected (lease %d)", uid, c.lease.id)
+	defer func() {
+		// Dead-man switch: whatever this connection started ends with it.
+		s.mu.Lock()
+		s.releaseLocked(c.lease)
+		s.mu.Unlock()
+		s.logf("uid %d: disconnected (lease %d)", uid, c.lease.id)
+	}()
 
 	for {
 		req, err := ReadRequest(br)
@@ -222,8 +246,22 @@ func (c *session) tunStart(req Request) Response {
 	if s.down {
 		return failure(req.ID, "helper is shutting down")
 	}
-	emit := func(ev Event) { _ = c.write(ev) }
+	// A new Tun instance supersedes any running one, whoever owns it. The old
+	// instance's events are muted and its owner is told it lost the Tun.
+	prev := s.leases.takeTun()
+	if prev != nil || s.Tun.Running() {
+		if err := s.Tun.Stop(); err != nil {
+			return failure(req.ID, "stop previous tun: "+err.Error())
+		}
+		if prev != nil && prev != c.lease {
+			_ = prev.write(Event{Event: EventTunStopped, Reason: "Tun was taken over by another connection"})
+		}
+	}
+	l := c.lease
+	gen := s.leases.claimTun(l)
+	emit := func(ev Event) { s.leases.route(l, gen, ev) }
 	if err := s.Tun.Start([]byte(req.Config), req.SocksPort, emit); err != nil {
+		s.leases.dropTun(l)
 		return failure(req.ID, err.Error())
 	}
 	return Response{ID: req.ID, OK: true}
@@ -234,8 +272,9 @@ func (c *session) tunStop(req Request) Response {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.Tun.Stop(); err != nil {
-		return failure(req.ID, err.Error())
+		return failure(req.ID, err.Error()) // ownership kept: the owner's close retries
 	}
+	s.leases.clearTun()
 	return Response{ID: req.ID, OK: true}
 }
 
@@ -256,6 +295,7 @@ func (c *session) sysproxyApply(req Request) Response {
 	if err != nil {
 		return Response{ID: req.ID, Error: err.Error(), Applied: applied, Failed: failed}
 	}
+	s.leases.setProxyOwner(c.lease)
 	return Response{ID: req.ID, OK: true, Applied: applied, Failed: failed}
 }
 
@@ -264,8 +304,9 @@ func (c *session) sysproxyRestore(req Request) Response {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.Proxy.Restore(); err != nil {
-		return failure(req.ID, err.Error())
+		return failure(req.ID, err.Error()) // ownership kept: the owner's close retries
 	}
+	s.leases.clearProxy()
 	return Response{ID: req.ID, OK: true}
 }
 
@@ -279,13 +320,7 @@ func (c *session) uninstall(req Request) bool {
 		return c.write(failure(req.ID, "uninstall unavailable")) == nil
 	}
 	s.mu.Lock()
-	var err error
-	if e := s.stopTunLocked(); e != nil {
-		err = fmt.Errorf("stop tun: %w", e)
-	}
-	if e := s.restoreProxyLocked(); e != nil {
-		err = errors.Join(err, fmt.Errorf("restore system proxy: %w", e))
-	}
+	err := s.teardownLocked()
 	if err == nil {
 		s.down = true
 	}

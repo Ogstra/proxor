@@ -257,7 +257,8 @@ func TestShutdownCleansEverything(t *testing.T) {
 	}
 	// Nothing new may start once the helper is shutting down.
 	b := h.dial()
-	b.send(`{"id":1,"cmd":"hello","protocol":1}`)
+	// The server may already have hung up, so the write can fail with EPIPE.
+	_, _ = b.c.Write([]byte(`{"id":1,"cmd":"hello","protocol":1}` + "\n"))
 	b.expectClosed()
 	if n := h.log.count("tun.start"); n != 1 {
 		t.Fatalf("tun.start calls %d", n)
