@@ -196,7 +196,7 @@ private:
     void macOnTunStopped(const QString &reason);
     void macOnHelperLost();
     bool mac_sysproxy_parked = false;
-    bool macApplySystemProxy(bool interactive);
+    void macApplySystemProxy(bool interactive, bool saved = false);
     void macParkSystemProxy();
 #endif
     QShortcut *shortcut_ctrl_f = new QShortcut(QKeySequence("Ctrl+F"), this);

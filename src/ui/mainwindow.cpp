@@ -47,6 +47,7 @@
 #include "ui/mac/MacLook.h"
 #include "ui/mac/MacDialogs.h"
 #include "sys/macos/MacHelperClient.h"
+#include "sys/macos/MacHelperService.h"
 #include "sys/macos/MacHelperInstaller.h"
 #endif
 
@@ -1054,10 +1055,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     //
     connect(ui->checkBox_VPN, &QCheckBox::clicked, this, [=](bool checked) { proxor_set_spmode_vpn(checked); });
 #ifdef Q_OS_MACOS
-    connect(MacHelper(), &MacHelperClient::tunReady, this, &MainWindow::macOnTunReady);
-    connect(MacHelper(), &MacHelperClient::tunStopped, this, &MainWindow::macOnTunStopped);
-    connect(MacHelper(), &MacHelperClient::helperLog, this, [=](const QString &line) { MW_show_log("[Tun] " + line); });
-    connect(MacHelper(), &MacHelperClient::connectionLost, this, &MainWindow::macOnHelperLost);
+    connect(MacHelperSvc(), &MacHelperService::tunReady, this, &MainWindow::macOnTunReady);
+    connect(MacHelperSvc(), &MacHelperService::tunStopped, this, &MainWindow::macOnTunStopped);
+    connect(MacHelperSvc(), &MacHelperService::helperLog, this, [=](const QString &line) { MW_show_log("[Tun] " + line); });
+    connect(MacHelperSvc(), &MacHelperService::connectionLost, this, &MainWindow::macOnHelperLost);
 #endif
     connect(ui->checkBox_SystemProxy, &QCheckBox::clicked, this, [=](bool checked) { proxor_set_spmode_system_proxy(checked); });
     connect(ui->menu_spmode, &QMenu::aboutToShow, this, [=]() {
@@ -2105,15 +2106,27 @@ void MainWindow::proxor_set_spmode_system_proxy(bool enable, bool save) {
     if (enable != ProxorGui::dataStore->spmode_system_proxy) {
 #ifdef Q_OS_MACOS
         if (enable) {
-            const auto macState = MacHelper()->state(1000);
-            const auto macAction = DecideMacHelperEnable(macState);
-            if (macAction != MacHelperEnableAction::Proceed) {
-                if (mac_spmode_restoring) { // startup restore: never prompt
-                    MW_show_log(tr("System Proxy is remembered, but the Proxor service is not available; leaving it off. Turn on System Proxy to install the service."));
+            if (!MacHelperSvc()->isConnected()) {
+                // Never wait for the helper on the UI thread: probe asynchronously and re-enter once when it answers.
+                const bool restoring = mac_spmode_restoring;
+                MacHelperSvc()->probe(this, 1000, [this, save, restoring](const MacHelperProbe &, MacHelperState st) {
+                    if (st == MacHelperState::Ready && MacHelperSvc()->isConnected()) {
+                        const bool before = mac_spmode_restoring;
+                        mac_spmode_restoring = restoring;
+                        proxor_set_spmode_system_proxy(true, save);
+                        mac_spmode_restoring = before;
+                        return;
+                    }
+                    auto macAction = DecideMacHelperEnable(st);
+                    if (macAction == MacHelperEnableAction::Proceed) macAction = MacHelperEnableAction::AskReinstall; // Ready but the connection dropped again
+                    if (restoring) { // startup restore: never prompt
+                        MW_show_log(tr("System Proxy is remembered, but the Proxor service is not available; leaving it off. Turn on System Proxy to install the service."));
+                        refresh_status();
+                        return;
+                    }
+                    macInstallHelperThen(tr("System Proxy"), macAction, [this] { proxor_set_spmode_system_proxy(true); });
                     refresh_status();
-                    return;
-                }
-                macInstallHelperThen(tr("System Proxy"), macAction, [this] { proxor_set_spmode_system_proxy(true); });
+                });
                 refresh_status();
                 return;
             }
@@ -2121,17 +2134,17 @@ void MainWindow::proxor_set_spmode_system_proxy(bool enable, bool save) {
                 // No profile runs: never point the Mac at a dead port. Applied by proxor_start.
                 mac_sysproxy_parked = true;
                 MW_show_log(tr("System Proxy is on; it takes effect when a profile starts."));
-            } else if (!macApplySystemProxy(true)) {
-                refresh_status();
-                return;
             } else {
+                // The switch shows on optimistically; macApplySystemProxy reverts it if the helper reports a failure.
                 mac_sysproxy_parked = false;
+                macApplySystemProxy(true, save);
             }
         } else {
             mac_sysproxy_parked = false;
-            if (MacHelper()->isConnected() || MacHelper()->state(1000) == MacHelperState::Ready) {
-                const auto r = MacHelper()->sysproxyRestore(20000);
-                if (!r.ok) MW_show_log(tr("[Warning] System Proxy restore: %1").arg(r.error));
+            if (MacHelperSvc()->isConnected() || MacHelperSvc()->lastState() == MacHelperState::Ready) {
+                MacHelperSvc()->sysproxyRestore(this, 20000, [this](const MacHelperService::Reply &r) {
+                    if (!r.ok) MW_show_log(tr("[Warning] System Proxy restore: %1").arg(r.error));
+                });
             }
         }
     }
@@ -2269,22 +2282,36 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
                 }
             } else {
 #ifdef Q_OS_MACOS
-                const auto macState = MacHelper()->state(1000);
-                const auto macAction = DecideMacHelperEnable(macState);
-                if (macAction != MacHelperEnableAction::Proceed) {
-                    if (startup_tun_pending) { // should be impossible (startup gated), but never deadlock
-                        startup_tun_pending = false;
-                        startup_tun_authorized = false;
-                        MW_show_log(DecideMacTunStartup(true, macState).logLine);
-                        if (!ProxorGui::dataStore->prepare_exit) resumeDeferredStartupProfile();
-                        if (startup_network_work) {
-                            auto w = std::move(startup_network_work);
-                            w();
+                if (!MacHelperSvc()->isConnected()) {
+                    // Never wait for the helper on the UI thread: probe asynchronously and re-enter once when it answers.
+                    // The check box stays off meanwhile (refresh_status via the FAILED return).
+                    const bool restoring = mac_spmode_restoring;
+                    MacHelperSvc()->probe(this, 1000, [this, save, restoring](const MacHelperProbe &, MacHelperState st) {
+                        if (st == MacHelperState::Ready && MacHelperSvc()->isConnected()) {
+                            const bool before = mac_spmode_restoring;
+                            mac_spmode_restoring = restoring;
+                            proxor_set_spmode_vpn(true, save);
+                            mac_spmode_restoring = before;
+                            return;
                         }
-                        proxor_set_spmode_FAILED
-                    }
-                    macInstallHelperThen(tr("Tun Mode"), macAction, [this] { proxor_set_spmode_vpn(true); });
-                    proxor_set_spmode_FAILED // the check box stays off until the service is installed
+                        auto macAction = DecideMacHelperEnable(st);
+                        if (macAction == MacHelperEnableAction::Proceed) macAction = MacHelperEnableAction::AskReinstall; // Ready but the connection dropped again
+                        if (startup_tun_pending) { // should be impossible (startup gated), but never deadlock
+                            startup_tun_pending = false;
+                            startup_tun_authorized = false;
+                            MW_show_log(DecideMacTunStartup(true, st).logLine);
+                            if (!ProxorGui::dataStore->prepare_exit) resumeDeferredStartupProfile();
+                            if (startup_network_work) {
+                                auto w = std::move(startup_network_work);
+                                w();
+                            }
+                            refresh_status();
+                            return;
+                        }
+                        macInstallHelperThen(tr("Tun Mode"), macAction, [this] { proxor_set_spmode_vpn(true); });
+                        refresh_status(); // the check box stays off until the service is installed
+                    });
+                    proxor_set_spmode_FAILED
                 }
 #endif
 #ifdef Q_OS_LINUX
@@ -3658,33 +3685,34 @@ bool MainWindow::StartVPNProcess() {
         QFile f(configPath);
         f.open(QIODevice::ReadOnly);
         const auto config = f.readAll();
-        const auto reply = MacHelper()->tunStart(config, ProxorGui::dataStore->inbound_socks_port, 10000);
-        if (!reply.ok) {
+        vpn_pid = 1; // marker: Tun requested from the helper (set before the async call so a second start is a no-op)
+        MacHelperSvc()->tunStart(this, config, ProxorGui::dataStore->inbound_socks_port, 10000, [this](const MacHelperService::Reply &reply) {
+            if (!reply.ok) {
+                vpn_pid = 0;
+                if (startup_tun_pending) {
+                    macTunFailed(reply.error);
+                    return;
+                }
+                MessageBoxWarning(software_name, MacTunFailureText(reply.error));
+                // Manual Tun after a profile is already up (proxor_start), or the switch was shown on optimistically.
+                if (ProxorGui::dataStore->spmode_vpn) proxor_set_spmode_vpn(false);
+                return;
+            }
             if (startup_tun_pending) {
-                macTunFailed(reply.error);
-                return false;
+                authorizeStartupTun(); // resumes the deferred profile so the SOCKS port the helper waits for comes up
+                if (!mac_tun_ready_timer) {
+                    mac_tun_ready_timer = new QTimer(this);
+                    mac_tun_ready_timer->setSingleShot(true);
+                    connect(mac_tun_ready_timer, &QTimer::timeout, this, [this] {
+                        if (startup_tun_pending) {
+                            MacHelperSvc()->tunStop(nullptr, 5000, {});
+                            macTunFailed(tr("the Tun interface did not come up within 45 seconds"));
+                        }
+                    });
+                }
+                mac_tun_ready_timer->start(45000);
             }
-            MessageBoxWarning(software_name, MacTunFailureText(reply.error));
-            // Manual Tun after a profile is already up (proxor_start): turn the mode off again. When called
-            // from proxor_set_spmode_vpn(true) itself the FAILED return already leaves it off.
-            if (ProxorGui::dataStore->spmode_vpn) runOnUiThread([=] { proxor_set_spmode_vpn(false); });
-            return false;
-        }
-        vpn_pid = 1; // marker: Tun owned by the helper
-        if (startup_tun_pending) {
-            authorizeStartupTun(); // resumes the deferred profile so the SOCKS port the helper waits for comes up
-            if (!mac_tun_ready_timer) {
-                mac_tun_ready_timer = new QTimer(this);
-                mac_tun_ready_timer->setSingleShot(true);
-                connect(mac_tun_ready_timer, &QTimer::timeout, this, [this] {
-                    if (startup_tun_pending) {
-                        MacHelper()->tunStop();
-                        macTunFailed(tr("the Tun interface did not come up within 45 seconds"));
-                    }
-                });
-            }
-            mac_tun_ready_timer->start(45000);
-        }
+        });
         MW_show_log(tr("Tun requested from the Proxor service; waiting for the interface."));
         return true;
     }
@@ -3827,34 +3855,45 @@ void MainWindow::macOnHelperLost() {
     }
 }
 
-bool MainWindow::macApplySystemProxy(bool interactive) {
-    const auto r = MacHelper()->sysproxyApply(ProxorGui::dataStore->inbound_socks_port, MacDefaultProxyBypass(), 20000);
-    if (!r.ok) {
-        if (interactive) {
-            MessageBoxWarning(software_name, tr("System Proxy could not be configured: %1").arg(r.error));
-        } else {
-            MW_show_log(tr("[Warning] System Proxy could not be re-applied: %1").arg(r.error));
+void MainWindow::macApplySystemProxy(bool interactive, bool saved) {
+    MacHelperSvc()->sysproxyApply(this, ProxorGui::dataStore->inbound_socks_port, MacDefaultProxyBypass(), 20000,
+                                  [this, interactive, saved](const MacHelperService::Reply &r) {
+        if (!r.ok) {
+            if (interactive) {
+                MessageBoxWarning(software_name, tr("System Proxy could not be configured: %1").arg(r.error));
+                // The switch was shown on optimistically: revert it (unless the user already turned it off).
+                if (ProxorGui::dataStore->spmode_system_proxy) {
+                    ProxorGui::dataStore->spmode_system_proxy = false;
+                    if (saved) {
+                        ProxorGui::dataStore->remember_spmode.removeAll("system_proxy");
+                        ProxorGui::dataStore->Save();
+                    }
+                    refresh_status();
+                }
+            } else {
+                MW_show_log(tr("[Warning] System Proxy could not be re-applied: %1").arg(r.error));
+            }
+            return;
         }
-        return false;
-    }
-    for (const auto &f: r.body.value("failed").toArray()) {
-        MW_show_log(tr("[Warning] System Proxy: %1").arg(f.toString()));
-    }
-    QStringList applied;
-    for (const auto &a: r.body.value("applied").toArray()) applied << a.toString();
-    MW_show_log(tr("System Proxy set on: %1").arg(applied.join(", ")));
-    return true;
+        for (const auto &f: r.body.value("failed").toArray()) {
+            MW_show_log(tr("[Warning] System Proxy: %1").arg(f.toString()));
+        }
+        QStringList applied;
+        for (const auto &a: r.body.value("applied").toArray()) applied << a.toString();
+        MW_show_log(tr("System Proxy set on: %1").arg(applied.join(", ")));
+    });
 }
 
 void MainWindow::macParkSystemProxy() {
     mac_sysproxy_parked = true;
-    if (MacHelper()->isConnected() || MacHelper()->state(1000) == MacHelperState::Ready) {
-        const auto r = MacHelper()->sysproxyRestore(20000);
-        if (r.ok) {
-            MW_show_log(tr("System Proxy paused: your previous network proxy settings are back while no profile is running."));
-        } else {
-            MW_show_log(tr("[Warning] System Proxy restore: %1").arg(r.error));
-        }
+    if (MacHelperSvc()->isConnected() || MacHelperSvc()->lastState() == MacHelperState::Ready) {
+        MacHelperSvc()->sysproxyRestore(this, 20000, [this](const MacHelperService::Reply &r) {
+            if (r.ok) {
+                MW_show_log(tr("System Proxy paused: your previous network proxy settings are back while no profile is running."));
+            } else {
+                MW_show_log(tr("[Warning] System Proxy restore: %1").arg(r.error));
+            }
+        });
     }
 }
 #endif
@@ -3893,9 +3932,10 @@ void MainWindow::failStartupTunAuthorization() {
 bool MainWindow::StopVPNProcess(bool unconditional) {
 #ifdef Q_OS_MACOS
     {
-        if (unconditional || vpn_pid != 0 || MacHelper()->isConnected()) {
-            const auto r = MacHelper()->tunStop(5000);
-            if (!r.ok && r.error != "timeout" && MacHelper()->isConnected()) MW_show_log(tr("[Warning] Tun stop: %1").arg(r.error));
+        if (unconditional || vpn_pid != 0 || MacHelperSvc()->isConnected()) {
+            MacHelperSvc()->tunStop(this, 5000, [this](const MacHelperService::Reply &r) {
+                if (!r.ok && r.error != "timeout" && MacHelperSvc()->isConnected()) MW_show_log(tr("[Warning] Tun stop: %1").arg(r.error));
+            });
         }
         vpn_pid = 0;
         if (mac_tun_ready_timer) mac_tun_ready_timer->stop();
