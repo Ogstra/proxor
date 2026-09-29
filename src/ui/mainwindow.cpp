@@ -2103,6 +2103,39 @@ void MainWindow::proxor_set_spmode_system_proxy(bool enable, bool save) {
         }
     }
     if (enable != ProxorGui::dataStore->spmode_system_proxy) {
+#ifdef Q_OS_MACOS
+        if (enable) {
+            const auto macState = MacHelper()->state(1000);
+            const auto macAction = DecideMacHelperEnable(macState);
+            if (macAction != MacHelperEnableAction::Proceed) {
+                if (mac_spmode_restoring) { // startup restore: never prompt
+                    MW_show_log(tr("System Proxy is remembered, but the Proxor service is not available; leaving it off. Turn on System Proxy to install the service."));
+                    refresh_status();
+                    return;
+                }
+                macInstallHelperThen(tr("System Proxy"), macAction, [this] { proxor_set_spmode_system_proxy(true); });
+                refresh_status();
+                return;
+            }
+            if (ProxorGui::dataStore->started_id < 0) {
+                // No profile runs: never point the Mac at a dead port. Applied by proxor_start.
+                mac_sysproxy_parked = true;
+                MW_show_log(tr("System Proxy is on; it takes effect when a profile starts."));
+            } else if (!macApplySystemProxy(true)) {
+                refresh_status();
+                return;
+            } else {
+                mac_sysproxy_parked = false;
+            }
+        } else {
+            mac_sysproxy_parked = false;
+            if (MacHelper()->isConnected() || MacHelper()->state(1000) == MacHelperState::Ready) {
+                const auto r = MacHelper()->sysproxyRestore(20000);
+                if (!r.ok) MW_show_log(tr("[Warning] System Proxy restore: %1").arg(r.error));
+            }
+        }
+    }
+#else
         if (enable) {
             auto socks_port = ProxorGui::dataStore->inbound_socks_port;
             auto http_port = ProxorGui::dataStore->inbound_socks_port;
@@ -2122,6 +2155,7 @@ void MainWindow::proxor_set_spmode_system_proxy(bool enable, bool save) {
             ClearSystemProxy();
         }
     }
+#endif
 
     if (save) {
         ProxorGui::dataStore->remember_spmode.removeAll("system_proxy");
@@ -3785,6 +3819,43 @@ void MainWindow::macOnTunStopped(const QString &reason) {
 
 void MainWindow::macOnHelperLost() {
     if (vpn_pid != 0 || startup_tun_pending) macOnTunStopped(tr("the Proxor service stopped"));
+    if (ProxorGui::dataStore->spmode_system_proxy) {
+        ProxorGui::dataStore->spmode_system_proxy = false;
+        mac_sysproxy_parked = false;
+        refresh_status();
+        MW_show_log(tr("System Proxy turned off: the Proxor service stopped and restored your previous proxy settings."));
+    }
+}
+
+bool MainWindow::macApplySystemProxy(bool interactive) {
+    const auto r = MacHelper()->sysproxyApply(ProxorGui::dataStore->inbound_socks_port, MacDefaultProxyBypass(), 20000);
+    if (!r.ok) {
+        if (interactive) {
+            MessageBoxWarning(software_name, tr("System Proxy could not be configured: %1").arg(r.error));
+        } else {
+            MW_show_log(tr("[Warning] System Proxy could not be re-applied: %1").arg(r.error));
+        }
+        return false;
+    }
+    for (const auto &f: r.body.value("failed").toArray()) {
+        MW_show_log(tr("[Warning] System Proxy: %1").arg(f.toString()));
+    }
+    QStringList applied;
+    for (const auto &a: r.body.value("applied").toArray()) applied << a.toString();
+    MW_show_log(tr("System Proxy set on: %1").arg(applied.join(", ")));
+    return true;
+}
+
+void MainWindow::macParkSystemProxy() {
+    mac_sysproxy_parked = true;
+    if (MacHelper()->isConnected() || MacHelper()->state(1000) == MacHelperState::Ready) {
+        const auto r = MacHelper()->sysproxyRestore(20000);
+        if (r.ok) {
+            MW_show_log(tr("System Proxy paused: your previous network proxy settings are back while no profile is running."));
+        } else {
+            MW_show_log(tr("[Warning] System Proxy restore: %1").arg(r.error));
+        }
+    }
 }
 #endif
 
