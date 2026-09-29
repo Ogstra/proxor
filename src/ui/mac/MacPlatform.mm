@@ -161,14 +161,19 @@ void AllowQuit() {
     g_allowQuit = true;
 }
 
-void PopupMenu(QMenu *menu, QWidget *anchor) {
+void PopupMenuAt(QMenu *menu, QWidget *anchor, const QPoint &posInAnchor) {
     if (!menu || !anchor || !anchor->window()) return;
     NSMenu *nsMenu = menu->toNSMenu();
     NSView *view = reinterpret_cast<NSView *>(anchor->window()->winId());
     if (!nsMenu || !view) return;
     // QNSView is flipped, so view coordinates run top-down like Qt's.
-    const QPoint p = anchor->mapTo(anchor->window(), QPoint(0, anchor->height() + 2));
+    const QPoint p = anchor->mapTo(anchor->window(), posInAnchor);
     [nsMenu popUpMenuPositioningItem:nil atLocation:NSMakePoint(p.x(), p.y()) inView:view];
+}
+
+void PopupMenu(QMenu *menu, QWidget *anchor) {
+    if (!anchor) return;
+    PopupMenuAt(menu, anchor, QPoint(0, anchor->height() + 2));
 }
 
 }

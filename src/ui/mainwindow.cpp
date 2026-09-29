@@ -2993,7 +2993,11 @@ void MainWindow::on_menu_resolve_domain_triggered() {
 }
 
 void MainWindow::on_proxyListTable_customContextMenuRequested(const QPoint &pos) {
+#ifdef Q_OS_MACOS
+    ProxorMac::PopupMenuAt(ui->menu_server, ui->proxyListTable->viewport(), pos); // native NSMenu
+#else
     ui->menu_server->popup(ui->proxyListTable->viewport()->mapToGlobal(pos)); // 弹出菜单
+#endif
 }
 
 QList<std::shared_ptr<ProxorGui::ProxyEntity>> MainWindow::get_now_selected_list() {
@@ -3326,7 +3330,11 @@ void MainWindow::on_masterLogBrowser_customContextMenuRequested(const QPoint &po
     });
     menu->addAction(action_clear);
 
+#ifdef Q_OS_MACOS
+    ProxorMac::PopupMenuAt(menu, ui->masterLogBrowser->viewport(), pos); // native NSMenu
+#else
     menu->exec(ui->masterLogBrowser->viewport()->mapToGlobal(pos)); // 弹出菜单
+#endif
 }
 
 // eventFilter

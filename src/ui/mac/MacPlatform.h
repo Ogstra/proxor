@@ -1,7 +1,7 @@
 // src/ui/mac/MacPlatform.h — macOS-only helpers. Include only under #ifdef Q_OS_MACOS.
 #pragma once
 #include <functional>
-class QIcon; class QMenu; class QObject; class QString; class QWidget;
+class QIcon; class QMenu; class QObject; class QPoint; class QString; class QWidget;
 namespace ProxorMac {
 // App-owned NSStatusItem, used on macOS instead of QSystemTrayIcon's status item.
 // Qt 6.11's QCocoaSystemTrayIcon::emitActivated() reads NSApp.currentEvent.clickCount
@@ -41,4 +41,6 @@ void AllowQuit();
 // when it is dismissed. Replaces QMenu::popup for toolbar buttons so the menu looks and behaves
 // like the menu-bar menus (rounded, shortcuts, submenu arrows).
 void PopupMenu(QMenu *menu, QWidget *anchor);
+// Same, at `posInAnchor` (anchor coordinates), for context menus.
+void PopupMenuAt(QMenu *menu, QWidget *anchor, const QPoint &posInAnchor);
 }
