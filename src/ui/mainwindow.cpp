@@ -3950,7 +3950,7 @@ void MainWindow::macApplySystemProxy(bool interactive, bool saved) {
 }
 
 void MainWindow::macPauseModes(bool systemProxy, bool tun) {
-    // spmode_vpn, spmode_system_proxy and remember_spmode are deliberately untouched: both switches stay on and remembered.
+    // Only the helper state changes here: both switches stay checked and remembered.
     if (systemProxy && (MacHelperSvc()->isConnected() || MacHelperSvc()->lastState() == MacHelperState::Ready)) {
         MacHelperSvc()->sysproxyRestore(this, 20000, [this](const MacHelperService::Reply &r) {
             if (r.ok) {

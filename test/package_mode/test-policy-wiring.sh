@@ -37,9 +37,28 @@ fi
 # macOS System Proxy through the Proxor service (phase 50): toggle, restore on user stop, re-apply on start
 grep -q 'MacHelperSvc()->sysproxyApply' "$repo_root/src/ui/mainwindow.cpp"
 grep -q 'MacHelperSvc()->sysproxyRestore' "$repo_root/src/ui/mainwindow.cpp"
-grep -q 'macParkSystemProxy' "$repo_root/src/ui/mainwindow_grpc.cpp"
-grep -q 'macApplySystemProxy' "$repo_root/src/ui/mainwindow_grpc.cpp"
-grep -q '!sem && ProxorGui::dataStore->spmode_system_proxy && !ProxorGui::dataStore->prepare_exit' "$repo_root/src/ui/mainwindow_grpc.cpp"
+# Pause/resume of System Proxy and Tun on a user stop goes through MacModeCoordinator (grace period, no flap).
+grep -q 'mac_modes->profileStopping(sem, ProxorGui::dataStore->prepare_exit)' "$repo_root/src/ui/mainwindow_grpc.cpp"
+grep -q 'mac_modes->profileStopped()' "$repo_root/src/ui/mainwindow_grpc.cpp"
+if ! awk '/^void MainWindow::proxor_stop/,/^}/' "$repo_root/src/ui/mainwindow_grpc.cpp" \
+    | awk '/mu_stopping.unlock\(\)/{u=NR} /mac_modes->profileStopped\(\)/{p=NR} END{exit !(u && p && u < p)}'; then
+  echo "test-policy-wiring.sh: profileStopped must run after the stop stage, or a slow stop drops the pause" >&2
+  exit 1
+fi
+grep -q 'mac_modes->profileStarting()' "$repo_root/src/ui/mainwindow_grpc.cpp"
+grep -q 'mac_modes->profileStarted()' "$repo_root/src/ui/mainwindow_grpc.cpp"
+grep -q 'mac_modes->profileStartFailed()' "$repo_root/src/ui/mainwindow_grpc.cpp"
+grep -q 'macPauseModes' "$repo_root/src/ui/mainwindow.cpp"
+grep -q 'macResumeModes' "$repo_root/src/ui/mainwindow.cpp"
+grep -q 'MacHelperSvc()->tunStop' "$repo_root/src/ui/mainwindow.cpp"
+grep -q 'new MacModeCoordinator' "$repo_root/src/ui/mainwindow.cpp"
+grep -q 'src/sys/macos/MacModeCoordinator.cpp' "$repo_root/cmake/macos/macos.cmake"
+grep -q 'mac_mode_coordinator_test' "$repo_root/test/package_mode/CMakeLists.txt"
+# The pause keeps Tun Mode checked and remembered: it must not touch remember_spmode or switch Tun off.
+if awk '/^void MainWindow::macPauseModes/,/^}/' "$repo_root/src/ui/mainwindow.cpp" | grep -qE 'remember_spmode|proxor_set_spmode_vpn\(false'; then
+  echo "test-policy-wiring.sh: macPauseModes must keep Tun Mode checked and remembered" >&2
+  exit 1
+fi
 # The GUI never waits for the helper: async facade call sites, async startup probe, bounded exit close.
 grep -q 'MacHelperSvc()->probe' "$repo_root/src/ui/mainwindow.cpp"
 grep -q 'macStartupProbed' "$repo_root/src/ui/mainwindow.cpp"
