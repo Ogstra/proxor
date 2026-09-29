@@ -450,14 +450,14 @@ private slots:
                                                 {QStringLiteral("/A B/it's \"x\".sh"), QStringLiteral("501")});
         // Shell layer: '/bin/sh' '/A B/it'"'"'s "x".sh' '501'; AppleScript layer escapes every " as \".
         const QString expected = QStringLiteral(
-            R"(do shell script "'/bin/sh' '/A B/it'\"'\"'s \"x\".sh' '501'" with administrator privileges)");
+            "do shell script \"'/bin/sh' '/A B/it'\\\"'\\\"'s \\\"x\\\".sh' '501'\" with administrator privileges");
         QCOMPARE(got, expected);
     }
 
     void adminAppleScriptEscapesBackslashBeforeQuote() {
         const QString got = MacAdminAppleScript(QStringLiteral("/bin/sh"), {QStringLiteral("a\\b\"c")});
         const QString expected = QStringLiteral(
-            R"(do shell script "'/bin/sh' 'a\\b\"c'" with administrator privileges)");
+            "do shell script \"'/bin/sh' 'a\\\\b\\\"c'\" with administrator privileges");
         QCOMPARE(got, expected);
     }
 
