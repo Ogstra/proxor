@@ -41,3 +41,13 @@ target_link_libraries(dialog_update_available_test PRIVATE
 add_test(NAME dialog_update_available_test COMMAND dialog_update_available_test)
 set_tests_properties(dialog_update_available_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# Pure macOS helper lifecycle policy (Qt Core only, no macOS APIs), so it is compiled and run
+# on every CI runner even though production only links it on APPLE.
+add_executable(mac_helper_policy_test
+    mac_helper_policy_test.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos/MacHelperPolicy.cpp)
+target_include_directories(mac_helper_policy_test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos)
+target_link_libraries(mac_helper_policy_test PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME mac_helper_policy_test COMMAND mac_helper_policy_test)
