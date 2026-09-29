@@ -42,6 +42,10 @@
 #include <cstdio>
 #endif
 
+#ifdef Q_OS_MACOS
+#include "ui/mac/MacPlatform.h"
+#endif
+
 #include <QClipboard>
 #include <QApplication>
 #include <QAbstractItemView>
@@ -572,6 +576,42 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     attachMenuOnClick(ui->toolButton_preferences, ui->menu_preferences);
     attachMenuOnClick(ui->toolButton_server, ui->menu_server);
     ui->menubar->setVisible(false);
+#ifdef Q_OS_MACOS
+    // QMenuBar::setVisible(false) does not remove a native menu bar, so menu_program /
+    // menu_preferences / menu_server stay in the macOS global menu bar. Qt's
+    // TextHeuristicRole would then move any action whose caption starts with
+    // About/Settings/Preferences/Quit/etc. into the application menu (Qt 6.11
+    // qcocoamenuitem.mm detectMenuRole), emptying Exit / Settings / About Proxor out of
+    // Proxor's own menus (and the mirrored tray menu built below, same QAction objects).
+    // NoRole keeps every one of these actions exactly where the .ui put them.
+    {
+        std::function<void(QAction *)> forceNoRole = [&](QAction *action) {
+            action->setMenuRole(QAction::NoRole);
+            if (auto *sub = action->menu()) {
+                for (auto *subAction : sub->actions()) forceNoRole(subAction);
+            }
+        };
+        for (auto *topMenu : {ui->menu_program, ui->menu_preferences, ui->menu_server}) {
+            for (auto *action : topMenu->actions()) forceNoRole(action);
+        }
+    }
+    // Mac convention: a "Proxor" application-menu entry for Settings... (Cmd+,) and About
+    // Proxor, wired to the same slots as the .ui actions above. These are separate QActions
+    // that exist only here, so menu_basic_settings/menu_about stay NoRole and visible in
+    // menu_preferences/menu_program. No QuitRole action is added here: Qt's default
+    // "Quit Proxor" item (Cmd+Q) is handled by the spontaneous-Quit interceptor installed
+    // further below, which runs Proxor's real exit path.
+    {
+        auto *macAppRoleMenu = ui->menubar->addMenu(QStringLiteral("Proxor"));
+        auto *macSettingsAction = macAppRoleMenu->addAction(tr("Settings…"));
+        macSettingsAction->setMenuRole(QAction::PreferencesRole);
+        macSettingsAction->setShortcut(QKeySequence::Preferences);
+        connect(macSettingsAction, &QAction::triggered, this, &MainWindow::on_menu_basic_settings_triggered);
+        auto *macAboutAction = macAppRoleMenu->addAction(tr("About Proxor"));
+        macAboutAction->setMenuRole(QAction::AboutRole);
+        connect(macAboutAction, &QAction::triggered, this, [this] { ui->menu_about->trigger(); });
+    }
+#endif
     auto applyToolbarAutoRaise = [this](const QString &themeName) {
         const bool isSystem = (themeManager->NormalizeTheme(themeName) == QStringLiteral("System"));
         const QList<QToolButton *> btns = {
@@ -875,9 +915,41 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     // Setup Tray
     tray = new QSystemTrayIcon(this); // 初始化托盘对象tray
+#ifdef Q_OS_MACOS
+    // Never call tray->setContextMenu/setIcon/show() on macOS: QSystemTrayIcon::setContextMenu
+    // is exactly what crashes (see MacPlatform.mm's header comment and tray-crash.log). `tray`
+    // stays around only so actionShow_window and the hotkey below can keep emitting
+    // tray->activated(Trigger) into the same lambda; its own (never shown) status item is inert.
+    // Proxor owns a real NSStatusItem instead, with a dedicated tray menu (not shared with the
+    // toolbar's ui->menu_program, since one NSMenu cannot have two supermenus).
+    mac_tray_menu = new QMenu(this);
+    for (auto *action : ui->menu_program->actions()) {
+        if (action->isSeparator()) {
+            mac_tray_menu->addSeparator();
+            continue;
+        }
+        if (action == ui->menu_spmode->menuAction()) {
+            auto *spmodeMirror = mac_tray_menu->addMenu(action->text());
+            for (auto *spAction : ui->menu_spmode->actions()) {
+                spmodeMirror->addAction(spAction);
+            }
+            connect(spmodeMirror, &QMenu::aboutToShow, this, [this] { emit ui->menu_spmode->aboutToShow(); });
+            continue;
+        }
+        mac_tray_menu->addAction(action);
+    }
+    mac_status_item = new ProxorMac::StatusItem;
+    mac_status_item->setIcon(Icon::GetTrayIcon(Icon::NONE));
+    mac_status_item->setMenu(mac_tray_menu);
+    mac_status_item->setVisible(true);
+    ProxorMac::InstallQuitInterceptor(this, [this] {
+        if (!ProxorGui::dataStore->prepare_exit) on_menu_exit_triggered();
+    });
+#else
     tray->setIcon(Icon::GetTrayIcon(Icon::NONE));
     tray->setContextMenu(ui->menu_program); // 创建托盘菜单
     tray->show();                           // 让托盘图标显示在系统托盘上
+#endif
     connect(tray, &QSystemTrayIcon::activated, this, [=](QSystemTrayIcon::ActivationReason reason) {
         if (reason == QSystemTrayIcon::Trigger) {
             if (this->isVisible()) {
@@ -1161,7 +1233,11 @@ void MainWindow::run_subscription_ping_on_open(int attempts) {
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {
+#ifdef Q_OS_MACOS
+    if (mac_status_item != nullptr && mac_status_item->isVisible()) {
+#else
     if (tray->isVisible()) {
+#endif
         ui->proxyListTable->clearSelection();
         hide();          // 隐藏窗口
         event->ignore(); // 忽略事件
@@ -1888,6 +1964,12 @@ void MainWindow::on_menu_exit_triggered() {
     }
     QApplication::closeAllWindows();
     tray->hide();
+#ifdef Q_OS_MACOS
+    if (mac_status_item) mac_status_item->setVisible(false);
+    // QCoreApplication::quit() ends in -[NSApp terminate:], which sends another spontaneous
+    // QEvent::Quit; let it through now that the real exit path has finished.
+    ProxorMac::AllowQuit();
+#endif
     QCoreApplication::quit();
 }
 
@@ -2190,6 +2272,12 @@ void MainWindow::refresh_status(const QString &traffic_update) {
     if (tray != nullptr) {
         tray->setToolTip(make_title(true));
         if (icon_status_new != icon_status) tray->setIcon(Icon::GetTrayIcon(icon_status_new));
+#ifdef Q_OS_MACOS
+        if (mac_status_item) {
+            mac_status_item->setToolTip(make_title(true));
+            if (icon_status_new != icon_status) mac_status_item->setIcon(Icon::GetTrayIcon(icon_status_new));
+        }
+#endif
     }
 
     icon_status = icon_status_new;

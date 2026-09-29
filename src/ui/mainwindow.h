@@ -38,11 +38,20 @@ namespace ProxorGui_sys {
     class CoreProcess;
 }
 
+#ifdef Q_OS_MACOS
+namespace ProxorMac {
+    class StatusItem;
+}
+#endif
+
 QT_BEGIN_NAMESPACE
 namespace Ui {
     class MainWindow;
 }
 class QLabel;
+#ifdef Q_OS_MACOS
+class QMenu;
+#endif
 QT_END_NAMESPACE
 
 class MainWindow : public QMainWindow {
@@ -172,6 +181,10 @@ private slots:
 private:
     Ui::MainWindow *ui;
     QSystemTrayIcon *tray;
+#ifdef Q_OS_MACOS
+    ProxorMac::StatusItem *mac_status_item = nullptr;
+    QMenu *mac_tray_menu = nullptr;
+#endif
     QShortcut *shortcut_ctrl_f = new QShortcut(QKeySequence("Ctrl+F"), this);
     QShortcut *shortcut_ctrl_v = new QShortcut(QKeySequence("Ctrl+V"), this);
     QShortcut *shortcut_ctrl_a = new QShortcut(QKeySequence("Ctrl+A"), this);
