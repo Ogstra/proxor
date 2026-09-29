@@ -152,15 +152,20 @@ func (m *ProxyManager) Apply(port int, bypass []string) (applied []string, faile
 	}
 	snap.Applied = true
 	snap.Port = port
+	// Recorded before the first write (also on a re-apply) so a restore or a
+	// crash recovery compares against the list really on the services.
+	snap.AppliedBypass = append([]string(nil), bypass...)
 	if err := m.Store.Save(snap); err != nil {
 		return nil, failed, fmt.Errorf("persisting proxy snapshot: %w", err)
 	}
 	m.current = &snap
 
-	for _, svc := range snap.Services {
-		plan := ApplyPlan(Snapshot{Services: []ServiceSnapshot{svc}}, port, bypass)
-		if perr := m.runPlan(plan); perr != nil {
-			failed = append(failed, fmt.Sprintf("%s: %v", svc.Name, perr))
+	errs := m.applyServices(snap.Services, port, bypass)
+	var applyFailed bool
+	for i, svc := range snap.Services {
+		if errs[i] != nil {
+			applyFailed = true
+			failed = append(failed, fmt.Sprintf("%s: %v", svc.Name, errs[i]))
 			continue
 		}
 		applied = append(applied, svc.Name)
@@ -170,7 +175,7 @@ func (m *ProxyManager) Apply(port int, bypass []string) (applied []string, faile
 		err = errors.New("system proxy could not be applied to any network service")
 		if !wasApplied {
 			// Roll back whatever the failed attempts changed, then forget the snapshot.
-			m.restoreServices(snap.Services)
+			m.restoreServices(snap.Services, nil)
 			m.current = nil
 			if cerr := m.Store.Clear(); cerr != nil {
 				log.Printf("machelper: clearing proxy snapshot after rollback: %v", cerr)
@@ -178,7 +183,58 @@ func (m *ProxyManager) Apply(port int, bypass []string) (applied []string, faile
 		}
 		return nil, failed, err
 	}
+	if applyFailed {
+		// A service that failed part-way may hold a different bypass list than
+		// the one recorded: forget it so restore writes the recorded list back
+		// unconditionally.
+		snap.AppliedBypass = nil
+		m.current = &snap
+		if serr := m.Store.Save(snap); serr != nil {
+			log.Printf("machelper: updating proxy snapshot after partial apply: %v", serr)
+		}
+	}
 	return applied, failed, nil
+}
+
+// maxParallelServices bounds how many services are processed at once.
+const maxParallelServices = 8
+
+// forEachService runs fn(0..n-1), at most limit at a time, and waits for all.
+func forEachService(n, limit int, fn func(i int)) {
+	if limit < 1 {
+		limit = 1
+	}
+	sem := make(chan struct{}, limit)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			fn(i)
+		}(i)
+	}
+	wg.Wait()
+}
+
+// applyServices applies every service concurrently (the commands of one
+// service stay in order), then retries each failed service once, sequentially,
+// in service order. The result holds one error (or nil) per service.
+func (m *ProxyManager) applyServices(services []ServiceSnapshot, port int, bypass []string) []error {
+	one := func(svc ServiceSnapshot) error {
+		return m.runPlan(ApplyPlan(Snapshot{Services: []ServiceSnapshot{svc}}, port, bypass))
+	}
+	errs := make([]error, len(services))
+	forEachService(len(services), maxParallelServices, func(i int) {
+		errs[i] = one(services[i])
+	})
+	for i, svc := range services {
+		if errs[i] != nil {
+			errs[i] = one(svc)
+		}
+	}
+	return errs
 }
 
 // runPlan runs every argv, stopping at the first failure.
@@ -215,19 +271,27 @@ func (m *ProxyManager) capture() (Snapshot, []string, error) {
 		return Snapshot{}, nil, errors.New("no network service with a hardware device")
 	}
 
+	type result struct {
+		ss  ServiceSnapshot
+		err error
+	}
+	results := make([]result, len(eligible))
+	forEachService(len(eligible), maxParallelServices, func(i int) {
+		name := eligible[i].Name
+		if !safeServiceName(name) {
+			results[i].err = errors.New("unsafe service name")
+			return
+		}
+		results[i].ss, results[i].err = m.snapshotService(name)
+	})
 	var snap Snapshot
 	var failed []string
-	for _, svc := range eligible {
-		if !safeServiceName(svc.Name) {
-			failed = append(failed, fmt.Sprintf("%s: unsafe service name", svc.Name))
+	for i, r := range results {
+		if r.err != nil {
+			failed = append(failed, fmt.Sprintf("%s: %v", eligible[i].Name, r.err))
 			continue
 		}
-		ss, err := m.snapshotService(svc.Name)
-		if err != nil {
-			failed = append(failed, fmt.Sprintf("%s: %v", svc.Name, err))
-			continue
-		}
-		snap.Services = append(snap.Services, ss)
+		snap.Services = append(snap.Services, r.ss)
 	}
 	if len(snap.Services) == 0 {
 		return Snapshot{}, failed, errors.New("no network service could be read")
@@ -235,65 +299,73 @@ func (m *ProxyManager) capture() (Snapshot, []string, error) {
 	return snap, failed, nil
 }
 
+// snapshotService reads the six getters of one service concurrently (they are
+// read-only and independent). The first failing getter, in the fixed getter
+// order, is the reported error.
 func (m *ProxyManager) snapshotService(name string) (ServiceSnapshot, error) {
 	ss := ServiceSnapshot{Name: name}
-	proxies := []struct {
-		cmd string
-		dst *ProxyState
+	getters := []struct {
+		cmd   string
+		parse func(out string) error
 	}{
-		{"-getwebproxy", &ss.Web},
-		{"-getsecurewebproxy", &ss.Secure},
-		{"-getsocksfirewallproxy", &ss.Socks},
+		{"-getwebproxy", func(out string) (err error) { ss.Web, err = ParseProxyState(out); return }},
+		{"-getsecurewebproxy", func(out string) (err error) { ss.Secure, err = ParseProxyState(out); return }},
+		{"-getsocksfirewallproxy", func(out string) (err error) { ss.Socks, err = ParseProxyState(out); return }},
+		{"-getproxybypassdomains", func(out string) (err error) { ss.Bypass, err = ParseBypassDomains(out); return }},
+		{"-getautoproxyurl", func(out string) error {
+			auto, err := ParseAutoProxyURL(out)
+			ss.AutoURL, ss.AutoURLEnabled = auto.URL, auto.Enabled
+			return err
+		}},
+		{"-getproxyautodiscovery", func(out string) (err error) { ss.AutoDiscovery, err = ParseAutoDiscovery(out); return }},
 	}
-	for _, p := range proxies {
-		out, err := m.run(p.cmd, name)
+	errs := make([]error, len(getters))
+	var wg sync.WaitGroup
+	for i := range getters {
+		wg.Add(1)
+		go func(i int) { // each getter writes only its own ss fields
+			defer wg.Done()
+			out, err := m.run(getters[i].cmd, name)
+			if err == nil {
+				err = getters[i].parse(out)
+			}
+			errs[i] = err
+		}(i)
+	}
+	wg.Wait()
+	for i, err := range errs {
 		if err != nil {
-			return ss, fmt.Errorf("%s: %w", p.cmd, err)
+			return ss, fmt.Errorf("%s: %w", getters[i].cmd, err)
 		}
-		if *p.dst, err = ParseProxyState(out); err != nil {
-			return ss, fmt.Errorf("%s: %w", p.cmd, err)
-		}
-	}
-	out, err := m.run("-getproxybypassdomains", name)
-	if err != nil {
-		return ss, fmt.Errorf("-getproxybypassdomains: %w", err)
-	}
-	if ss.Bypass, err = ParseBypassDomains(out); err != nil {
-		return ss, fmt.Errorf("-getproxybypassdomains: %w", err)
-	}
-	out, err = m.run("-getautoproxyurl", name)
-	if err != nil {
-		return ss, fmt.Errorf("-getautoproxyurl: %w", err)
-	}
-	auto, err := ParseAutoProxyURL(out)
-	if err != nil {
-		return ss, fmt.Errorf("-getautoproxyurl: %w", err)
-	}
-	ss.AutoURL, ss.AutoURLEnabled = auto.URL, auto.Enabled
-	out, err = m.run("-getproxyautodiscovery", name)
-	if err != nil {
-		return ss, fmt.Errorf("-getproxyautodiscovery: %w", err)
-	}
-	if ss.AutoDiscovery, err = ParseAutoDiscovery(out); err != nil {
-		return ss, fmt.Errorf("-getproxyautodiscovery: %w", err)
 	}
 	return ss, nil
 }
 
 // restoreServices writes back every service's recorded state, best effort:
-// all commands of a service run even after one fails. It returns the
-// services that did not restore cleanly and the errors.
-func (m *ProxyManager) restoreServices(services []ServiceSnapshot) (remaining []ServiceSnapshot, errs []error) {
-	for _, svc := range services {
-		var svcErrs []error
-		for _, argv := range RestorePlan(Snapshot{Services: []ServiceSnapshot{svc}}) {
+// all commands of a service run even after one fails. Services run
+// concurrently (one service's commands stay in order); a service with any
+// error is retried once, sequentially, in service order. It returns the
+// services that did not restore cleanly and the errors, in service order.
+func (m *ProxyManager) restoreServices(services []ServiceSnapshot, appliedBypass []string) (remaining []ServiceSnapshot, errs []error) {
+	one := func(svc ServiceSnapshot) (svcErrs []error) {
+		for _, argv := range RestorePlan(Snapshot{Services: []ServiceSnapshot{svc}}, appliedBypass) {
 			if _, err := m.run(argv...); err != nil {
 				svcErrs = append(svcErrs, fmt.Errorf("%s: %s: %w", svc.Name, argv[0], err))
 			}
 		}
-		if len(svcErrs) > 0 {
+		return svcErrs
+	}
+	results := make([][]error, len(services))
+	forEachService(len(services), maxParallelServices, func(i int) {
+		results[i] = one(services[i])
+	})
+	for i, svc := range services {
+		if len(results[i]) > 0 {
+			results[i] = one(svc)
+		}
+		if len(results[i]) > 0 {
 			remaining = append(remaining, svc)
-			errs = append(errs, svcErrs...)
+			errs = append(errs, results[i]...)
 		}
 	}
 	return remaining, errs
@@ -327,7 +399,7 @@ func (m *ProxyManager) Restore() error {
 		return nil
 	}
 	snap := *m.current
-	remaining, errs := m.restoreServices(snap.Services)
+	remaining, errs := m.restoreServices(snap.Services, snap.AppliedBypass)
 	return m.finishRestore(snap, remaining, errs)
 }
 
@@ -355,6 +427,6 @@ func (m *ProxyManager) RecoverAtStart() error {
 		}
 		return nil
 	}
-	remaining, errs := m.restoreServices(snap.Services)
+	remaining, errs := m.restoreServices(snap.Services, snap.AppliedBypass)
 	return m.finishRestore(*snap, remaining, errs)
 }

@@ -156,16 +156,15 @@ func (n *simNet) Run(args ...string) (string, error) {
 	if n.svcInflight == nil {
 		n.svcInflight = map[string]int{}
 	}
-	if len(args) > 1 {
+	isWrite := len(args) > 1 && strings.HasPrefix(args[0], "-set")
+	if isWrite { // reads of one service run concurrently on purpose; writes must not
 		if n.svcInflight[svc]++; n.svcInflight[svc] > 1 {
 			n.overlap = append(n.overlap, svc)
 		}
-		if strings.HasPrefix(args[0], "-set") {
-			if n.writes == nil {
-				n.writes = map[string][][]string{}
-			}
-			n.writes[svc] = append(n.writes[svc], append([]string(nil), args...))
+		if n.writes == nil {
+			n.writes = map[string][][]string{}
 		}
+		n.writes[svc] = append(n.writes[svc], append([]string(nil), args...))
 	}
 	delay := n.delay
 	n.mu.Unlock()
@@ -177,7 +176,7 @@ func (n *simNet) Run(args ...string) (string, error) {
 	n.mu.Lock()
 	defer func() {
 		n.inflight--
-		if len(args) > 1 {
+		if isWrite {
 			n.svcInflight[svc]--
 		}
 		n.mu.Unlock()
@@ -1038,4 +1037,28 @@ func TestRestoreFailureRetriedSequentially(t *testing.T) {
 	if m.Applied() {
 		t.Fatal("fully restored")
 	}
+}
+
+func TestPartialApplyForgetsAppliedBypass(t *testing.T) {
+	n := newSimNet()
+	orig := n.clone()
+	n.fail = func(args []string) *simFailure {
+		if len(args) > 1 && args[0] == "-setsocksfirewallproxy" && args[1] == "Wi-Fi" {
+			return &simFailure{out: "** Error: nope\n", err: errors.New("exit status 1")}
+		}
+		return nil
+	}
+	m, store := newManager(t, n)
+	if _, failed, err := m.Apply(2080, nil); err != nil || len(failed) != 1 {
+		t.Fatalf("failed=%v err=%v", failed, err)
+	}
+	snap, _ := store.Load()
+	if snap == nil || snap.AppliedBypass != nil {
+		t.Fatalf("a partly failed apply must leave the applied bypass unknown: %+v", snap)
+	}
+	n.fail = nil
+	if err := m.Restore(); err != nil {
+		t.Fatal(err)
+	}
+	assertRestored(t, orig, n.clone())
 }

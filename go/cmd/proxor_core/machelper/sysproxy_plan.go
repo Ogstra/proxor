@@ -49,6 +49,11 @@ type Snapshot struct {
 	Applied  bool              `json:"applied"`
 	Port     int               `json:"port"`
 	Services []ServiceSnapshot `json:"services"`
+	// AppliedBypass is the bypass list Apply wrote to the services. Restore
+	// skips the bypass write when the recorded list is identical. nil (an
+	// old snapshot, or an apply that partly failed) means "unknown": the
+	// recorded list is always written back.
+	AppliedBypass []string `json:"appliedBypass,omitempty"`
 }
 
 // DefaultBypass is applied when the client sends no bypass list.
@@ -269,6 +274,8 @@ func onOff(b bool) string {
 
 // ApplyPlan returns the networksetup argv lists (without the binary) that
 // point every snapshotted service at 127.0.0.1:port with the bypass list.
+// -setwebproxy/-setsecurewebproxy/-setsocksfirewallproxy already turn the
+// proxy on, so no separate `-set*proxystate on` write is emitted.
 // PAC/WPAD are turned off only for services where they were on.
 func ApplyPlan(snap Snapshot, port int, bypass []string) [][]string {
 	p := strconv.Itoa(port)
@@ -278,9 +285,6 @@ func ApplyPlan(snap Snapshot, port int, bypass []string) [][]string {
 			[]string{"-setwebproxy", s.Name, "127.0.0.1", p},
 			[]string{"-setsecurewebproxy", s.Name, "127.0.0.1", p},
 			[]string{"-setsocksfirewallproxy", s.Name, "127.0.0.1", p},
-			[]string{"-setwebproxystate", s.Name, "on"},
-			[]string{"-setsecurewebproxystate", s.Name, "on"},
-			[]string{"-setsocksfirewallproxystate", s.Name, "on"},
 			append([]string{"-setproxybypassdomains", s.Name}, bypass...),
 		)
 		if s.AutoURLEnabled {
@@ -293,27 +297,47 @@ func ApplyPlan(snap Snapshot, port int, bypass []string) [][]string {
 	return plan
 }
 
-// RestorePlan returns the argv lists that write back exactly the recorded state.
-func RestorePlan(snap Snapshot) [][]string {
+// RestorePlan returns the argv lists that write back the recorded state, but
+// only what Apply changed: the three proxies (always), the bypass list (only
+// when it differs from appliedBypass; a nil appliedBypass means unknown and
+// always writes), the PAC URL and state (only when PAC was on) and WPAD (only
+// when it was on).
+func RestorePlan(snap Snapshot, appliedBypass []string) [][]string {
 	var plan [][]string
 	for _, s := range snap.Services {
 		plan = append(plan, restoreProxy(s.Name, "-setwebproxy", "-setwebproxystate", s.Web)...)
 		plan = append(plan, restoreProxy(s.Name, "-setsecurewebproxy", "-setsecurewebproxystate", s.Secure)...)
 		plan = append(plan, restoreProxy(s.Name, "-setsocksfirewallproxy", "-setsocksfirewallproxystate", s.Socks)...)
-		if len(s.Bypass) == 0 {
-			plan = append(plan, []string{"-setproxybypassdomains", s.Name, "Empty"})
-		} else {
-			plan = append(plan, append([]string{"-setproxybypassdomains", s.Name}, s.Bypass...))
+		if appliedBypass == nil || !equalStrings(s.Bypass, appliedBypass) {
+			if len(s.Bypass) == 0 {
+				plan = append(plan, []string{"-setproxybypassdomains", s.Name, "Empty"})
+			} else {
+				plan = append(plan, append([]string{"-setproxybypassdomains", s.Name}, s.Bypass...))
+			}
 		}
-		if s.AutoURL != "" {
-			plan = append(plan, []string{"-setautoproxyurl", s.Name, s.AutoURL})
+		if s.AutoURLEnabled {
+			if s.AutoURL != "" {
+				plan = append(plan, []string{"-setautoproxyurl", s.Name, s.AutoURL})
+			}
+			plan = append(plan, []string{"-setautoproxystate", s.Name, "on"})
 		}
-		plan = append(plan,
-			[]string{"-setautoproxystate", s.Name, onOff(s.AutoURLEnabled)},
-			[]string{"-setproxyautodiscovery", s.Name, onOff(s.AutoDiscovery)},
-		)
+		if s.AutoDiscovery {
+			plan = append(plan, []string{"-setproxyautodiscovery", s.Name, "on"})
+		}
 	}
 	return plan
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func restoreProxy(service, setCmd, stateCmd string, st ProxyState) [][]string {
