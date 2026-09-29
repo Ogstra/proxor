@@ -12,7 +12,7 @@ mkdir -p "$output"; cp "$source" "$manifest" "$output/"
 if [ "$phase" = prepare-source-release ]; then exit 0; fi
 [ "$phase" = prepare-final-assets ] || usage
 case "$public_url" in "https://github.com/Ogstra/proxor/releases/download/"*/"proxor-$version.tar.gz") ;; *) echo 'public source URL must be the attached release asset' >&2; exit 1;; esac
-for required in '*-windows64.zip' '*-winget-x64.zip' '*.AppImage' '*.deb' '*.rpm' '*.flatpak'; do find "$input" -type f -name "$required" -print -quit | grep -q . || { echo "missing $required" >&2; exit 1; }; done
+for required in '*-windows64.zip' '*-winget-x64.zip' '*-macos-arm64.zip' '*.AppImage' '*.deb' '*.rpm' '*.flatpak'; do find "$input" -type f -name "$required" -print -quit | grep -q . || { echo "missing $required" >&2; exit 1; }; done
 ! find "$input" -type f \( -iname '*.msi' -o -iname '*.dmg' \) -print -quit | grep -q .
 # Only what a user downloads and runs: debug symbols, debug packages and source RPMs
 # stay build artifacts, because a release list full of them hides the actual downloads.
