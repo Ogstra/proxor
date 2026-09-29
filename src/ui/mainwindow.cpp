@@ -659,30 +659,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             "  border-color: palette(shadow);"
             "}");
 #ifdef Q_OS_MACOS
-        // Mac toolbar look: QMacStyle draws a QToolButton outside a QToolBar as a boxed bevel
-        // whatever autoRaise says, so the four big toolbar buttons get a minimal flat
-        // hover-only skin instead of the Windows-tuned systemBtnSS. Translucent grays work
-        // in light and dark without a custom palette. Test Latency / Update Sub keep the
-        // native QMacStyle button bevel so they still read as buttons.
+        // QMacStyle draws a QToolButton outside a QToolBar as a boxed bevel, which gives the same
+        // boxed buttons as the other platforms in the Mac style. The Windows-tuned systemBtnSS
+        // would replace that native drawing, so every button keeps no style sheet here.
         (void) systemBtnSS;
-        static const QString macFlatBtnSS = QStringLiteral(
-            "QToolButton {"
-            "  background: transparent;"
-            "  border: none;"
-            "  border-radius: 6px;"
-            "  padding: 3px;"
-            "}"
-            "QToolButton:hover {"
-            "  background: rgba(127, 127, 127, 46);"
-            "}"
-            "QToolButton:pressed, QToolButton:open {"
-            "  background: rgba(127, 127, 127, 80);"
-            "}");
+        (void) isSystem;
         for (auto *btn : btns) {
-            const bool flat = isSystem && btn != ui->toolButton_url_test &&
-                              btn != ui->toolButton_update_subscription;
-            btn->setAutoRaise(flat);
-            btn->setStyleSheet(flat ? macFlatBtnSS : QString());
+            btn->setAutoRaise(false);
+            btn->setStyleSheet(QString());
         }
 #else
         for (auto *btn : btns) {
@@ -733,9 +717,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     }, this, 0);
 #ifdef Q_OS_MACOS
     {
-        // The four widgets now live in the QToolBar built by ProxorMac::PolishMainWindow (the two push
-        // buttons as real QPushButtons), where their native size hints must win under every theme.
-        // The Windows-tuned forced heights are therefore always reset on macOS.
+        // The Windows-tuned forced heights squeeze the native Mac bevels (the stacked buttons
+        // overlapped and the check boxes sat above their labels), so on macOS the native size
+        // hints win under every theme.
         auto applyStackedHeights = [this](const QString &) {
             for (QWidget *w : {static_cast<QWidget *>(ui->toolButton_url_test),
                                static_cast<QWidget *>(ui->toolButton_update_subscription),
@@ -841,13 +825,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     connect(themeManager, &ThemeManager::themeChanged, this, refreshTableTheme);
 #ifdef Q_OS_MACOS
     {
-        // System on macOS: native document-mode tab strips and native alternating rows without
-        // grid lines. Other themes get today's values back. Connected after refreshTableTheme,
-        // so it runs after that lambda resets the palettes on every themeChanged.
+        // System on macOS: native tab panes (same framed layout as the other platforms) and
+        // native alternating rows without grid lines. Other themes get today's values back.
+        // Connected after refreshTableTheme, so it runs after that lambda resets the palettes
+        // on every themeChanged.
         auto applyMacNativeLook = [this](const QString &themeName) {
             const bool isSystem = (themeManager->NormalizeTheme(themeName) == QStringLiteral("System"));
-            ui->tabWidget->setDocumentMode(isSystem);
-            ui->down_tab->setDocumentMode(isSystem);
+            ui->tabWidget->setDocumentMode(false);
+            ui->down_tab->setDocumentMode(false);
             ui->proxyListTable->setAlternatingRowColors(isSystem);
             ui->tableWidget_conn->setAlternatingRowColors(true);
             ui->tableWidget_conn->setShowGrid(!isSystem);

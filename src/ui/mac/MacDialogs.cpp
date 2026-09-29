@@ -59,174 +59,16 @@ const QString kScrollBarQss = QStringLiteral(
 
 constexpr auto kPolishedProp = "proxorMacPolished";
 
-QLayout *owningLayout(QLayout *root, QWidget *w) {
-    if (root == nullptr) return nullptr;
-    if (root->indexOf(w) >= 0) return root;
-    for (int i = 0; i < root->count(); ++i) {
-        if (auto *child = root->itemAt(i)->layout()) {
-            if (auto *hit = owningLayout(child, w)) return hit;
-        }
-    }
-    return nullptr;
-}
-
-QLayout *owningLayout(QWidget *w) {
-    for (QWidget *parent = w->parentWidget(); parent != nullptr; parent = parent->parentWidget()) {
-        if (parent->layout()) {
-            if (auto *hit = owningLayout(parent->layout(), w)) return hit;
-        }
-        if (qobject_cast<QDialog *>(parent) && parent->isWindow()) break;
-    }
-    return nullptr;
-}
-
-bool layoutHasFlexibleItem(QLayout *layout) {
-    for (int i = 0; i < layout->count(); ++i) {
-        auto *item = layout->itemAt(i);
-        if (item->spacerItem()) {
-            if (item->expandingDirections() & Qt::Horizontal) return true;
-            continue;
-        }
-        if (item->expandingDirections() & Qt::Horizontal) return true;
-    }
-    return false;
-}
-
-struct FormScope {
-    QList<QLabel *> labels;
-};
-
-// Collects the "label + field" rows below `layout`. Group boxes that sit side by side in one row
-// (e.g. Inbound | Custom Inbound) are separate scopes: they are too narrow to share a label column
-// with the full-width groups around them.
-void collectFormLabels(QLayout *layout, FormScope &cur, QList<FormScope> &done) {
-    if (layout == nullptr) return;
-    auto isRowLabel = [](QLayoutItem *item) {
-        auto *l = item ? qobject_cast<QLabel *>(item->widget()) : nullptr;
-        return (l && !l->isHidden() && !l->wordWrap() && !l->text().isEmpty()) ? l : nullptr;
-    };
-    if (auto *grid = qobject_cast<QGridLayout *>(layout)) {
-        for (int r = 0; r < grid->rowCount(); ++r) {
-            if (auto *l = isRowLabel(grid->itemAtPosition(r, 0))) {
-                if (grid->itemAtPosition(r, 1)) cur.labels << l;
-            }
-        }
-    } else if (auto *hbox = qobject_cast<QHBoxLayout *>(layout)) {
-        if (hbox->count() >= 2) {
-            if (auto *l = isRowLabel(hbox->itemAt(0))) cur.labels << l;
-        }
-    }
-    int sideBySide = 0;
-    if (qobject_cast<QHBoxLayout *>(layout)) {
-        for (int i = 0; i < layout->count(); ++i) {
-            if (qobject_cast<QGroupBox *>(layout->itemAt(i)->widget())) ++sideBySide;
-        }
-    }
-    for (int i = 0; i < layout->count(); ++i) {
-        auto *item = layout->itemAt(i);
-        if (auto *child = item->layout()) {
-            collectFormLabels(child, cur, done);
-        } else if (auto *w = item->widget()) {
-            if (!w->layout() || qobject_cast<QScrollArea *>(w)) continue;
-            if (sideBySide >= 2 && qobject_cast<QGroupBox *>(w)) {
-                FormScope own;
-                collectFormLabels(w->layout(), own, done);
-                done << own;
-            } else {
-                collectFormLabels(w->layout(), cur, done);
-            }
-        }
-    }
-}
-
-// Labels of every "label + field" row inside `root` get one common width and right alignment, so the
-// fields start at the same x (the macOS form convention). Idempotent.
-void alignFormColumns(QWidget *root) {
-    FormScope top;
-    QList<FormScope> scopes;
-    collectFormLabels(root->layout(), top, scopes);
-    scopes << top;
-    for (const auto &scope : scopes) {
-        if (scope.labels.isEmpty()) continue;
-        int common = 0;
-        for (auto *l : scope.labels) common = qMax(common, l->sizeHint().width());
-        common = qMin(common, 280);
-        for (auto *l : scope.labels) {
-            if (scope.labels.size() > 1 && l->sizeHint().width() <= common) l->setMinimumWidth(common);
-            l->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        }
-    }
-}
-
-// Rows that are laid out top-down should hug the top instead of spreading out over spare height.
-void addBottomStretch(QLayout *layout) {
-    auto *vbox = qobject_cast<QVBoxLayout *>(layout);
-    if (vbox == nullptr || vbox->property("proxorMacStretch").toBool()) return;
-    for (int i = 0; i < vbox->count(); ++i) {
-        if (vbox->itemAt(i)->expandingDirections() & Qt::Vertical) return;
-    }
-    vbox->setProperty("proxorMacStretch", true);
-    vbox->addStretch(1);
-}
-
-void tidyLayouts(QWidget *root) {
-    if (root->layout()) addBottomStretch(root->layout());
-    for (auto *box : root->findChildren<QGroupBox *>()) {
-        if (auto *l = box->layout()) {
-            if (!box->property("proxorMacMargins").toBool()) {
-                box->setProperty("proxorMacMargins", true);
-                l->setContentsMargins(12, 10, 12, 12);
-            }
-            addBottomStretch(l);
-        }
-    }
-}
-
-// Buttons keep their natural size (left aligned) instead of stretching across the whole row.
-void tidyButtons(QWidget *root) {
-    for (auto *btn : root->findChildren<QPushButton *>()) {
-        if (qobject_cast<QDialogButtonBox *>(btn->parentWidget())) continue;
-        if (btn->isFlat()) continue;
-        const auto pol = btn->sizePolicy().horizontalPolicy();
-        if (pol == QSizePolicy::Fixed || pol == QSizePolicy::Maximum) continue;
-        auto *layout = owningLayout(btn);
-        if (layout == nullptr) continue;
-        btn->setSizePolicy(QSizePolicy::Maximum, btn->sizePolicy().verticalPolicy());
-        if (qobject_cast<QVBoxLayout *>(layout) || qobject_cast<QGridLayout *>(layout)) {
-            layout->setAlignment(btn, Qt::AlignLeft);
-        } else if (auto *hbox = qobject_cast<QHBoxLayout *>(layout)) {
-            if (!layoutHasFlexibleItem(hbox)) hbox->addStretch(1);
-        }
-    }
-}
-
 // Rounded, bordered fields that match the rest of the System theme. Combo box editors and spin boxes
 // keep their native drawing.
 void styleLineEdits(QWidget *root, bool sys) {
     for (auto *le : root->findChildren<QLineEdit *>()) {
         if (qobject_cast<QComboBox *>(le->parentWidget()) || qobject_cast<QAbstractSpinBox *>(le->parentWidget())) continue;
         if (le->property("proxorMacKeepStyle").toBool()) continue;
-        // Fields in the same column must reach the same right edge: some .ui line edits are Preferred
-        // or Ignored, which stops them a few points short of their cell (or collapses them).
-        if (le->minimumWidth() != le->maximumWidth() && le->sizePolicy().horizontalPolicy() != QSizePolicy::Expanding) {
-            le->setSizePolicy(QSizePolicy::Expanding, le->sizePolicy().verticalPolicy());
-        }
         if (sys) {
             if (le->styleSheet().isEmpty()) le->setStyleSheet(kLineEditQss);
         } else if (le->styleSheet() == kLineEditQss) {
             le->setStyleSheet(QString());
-        }
-    }
-}
-
-void limitWidth(QWidget *root, std::initializer_list<const char *> names, int width) {
-    for (const char *name : names) {
-        auto *w = root->findChild<QWidget *>(QString::fromLatin1(name));
-        if (w == nullptr) continue;
-        // Some of these edits have an Ignored size policy in the .ui, which collapses to zero next to a stretch.
-        w->setFixedWidth(width);
-        if (auto *box = qobject_cast<QBoxLayout *>(owningLayout(w))) {
-            if (!layoutHasFlexibleItem(box)) box->addStretch(1);
         }
     }
 }
@@ -262,39 +104,54 @@ void polishBasicSettings(QDialog *d) {
         if (area->parentWidget() == d) area->verticalScrollBar()->setStyleSheet(kScrollBarQss);
     }
 
-    limitWidth(d, {"inbound_socks_port", "test_concurrent", "test_download_timeout", "max_log_line",
-                   "sub_auto_update", "mux_concurrency"}, 92);
+    // Custom cores (hysteria2 / naive / tuic): each row is "label | path | Select" in its own widget,
+    // so the path fields started wherever each name ended. Give the names one shared width.
+    QHash<QWidget *, QList<QLabel *>> coreRows;
+    for (auto *row : d->findChildren<QWidget *>()) {
+        auto *h = qobject_cast<QHBoxLayout *>(row->layout());
+        if (h == nullptr || h->count() != 3) continue;
+        auto *label = qobject_cast<QLabel *>(h->itemAt(0)->widget());
+        if (label && qobject_cast<QLineEdit *>(h->itemAt(1)->widget()) &&
+            qobject_cast<QPushButton *>(h->itemAt(2)->widget())) {
+            coreRows[row->parentWidget()] << label;
+        }
+    }
+    for (const auto &labels : coreRows) {
+        int w = 0;
+        for (auto *l : labels) w = qMax(w, l->sizeHint().width());
+        for (auto *l : labels) l->setMinimumWidth(w);
+    }
 
     // The lock button next to Listen Address: an icon-sized button, not a full-size push button.
     if (auto *auth = d->findChild<QPushButton *>(QStringLiteral("inbound_auth"))) {
         auth->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
         auth->setFixedWidth(40);
     }
+}
 
-    // Subscriptions: "Interval (minute, invalid if less than 30)" broke the row. Give it its own row.
-    auto *grid = d->findChild<QGridLayout *>(QStringLiteral("gridLayout_sub_auto"));
-    auto *row = d->findChild<QHBoxLayout *>(QStringLiteral("horizontalLayout_5"));
-    auto *intervalLabel = d->findChild<QLabel *>(QStringLiteral("label_21"));
-    auto *intervalEdit = d->findChild<QLineEdit *>(QStringLiteral("sub_auto_update"));
-    auto *uaLabel = d->findChild<QLabel *>(QStringLiteral("label_4"));
-    auto *uaEdit = d->findChild<QLineEdit *>(QStringLiteral("user_agent"));
-    if (grid && row && intervalLabel && intervalEdit && uaLabel && uaEdit &&
-        !d->property("proxorMacIntervalMoved").toBool()) {
-        d->setProperty("proxorMacIntervalMoved", true);
-        row->removeWidget(intervalLabel);
-        row->removeWidget(intervalEdit);
-        grid->removeWidget(uaLabel);
-        grid->removeWidget(uaEdit);
-        auto *intervalRow = new QHBoxLayout;
-        intervalRow->setContentsMargins(0, 0, 0, 0);
-        intervalRow->addWidget(intervalEdit);
-        intervalRow->addStretch(1);
-        grid->addWidget(intervalLabel, 1, 0);
-        grid->addLayout(intervalRow, 1, 1);
-        grid->addWidget(uaLabel, 2, 0);
-        grid->addWidget(uaEdit, 2, 1);
-        intervalEdit->setFixedWidth(92);
+// Edit dialogs stack several group boxes, each with its own "label | field" grid, so every section's
+// fields started at a different x (the macOS font makes the label widths differ more than elsewhere).
+// Give the first-column labels of all those grids one shared width so the fields line up down the
+// whole dialog. Grids inside a group box nested in another one (e.g. Edit Group's "Update") are an
+// indented sub-section and keep their own column.
+void syncLabelColumns(QWidget *root) {
+    QList<QLabel *> labels;
+    for (auto *grid : root->findChildren<QGridLayout *>()) {
+        QWidget *owner = grid->parentWidget();
+        bool nested = false;
+        for (QWidget *w = owner; w && w != root; w = w->parentWidget()) {
+            if (qobject_cast<QGroupBox *>(w) && w != owner && qobject_cast<QGroupBox *>(owner)) nested = true;
+        }
+        if (nested) continue;
+        for (int r = 0; r < grid->rowCount(); ++r) {
+            auto *item = grid->itemAtPosition(r, 0);
+            auto *l = item ? qobject_cast<QLabel *>(item->widget()) : nullptr;
+            if (l && !l->wordWrap() && !l->text().isEmpty() && grid->itemAtPosition(r, 1)) labels << l;
+        }
     }
+    int w = 0;
+    for (auto *l : labels) w = qMax(w, l->sizeHint().width());
+    for (auto *l : labels) l->setMinimumWidth(w);
 }
 
 void polishVpnPage(QWidget *page) {
@@ -323,10 +180,9 @@ void polishDialog(QDialog *d) {
     const bool first = !d->property(kPolishedProp).toBool();
     d->setProperty(kPolishedProp, true);
 
+    // Same layout as on Windows and Linux (the .ui files are shared): only field drawing changes.
     styleLineEdits(d, sys);
-    tidyButtons(d);
-    tidyLayouts(d);
-    alignFormColumns(d);
+    if (cls == QLatin1String("DialogEditProfile") || cls == QLatin1String("DialogEditGroup")) syncLabelColumns(d);
 
     if (!first) return;
 
@@ -336,18 +192,15 @@ void polishDialog(QDialog *d) {
         d->setMinimumWidth(qMax(d->minimumWidth(), 540));
         d->adjustSize();
     }
-    if (cls == QLatin1String("DialogEditGroup")) {
-        // "Update" was a group box nested inside the "Subscription" group box.
-        if (auto *inner = d->findChild<QGroupBox *>(QStringLiteral("cat_update"))) inner->setFlat(true);
-    }
     if (cls == QLatin1String("DialogManageGroups")) {
         d->resize(qMax(d->width(), 780), qMax(d->height(), 420));
         if (auto *table = d->findChild<QTableView *>(QStringLiteral("listView"))) {
-            table->horizontalHeader()->setStyleSheet(sys ? kHeaderQss : QString());
-            table->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+            // Framed, native header with centered captions, like the main window tables.
+            table->horizontalHeader()->setStyleSheet(QString());
+            table->horizontalHeader()->setDefaultAlignment(Qt::AlignCenter);
             table->setAlternatingRowColors(true);
             table->setShowGrid(false);
-            table->setFrameShape(QFrame::NoFrame);
+            table->setFrameShape(QFrame::StyledPanel);
         }
     }
 
@@ -378,9 +231,6 @@ protected:
                     QTimer::singleShot(0, w, [page = QPointer<QWidget>(w)] {
                         if (!page) return;
                         styleLineEdits(page, systemThemeActive());
-                        tidyButtons(page);
-                        tidyLayouts(page);
-                        alignFormColumns(page);
                     });
                 }
             }

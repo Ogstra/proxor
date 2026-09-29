@@ -9,9 +9,9 @@
 class QMainWindow;
 
 namespace ProxorMac {
-// Turns the top button row into a real QToolBar (text under icon, native push buttons on the right),
-// and applies native-looking tabs, headers, fonts and status bar under the System theme. The icons
-// inside the window are left untouched. Call once at the end of the MainWindow constructor;
-// re-evaluates itself whenever the theme changes.
+// Keeps the main window's layout identical to Windows/Linux and only adjusts how it is drawn on
+// macOS: native framed tab panes and tables, equal-width Test Latency / Update Sub, bordered filter
+// fields without launch focus. Call once at the end of the MainWindow constructor; re-evaluates
+// itself whenever the theme changes.
 void PolishMainWindow(QMainWindow *mainWindow);
 }
