@@ -440,15 +440,13 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
             refresh_status();
             refresh_proxy_list(ent->id);
 #ifdef Q_OS_MACOS
-            if (mac_sysproxy_parked && ProxorGui::dataStore->spmode_system_proxy) {
-                mac_sysproxy_parked = false;
-                macApplySystemProxy(false);
-            }
-#endif
+            mac_modes->profileStarted();
+#else
             if (ProxorGui::dataStore->spmode_vpn && !ProxorGui::UseInternalTun() && vpn_pid == 0) {
                 MW_show_log(tr("Proxy profile ready; starting Tun."));
                 StartVPNProcess();
             }
+#endif
         });
 
         return true;
@@ -487,6 +485,9 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
     connect(restartMsgbox, &QMessageBox::accepted, this, [=] { MW_dialog_message("", "RestartProgram"); });
     auto restartMsgboxTimer = new MessageBoxTimer(this, restartMsgbox, 5000);
 
+#ifdef Q_OS_MACOS
+    mac_modes->profileStarting();
+#endif
     runOnNewThread([=] {
         // validate config before stopping the current connection or marking anything active
 #ifndef NKR_NO_GRPC
@@ -499,6 +500,9 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
             runOnUiThread([=] { MessageBoxWarning("Validate return error", validateError); });
             start_pending = false;
             mu_starting.unlock();
+#ifdef Q_OS_MACOS
+            runOnUiThread([=] { mac_modes->profileStartFailed(); });
+#endif
             runOnUiThread([=] {
                 refresh_status();
                 restartMsgboxTimer->cancel();
@@ -510,6 +514,9 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
             MW_show_log("<<<<<<<< " + tr("Config validation RPC failed for %1").arg(ent->bean->DisplayTypeAndName()));
             start_pending = false;
             mu_starting.unlock();
+#ifdef Q_OS_MACOS
+            runOnUiThread([=] { mac_modes->profileStartFailed(); });
+#endif
             runOnUiThread([=] {
                 refresh_status();
                 restartMsgboxTimer->cancel();
@@ -530,6 +537,9 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
         if (!proxor_start_stage2()) {
             start_pending = false;
             MW_show_log("<<<<<<<< " + tr("Failed to start profile %1").arg(ent->bean->DisplayTypeAndName()));
+#ifdef Q_OS_MACOS
+            runOnUiThread([=] { mac_modes->profileStartFailed(); });
+#endif
         }
         mu_starting.unlock();
         // cancel timeout
@@ -555,10 +565,11 @@ void MainWindow::proxor_stop(bool crash, bool sem) {
         return;
     }
 #ifdef Q_OS_MACOS
-    // User stop: point the network back at the snapshot but keep System Proxy on and remembered;
-    // proxor_start re-applies it. Restart Proxy / profile switch (sem=true, a start follows at once)
-    // and exit (sem=true, System Proxy already turned off) must not flap.
-    if (!sem && ProxorGui::dataStore->spmode_system_proxy && !ProxorGui::dataStore->prepare_exit) macParkSystemProxy();
+    // User stop: System Proxy and Tun are paused after a grace period (restore the snapshot / tun_stop)
+    // while both switches stay on and remembered; proxor_start resumes them. Restart Proxy / profile
+    // switch and exit (sem=true) never pause, and a start within the grace period cancels the pause
+    // (owner log 18:39:18.909 -> .940), so no helper call is made at all.
+    mac_modes->profileStopping(sem, ProxorGui::dataStore->prepare_exit);
 #endif
 
     auto proxor_stop_stage2 = [=] {
@@ -643,6 +654,9 @@ void MainWindow::proxor_stop(bool crash, bool sem) {
         if (sem) sem_stopped.release();
         // cancel timeout
         runOnUiThread([=] {
+#ifdef Q_OS_MACOS
+            mac_modes->profileStopped();
+#endif
             restartMsgboxTimer->cancel();
             restartMsgboxTimer->deleteLater();
             restartMsgbox->deleteLater();

@@ -1059,6 +1059,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     connect(MacHelperSvc(), &MacHelperService::tunStopped, this, &MainWindow::macOnTunStopped);
     connect(MacHelperSvc(), &MacHelperService::helperLog, this, [=](const QString &line) { MW_show_log("[Tun] " + line); });
     connect(MacHelperSvc(), &MacHelperService::connectionLost, this, &MainWindow::macOnHelperLost);
+    mac_modes = new MacModeCoordinator({
+        [this] { return ProxorGui::dataStore->spmode_system_proxy; },
+        [this] { return ProxorGui::dataStore->spmode_vpn; },
+        [this] { return vpn_pid != 0; },
+        [this] { return ProxorGui::dataStore->started_id >= 0; },
+        [this](bool sp, bool tun) { macPauseModes(sp, tun); },
+        [this](bool sp, bool tun) { macResumeModes(sp, tun); },
+    }, kMacPauseGraceMs, this);
 #endif
     connect(ui->checkBox_SystemProxy, &QCheckBox::clicked, this, [=](bool checked) { proxor_set_spmode_system_proxy(checked); });
     connect(ui->menu_spmode, &QMenu::aboutToShow, this, [=]() {
@@ -1996,6 +2004,9 @@ void MainWindow::on_menu_exit_triggered() {
             }
         }
         ProxorGui::dataStore->prepare_exit = true;
+#ifdef Q_OS_MACOS
+        mac_modes->reset();
+#endif
         //
         proxor_set_spmode_system_proxy(false, false);
         proxor_set_spmode_vpn(false, false);
@@ -2131,15 +2142,15 @@ void MainWindow::proxor_set_spmode_system_proxy(bool enable, bool save) {
             }
             if (ProxorGui::dataStore->started_id < 0) {
                 // No profile runs: never point the Mac at a dead port. Applied by proxor_start.
-                mac_sysproxy_parked = true;
+                mac_modes->setSystemProxyParked(true);
                 MW_show_log(tr("System Proxy is on; it takes effect when a profile starts."));
             } else {
                 // The switch shows on optimistically; macApplySystemProxy reverts it if the helper reports a failure.
-                mac_sysproxy_parked = false;
+                mac_modes->setSystemProxyParked(false);
                 macApplySystemProxy(true, save);
             }
         } else {
-            mac_sysproxy_parked = false;
+            mac_modes->setSystemProxyParked(false);
             if (MacHelperSvc()->isConnected() || MacHelperSvc()->lastState() == MacHelperState::Ready) {
                 MacHelperSvc()->sysproxyRestore(this, 20000, [this](const MacHelperService::Reply &r) {
                     if (!r.ok) MW_show_log(tr("[Warning] System Proxy restore: %1").arg(r.error));
@@ -3899,10 +3910,11 @@ void MainWindow::macOnTunStopped(const QString &reason) {
 }
 
 void MainWindow::macOnHelperLost() {
+    // The service's lease cleanup already restored the proxy and stopped Tun: forget any pending pause/park.
+    mac_modes->reset();
     if (vpn_pid != 0 || startup_tun_pending) macOnTunStopped(tr("the Proxor service stopped"));
     if (ProxorGui::dataStore->spmode_system_proxy) {
         ProxorGui::dataStore->spmode_system_proxy = false;
-        mac_sysproxy_parked = false;
         refresh_status();
         MW_show_log(tr("System Proxy turned off: the Proxor service stopped and restored your previous proxy settings."));
     }
@@ -3937,9 +3949,9 @@ void MainWindow::macApplySystemProxy(bool interactive, bool saved) {
     });
 }
 
-void MainWindow::macParkSystemProxy() {
-    mac_sysproxy_parked = true;
-    if (MacHelperSvc()->isConnected() || MacHelperSvc()->lastState() == MacHelperState::Ready) {
+void MainWindow::macPauseModes(bool systemProxy, bool tun) {
+    // spmode_vpn, spmode_system_proxy and remember_spmode are deliberately untouched: both switches stay on and remembered.
+    if (systemProxy && (MacHelperSvc()->isConnected() || MacHelperSvc()->lastState() == MacHelperState::Ready)) {
         MacHelperSvc()->sysproxyRestore(this, 20000, [this](const MacHelperService::Reply &r) {
             if (r.ok) {
                 MW_show_log(tr("System Proxy paused: your previous network proxy settings are back while no profile is running."));
@@ -3947,6 +3959,25 @@ void MainWindow::macParkSystemProxy() {
                 MW_show_log(tr("[Warning] System Proxy restore: %1").arg(r.error));
             }
         });
+    }
+    if (tun) {
+        vpn_pid = 0;
+        if (mac_tun_ready_timer) mac_tun_ready_timer->stop();
+        MacHelperSvc()->tunStop(this, 5000, [this](const MacHelperService::Reply &r) {
+            if (r.ok) {
+                MW_show_log(tr("Tun paused: no profile is running; it resumes when a profile starts."));
+            } else {
+                MW_show_log(tr("[Warning] Tun stop: %1").arg(r.error));
+            }
+        });
+    }
+}
+
+void MainWindow::macResumeModes(bool systemProxy, bool tun) {
+    if (systemProxy) macApplySystemProxy(false);
+    if (tun) {
+        MW_show_log(tr("Proxy profile ready; starting Tun."));
+        StartVPNProcess();
     }
 }
 #endif

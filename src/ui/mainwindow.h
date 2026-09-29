@@ -43,6 +43,7 @@ namespace ProxorMac {
     class StatusItem;
 }
 #include "sys/macos/MacHelperPolicy.h"
+#include "sys/macos/MacModeCoordinator.h"
 #endif
 
 QT_BEGIN_NAMESPACE
@@ -199,9 +200,10 @@ private:
     QTimer *mac_startup_probe_timer = nullptr;
     void macStartupRestore(bool rememberedSystemProxy, bool rememberedTun);
     void macStartupProbed(MacHelperState st, bool rememberedTun, bool rememberedSystemProxy);
-    bool mac_sysproxy_parked = false;
+    MacModeCoordinator *mac_modes = nullptr;
     void macApplySystemProxy(bool interactive, bool saved = false);
-    void macParkSystemProxy();
+    void macPauseModes(bool systemProxy, bool tun);
+    void macResumeModes(bool systemProxy, bool tun);
 #endif
     QShortcut *shortcut_ctrl_f = new QShortcut(QKeySequence("Ctrl+F"), this);
     QShortcut *shortcut_ctrl_v = new QShortcut(QKeySequence("Ctrl+V"), this);
