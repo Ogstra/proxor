@@ -48,7 +48,7 @@ If the application reports missing runtime DLLs, install the [Microsoft Visual C
 
 ### macOS
 
-Apple Silicon Macs running macOS 15 or later install Proxor with Homebrew: `brew install --cask ogstra/tap/proxor`, and update it with `brew upgrade --cask proxor`. The app is ad-hoc signed and not notarized; the cask clears the quarantine flag. See [Build on macOS](docs/Build_macOS.md).
+Apple Silicon Macs running macOS 15 or later install Proxor with Homebrew: `brew install --cask ogstra/tap/proxor`, and update it with `brew upgrade --cask proxor`. The app is ad-hoc signed and not notarized; the cask clears the quarantine flag. Tun Mode and System Proxy work after a one-time administrator prompt that installs a small Proxor service; see [Build on macOS](docs/Build_macOS.md#tun-and-system-proxy).
 
 ### Linux
 
