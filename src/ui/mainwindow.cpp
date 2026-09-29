@@ -1053,6 +1053,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     connect(ui->actionShow_window, &QAction::triggered, this, [=] { tray->activated(QSystemTrayIcon::ActivationReason::Trigger); });
     //
     connect(ui->checkBox_VPN, &QCheckBox::clicked, this, [=](bool checked) { proxor_set_spmode_vpn(checked); });
+#ifdef Q_OS_MACOS
+    connect(MacHelper(), &MacHelperClient::tunReady, this, &MainWindow::macOnTunReady);
+    connect(MacHelper(), &MacHelperClient::tunStopped, this, &MainWindow::macOnTunStopped);
+    connect(MacHelper(), &MacHelperClient::helperLog, this, [=](const QString &line) { MW_show_log("[Tun] " + line); });
+    connect(MacHelper(), &MacHelperClient::connectionLost, this, &MainWindow::macOnHelperLost);
+#endif
     connect(ui->checkBox_SystemProxy, &QCheckBox::clicked, this, [=](bool checked) { proxor_set_spmode_system_proxy(checked); });
     connect(ui->menu_spmode, &QMenu::aboutToShow, this, [=]() {
         ui->menu_spmode_disabled->setChecked(!(ProxorGui::dataStore->spmode_system_proxy || ProxorGui::dataStore->spmode_vpn));
@@ -2175,6 +2181,7 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
     if (!enable && startup_tun_failed && !startup_network_work) {
         startup_tun_failed = false;
         mac_tun_failure_reason.clear();
+        mac_stop_keeps_remembered_profile = false;
         if (!ProxorGui::dataStore->prepare_exit) {
             MW_show_log(tr("Tun Mode turned off; starting the profile without Tun."));
             resumeDeferredStartupProfile();
@@ -2188,6 +2195,7 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
         startupWork();
 #ifdef Q_OS_MACOS
         mac_tun_failure_reason.clear();
+        mac_stop_keeps_remembered_profile = false;
         if (!ProxorGui::dataStore->prepare_exit) resumeDeferredStartupProfile();
 #endif
     }
@@ -3611,6 +3619,42 @@ bool MainWindow::StartVPNProcess() {
     auto configPath = ProxorGui::WriteVPNSingBoxConfig();
     auto scriptPath = ProxorGui::WriteVPNLinuxScript();
     //
+#ifdef Q_OS_MACOS
+    {
+        QFile f(configPath);
+        f.open(QIODevice::ReadOnly);
+        const auto config = f.readAll();
+        const auto reply = MacHelper()->tunStart(config, ProxorGui::dataStore->inbound_socks_port, 10000);
+        if (!reply.ok) {
+            if (startup_tun_pending) {
+                macTunFailed(reply.error);
+                return false;
+            }
+            MessageBoxWarning(software_name, MacTunFailureText(reply.error));
+            // Manual Tun after a profile is already up (proxor_start): turn the mode off again. When called
+            // from proxor_set_spmode_vpn(true) itself the FAILED return already leaves it off.
+            if (ProxorGui::dataStore->spmode_vpn) runOnUiThread([=] { proxor_set_spmode_vpn(false); });
+            return false;
+        }
+        vpn_pid = 1; // marker: Tun owned by the helper
+        if (startup_tun_pending) {
+            authorizeStartupTun(); // resumes the deferred profile so the SOCKS port the helper waits for comes up
+            if (!mac_tun_ready_timer) {
+                mac_tun_ready_timer = new QTimer(this);
+                mac_tun_ready_timer->setSingleShot(true);
+                connect(mac_tun_ready_timer, &QTimer::timeout, this, [this] {
+                    if (startup_tun_pending) {
+                        MacHelper()->tunStop();
+                        macTunFailed(tr("the Tun interface did not come up within 45 seconds"));
+                    }
+                });
+            }
+            mac_tun_ready_timer->start(45000);
+        }
+        MW_show_log(tr("Tun requested from the Proxor service; waiting for the interface."));
+        return true;
+    }
+#endif
 #ifdef Q_OS_WIN
     runOnNewThread([=] {
         vpn_pid = 1; // TODO get pid?
@@ -3647,23 +3691,7 @@ bool MainWindow::StartVPNProcess() {
     });
     //
     vpn_process->setProcessChannelMode(QProcess::SeparateChannels);
-#ifdef Q_OS_MACOS
-    auto shellQuote = [](QString value) {
-        return QStringLiteral("'") + value.replace(QStringLiteral("'"), QStringLiteral("'\\\"'\\\"'")) + QStringLiteral("'");
-    };
-    auto appleScriptQuote = [](QString value) {
-        value.replace('\\', QStringLiteral("\\\\"));
-        value.replace('"', QStringLiteral("\\\""));
-        return QStringLiteral("\"") + value + QStringLiteral("\"");
-    };
-    const auto command = QStringLiteral("bash %1 %2 %3 '' %4").arg(
-        shellQuote(scriptPath),
-        shellQuote(corePath),
-        shellQuote(configPath),
-        shellQuote(Int2String(ProxorGui::dataStore->inbound_socks_port))
-    );
-    vpn_process->start("osascript", {"-e", QStringLiteral("do shell script %1 with administrator privileges").arg(appleScriptQuote(command))});
-#else
+#ifndef Q_OS_MACOS
     QStringList vpnArgs{"bash", scriptPath, corePath, configPath, "proxor-tun"};
     // The script only starts after a profile is active or is being restored.
     // Wait for its SOCKS listener before TUN routes system traffic.
@@ -3714,6 +3742,52 @@ void MainWindow::resumeDeferredStartupProfile() {
     }
 }
 
+#ifdef Q_OS_MACOS
+void MainWindow::macTunFailed(const QString &reason) {
+    mac_tun_failure_reason = reason.isEmpty() ? tr("unknown error") : reason;
+    vpn_pid = 0;
+    if (mac_tun_ready_timer) mac_tun_ready_timer->stop();
+    if (ProxorGui::dataStore->started_id >= 0) {
+        // The deferred profile was already resumed: stop it, no profile runs until Tun works or Tun is turned off.
+        // remember_id must keep naming it (see proxor_stop stage2), so a quit or crash while blocked restores it.
+        startup_deferred_profile_id = ProxorGui::dataStore->started_id;
+        mac_stop_keeps_remembered_profile = true;
+        proxor_stop();
+    }
+    failStartupTunAuthorization();
+    // The check box shows Tun on so the user can switch it off: that is the escape from the block.
+    ProxorGui::dataStore->spmode_vpn = true;
+    refresh_status();
+    const auto text = MacTunFailureText(mac_tun_failure_reason);
+    MW_show_log(text);
+    MessageBoxWarning(software_name, text);
+}
+
+void MainWindow::macOnTunReady() {
+    if (mac_tun_ready_timer) mac_tun_ready_timer->stop();
+    mac_tun_failure_reason.clear();
+    mac_stop_keeps_remembered_profile = false;
+    MW_show_log(tr("Tun interface ready."));
+    if (startup_tun_pending) completeStartupTunAuthorization();
+}
+
+void MainWindow::macOnTunStopped(const QString &reason) {
+    if (startup_tun_pending) {
+        macTunFailed(reason);
+        return;
+    }
+    vpn_pid = 0;
+    if (ProxorGui::dataStore->spmode_vpn && !ProxorGui::dataStore->prepare_exit) {
+        MW_show_log(MacTunFailureText(reason));
+        proxor_set_spmode_vpn(false);
+    }
+}
+
+void MainWindow::macOnHelperLost() {
+    if (vpn_pid != 0 || startup_tun_pending) macOnTunStopped(tr("the Proxor service stopped"));
+}
+#endif
+
 void MainWindow::authorizeStartupTun() {
     if (!startup_tun_pending || startup_tun_authorized) return;
     startup_tun_authorized = true;
@@ -3746,6 +3820,17 @@ void MainWindow::failStartupTunAuthorization() {
 }
 
 bool MainWindow::StopVPNProcess(bool unconditional) {
+#ifdef Q_OS_MACOS
+    {
+        if (unconditional || vpn_pid != 0 || MacHelper()->isConnected()) {
+            const auto r = MacHelper()->tunStop(5000);
+            if (!r.ok && r.error != "timeout" && MacHelper()->isConnected()) MW_show_log(tr("[Warning] Tun stop: %1").arg(r.error));
+        }
+        vpn_pid = 0;
+        if (mac_tun_ready_timer) mac_tun_ready_timer->stop();
+        return true; // stopping never asks for a password and never fails the toggle, so the exit retry loop terminates
+    }
+#endif
     if (unconditional || vpn_pid != 0) {
         bool ok;
         core_process->processId();
@@ -3756,10 +3841,7 @@ bool MainWindow::StopVPNProcess(bool unconditional) {
         ok = ret == 0;
 #else
         QProcess p;
-#ifdef Q_OS_MACOS
-        p.start("osascript", {"-e", QStringLiteral("do shell script \"%1\" with administrator privileges")
-                                        .arg("pkill -2 -U 0 proxor_core")});
-#else
+#ifndef Q_OS_MACOS
         if (unconditional) {
             p.start(Linux_PkexecPath(), {"killall", "-2", "proxor_core"});
         } else {

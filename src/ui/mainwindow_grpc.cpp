@@ -584,7 +584,18 @@ void MainWindow::proxor_stop(bool crash, bool sem) {
         }
 #endif
 
+#ifdef Q_OS_MACOS
+        if (mac_stop_keeps_remembered_profile) {
+            // Stop enforcing the startup Tun block: keep remember_id (never persist -1919) so the
+            // remembered profile is restored after a quit or crash while blocked.
+            mac_stop_keeps_remembered_profile = false;
+            ProxorGui::dataStore->started_id = -1919;
+        } else {
+            ProxorGui::dataStore->UpdateStartedId(-1919);
+        }
+#else
         ProxorGui::dataStore->UpdateStartedId(-1919);
+#endif
         started_via_ssid_trigger = false;
         ProxorGui::dataStore->need_keep_vpn_off = false;
         running = nullptr;

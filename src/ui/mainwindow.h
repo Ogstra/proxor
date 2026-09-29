@@ -52,6 +52,7 @@ namespace Ui {
 class QLabel;
 #ifdef Q_OS_MACOS
 class QMenu;
+class QTimer;
 #endif
 QT_END_NAMESPACE
 
@@ -187,7 +188,13 @@ private:
     QMenu *mac_tray_menu = nullptr;
     QString mac_tun_failure_reason;
     bool mac_spmode_restoring = false;
+    QTimer *mac_tun_ready_timer = nullptr;
+    bool mac_stop_keeps_remembered_profile = false;
     void macInstallHelperThen(const QString &feature, MacHelperEnableAction action, std::function<void()> onReady);
+    void macTunFailed(const QString &reason);
+    void macOnTunReady();
+    void macOnTunStopped(const QString &reason);
+    void macOnHelperLost();
 #endif
     QShortcut *shortcut_ctrl_f = new QShortcut(QKeySequence("Ctrl+F"), this);
     QShortcut *shortcut_ctrl_v = new QShortcut(QKeySequence("Ctrl+V"), this);
