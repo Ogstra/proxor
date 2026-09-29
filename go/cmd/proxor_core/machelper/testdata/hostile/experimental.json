@@ -1,0 +1,37 @@
+{
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "address": [
+        "172.19.0.1/28"
+      ],
+      "auto_route": true,
+      "stack": "gvisor"
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "socks",
+      "tag": "proxor-socks",
+      "server": "127.0.0.1",
+      "server_port": 2080
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "route": {
+    "final": "proxor-socks"
+  },
+  "experimental": {
+    "clash_api": {
+      "external_controller": "127.0.0.1:9090"
+    },
+    "cache_file": {
+      "enabled": true,
+      "path": "/etc/proxor-cache.db"
+    }
+  }
+}
