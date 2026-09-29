@@ -52,7 +52,7 @@ constexpr const char *kKeyFailed = "failed";
 constexpr const char *kKeyEvent = "event";
 constexpr const char *kKeyLine = "line";
 constexpr const char *kKeyReason = "reason";
-} // namespace MacHelperWire
+}
 
 // One persistent connection to the helper. That connection is the lease the helper uses for cleanup:
 // when it drops (GUI exit or crash) the helper stops Tun and restores the system proxy.
