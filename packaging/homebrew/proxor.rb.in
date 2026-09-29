@@ -33,10 +33,20 @@ cask "proxor" do
     run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{appdir}}/Proxor.app"]
   end
 
-  uninstall quit: "io.github.Ogstra.Proxor"
+  # The Tun/System Proxy service installed from the app (Settings > Tun) lives outside the app bundle.
+  # Owner decision: plain `brew uninstall` removes it too. Homebrew also runs this on `brew upgrade`,
+  # so upgrading removes the service (the app offers to reinstall it) and asks for the admin password.
+  uninstall launchctl: "io.github.Ogstra.Proxor.helper",
+            quit:      "io.github.Ogstra.Proxor",
+            delete:    [
+              "/Library/Application Support/Proxor",
+              "/Library/LaunchDaemons/io.github.Ogstra.Proxor.helper.plist",
+              "/Library/PrivilegedHelperTools/io.github.Ogstra.Proxor.helper",
+            ]
 
-  zap trash: [
-    "~/Library/Preferences/io.github.Ogstra.Proxor.plist",
-    "~/Library/Preferences/proxor",
-  ]
+  zap delete: "/var/log/proxor-helper.log",
+      trash:  [
+        "~/Library/Preferences/io.github.Ogstra.Proxor.plist",
+        "~/Library/Preferences/proxor",
+      ]
 end

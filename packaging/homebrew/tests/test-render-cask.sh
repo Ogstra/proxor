@@ -21,9 +21,14 @@ cask "proxor" do
   app "Proxor.app"
   postflight_steps do
     run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{appdir}}/Proxor.app"]
-  uninstall quit: "io.github.Ogstra.Proxor"
-    "~/Library/Preferences/io.github.Ogstra.Proxor.plist",
-    "~/Library/Preferences/proxor",
+  uninstall launchctl: "io.github.Ogstra.Proxor.helper",
+            quit:      "io.github.Ogstra.Proxor",
+              "/Library/Application Support/Proxor",
+              "/Library/LaunchDaemons/io.github.Ogstra.Proxor.helper.plist",
+              "/Library/PrivilegedHelperTools/io.github.Ogstra.Proxor.helper",
+  zap delete: "/var/log/proxor-helper.log",
+        "~/Library/Preferences/io.github.Ogstra.Proxor.plist",
+        "~/Library/Preferences/proxor",
 LINES
 
 if grep -Eq '^[[:space:]]*postflight do|verified:|@[A-Z0-9_]+@' "$cask"; then
@@ -34,6 +39,26 @@ fi
 cmp "$cask" "$tmp/ok2/proxor.rb"
 
 ruby -c "$cask" >/dev/null
+
+# Helper removal stanzas: launchctl exactly once and before quit; delete paths inside the uninstall block.
+if [ "$(grep -c 'launchctl:' "$cask")" != 1 ]; then
+  echo 'FAIL: expected exactly one launchctl: directive' >&2; exit 1
+fi
+launchctl_line="$(grep -n 'launchctl:' "$cask" | cut -d: -f1)"
+quit_line="$(grep -n 'quit:' "$cask" | cut -d: -f1)"
+if [ "$launchctl_line" -ge "$quit_line" ]; then
+  echo 'FAIL: launchctl: must appear before quit:' >&2; exit 1
+fi
+uninstall_block="$(awk '/^  uninstall/{f=1} /^  zap/{f=0} f' "$cask")"
+for path in \
+  "/Library/Application Support/Proxor" \
+  "/Library/LaunchDaemons/io.github.Ogstra.Proxor.helper.plist" \
+  "/Library/PrivilegedHelperTools/io.github.Ogstra.Proxor.helper"; do
+  grep -qF -- "\"$path\"" <<<"$uninstall_block" || { echo "FAIL: uninstall block lacks delete path: $path" >&2; exit 1; }
+done
+if ! grep -q 'delete:' <<<"$uninstall_block"; then
+  echo 'FAIL: delete: missing from the uninstall block' >&2; exit 1
+fi
 
 n=0
 expect_reject() {
