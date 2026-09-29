@@ -68,3 +68,21 @@ if grep -rnE 'MacHelper\(\)' "$repo_root/src" >/dev/null; then
   echo "test-policy-wiring.sh: the synchronous helper singleton is back" >&2
   exit 1
 fi
+# Launch install prompt (50-19): asks once per session, never holds the profile, one installer at a time.
+grep -q 'DecideMacStartupInstall' "$repo_root/src/ui/mainwindow.cpp"
+grep -q 'MacStartupInstallDeclinedText' "$repo_root/src/ui/mainwindow.cpp"
+grep -q 'mac_install_prompted_this_session' "$repo_root/src/ui/mainwindow.cpp"
+grep -q 'MacHelperInstaller::InstallInProgress()' "$repo_root/src/ui/mainwindow.cpp"
+grep -q 'MacHelperInstaller::InstallInProgress()' "$repo_root/src/ui/dialog_vpn_settings.cpp"
+grep -q 'g_installInProgress' "$repo_root/src/sys/macos/MacHelperInstaller.cpp"
+if ! awk '/^void MainWindow::macStartupProbed/,/^}/' "$repo_root/src/ui/mainwindow.cpp" \
+    | awk '/resumeDeferredStartupProfile/{r=NR} /ConfirmAndInstall/{c=NR} END{exit !(r && c && r < c)}'; then
+  echo "test-policy-wiring.sh: startup install prompt must not hold the profile" >&2
+  exit 1
+fi
+# A non-user Tun loss keeps Tun remembered (only the user's own toggle or Remove un-remembers it).
+if awk '/^void MainWindow::macOnTunStopped/,/^}/' "$repo_root/src/ui/mainwindow.cpp" | grep -q 'proxor_set_spmode_vpn(false);'; then
+  echo "test-policy-wiring.sh: macOnTunStopped must not un-remember Tun (use save=false)" >&2
+  exit 1
+fi
+grep -q 'Settings > Tun settings' "$repo_root/docs/Build_macOS.md"
