@@ -51,3 +51,16 @@ target_include_directories(mac_helper_policy_test PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos)
 target_link_libraries(mac_helper_policy_test PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME mac_helper_policy_test COMMAND mac_helper_policy_test)
+
+# Helper protocol client (Qt Core + Network only): tested against a fake QLocalServer that runs in
+# its own thread, on every CI runner, even though production only links it on APPLE.
+find_package(Qt6 REQUIRED COMPONENTS Network)
+add_executable(mac_helper_client_test
+    mac_helper_client_test.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos/MacHelperClient.h
+    ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos/MacHelperClient.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos/MacHelperPolicy.cpp)
+target_include_directories(mac_helper_client_test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos)
+target_link_libraries(mac_helper_client_test PRIVATE Qt6::Core Qt6::Network Qt6::Test)
+add_test(NAME mac_helper_client_test COMMAND mac_helper_client_test)
