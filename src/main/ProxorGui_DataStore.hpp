@@ -141,13 +141,7 @@ namespace ProxorGui {
         QString utlsFingerprint = "";
 
         // Remember
-#ifdef Q_OS_MACOS
-        // New macOS configs come up with Tun and System Proxy on, the way they do on Windows
-        // (both go through the Proxor service; existing configs keep what they saved).
-        QStringList remember_spmode = {"vpn", "system_proxy"};
-#else
         QStringList remember_spmode = {"vpn"};
-#endif
         int remember_id = -1919;
         bool remember_enable = false;
 
