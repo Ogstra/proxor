@@ -4003,15 +4003,9 @@ void MainWindow::macApplySystemProxy(bool interactive, bool saved) {
 
 void MainWindow::macPauseModes(bool systemProxy, bool tun) {
     // Only the helper state changes here: both switches stay checked and remembered.
-    if (systemProxy && (MacHelperSvc()->isConnected() || MacHelperSvc()->lastState() == MacHelperState::Ready)) {
-        MacHelperSvc()->sysproxyRestore(this, 20000, [this](const MacHelperService::Reply &r) {
-            if (r.ok) {
-                MW_show_log(tr("System Proxy paused: your previous network proxy settings are back while no profile is running."));
-            } else {
-                MW_show_log(tr("[Warning] System Proxy restore: %1").arg(r.error));
-            }
-        });
-    }
+    // Tun goes first: the helper answers requests in order, and the System Proxy restore
+    // takes seconds on a Mac with several network services. Until Tun is down every
+    // connection still goes to the stopped profile's port.
     if (tun) {
         vpn_pid = 0;
         if (mac_tun_ready_timer) mac_tun_ready_timer->stop();
@@ -4023,15 +4017,25 @@ void MainWindow::macPauseModes(bool systemProxy, bool tun) {
             }
         });
     }
+    if (systemProxy && (MacHelperSvc()->isConnected() || MacHelperSvc()->lastState() == MacHelperState::Ready)) {
+        MacHelperSvc()->sysproxyRestore(this, 20000, [this](const MacHelperService::Reply &r) {
+            if (r.ok) {
+                MW_show_log(tr("System Proxy paused: your previous network proxy settings are back while no profile is running."));
+            } else {
+                MW_show_log(tr("[Warning] System Proxy restore: %1").arg(r.error));
+            }
+        });
+    }
 }
 
 void MainWindow::macResumeModes(bool systemProxy, bool tun) {
-    if (systemProxy) macApplySystemProxy(false);
+    // Tun first, for the same reason as in macPauseModes: it is quick, the proxy is not.
     if (tun) {
         MW_show_log(tr("Proxy profile ready; starting Tun."));
         mac_tun_request_saves = false; // a resume must never un-remember Tun
         StartVPNProcess();
     }
+    if (systemProxy) macApplySystemProxy(false);
 }
 #endif
 
