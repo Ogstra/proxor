@@ -3,6 +3,8 @@
 
 #include "main/GuiUtils.hpp"
 #include "main/ProxorGui.hpp"
+#include "platform/PlatformCapabilitiesApp.hpp"
+#include "platform/CapabilityUi.hpp"
 #include "ui/mainwindow_interface.h"
 
 #include <QDialog>
@@ -146,6 +148,31 @@ DialogVPNSettings::DialogVPNSettings(QWidget *parent) : QDialog(parent), ui(new 
         refresh();
     }
 #endif
+    {
+        using namespace ProxorPlatform;
+        auto *tunNote = MakeCapabilityNote(this);
+        ui->verticalLayout->insertWidget(0, tunNote);
+        const auto tun = CurrentCapability(Capability::TunMode);
+        if (!IsUsable(tun)) {
+            QList<QWidget *> pageWidgets;
+            for (int i = 0; i < ui->verticalLayout->count(); i++) {
+                auto *w = ui->verticalLayout->itemAt(i)->widget();
+                if (w != nullptr && w != tunNote) pageWidgets << w;
+            }
+            ApplyCapability(pageWidgets, tun, tunNote);
+        } else {
+            QStringList reasons;
+            for (const auto &entry : {std::make_pair(static_cast<QWidget *>(ui->strict_route), CurrentCapability(Capability::TunStrictRoute)),
+                                      std::make_pair(static_cast<QWidget *>(ui->single_core), CurrentCapability(Capability::TunSingleCore))}) {
+                ApplyCapability(entry.first, entry.second);
+                if (entry.second.support != Support::Supported && !entry.second.reason.isEmpty()) reasons << entry.second.reason;
+            }
+            if (!reasons.isEmpty()) {
+                tunNote->setText(reasons.join("\n"));
+                tunNote->setVisible(true);
+            }
+        }
+    }
     //
     D_LOAD_STRING_PLAIN(vpn_rule_cidr)
     D_LOAD_STRING_PLAIN(vpn_rule_process)

@@ -7,6 +7,8 @@
 #include "fmt/Preset.hpp"
 #include "ui/ThemeManager.hpp"
 #include "db/Database.hpp"
+#include "platform/PlatformCapabilitiesApp.hpp"
+#include "platform/CapabilityUi.hpp"
 
 #include <QFile>
 #include <QSet>
@@ -138,6 +140,15 @@ private:
 };
 }
 
+namespace {
+// "Skip on SSIDs" is read-only where SSID detection is not available; stored values stay visible and are saved unchanged.
+QTableWidgetItem *lockSsidCell(QTableWidgetItem *item) {
+    if (ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::OnDemandSsid).support != ProxorPlatform::Support::Supported)
+        item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+    return item;
+}
+} // namespace
+
 DialogManageRoutes::DialogManageRoutes(QWidget *parent) : QDialog(parent), ui(new Ui::DialogManageRoutes) {
     ui->setupUi(this);
     title_base = windowTitle();
@@ -224,6 +235,11 @@ DialogManageRoutes::DialogManageRoutes(QWidget *parent) : QDialog(parent), ui(ne
     hostsMapTable->setHorizontalHeaderLabels({tr("Hostname"), tr("IP"), tr("Skip on SSIDs")});
     hostsMapTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     hostsMapTable->horizontalHeaderItem(2)->setToolTip(tr("Comma-separated SSIDs where this entry is NOT applied (skipped). Useful for using local DNS when on a known home WiFi."));
+    const auto ssidCapability = ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::OnDemandSsid);
+    if (ssidCapability.support != ProxorPlatform::Support::Supported) {
+        hostsMapTable->horizontalHeaderItem(2)->setToolTip(ssidCapability.reason);
+        hostsMapTable->horizontalHeaderItem(2)->setText(tr("Skip on SSIDs") + " " + tr("(not available)"));
+    }
     hostsMapTable->verticalHeader()->setVisible(false);
     hostsMapTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     auto addHostBtn = new QPushButton(tr("Add"), this);
@@ -233,7 +249,7 @@ DialogManageRoutes::DialogManageRoutes(QWidget *parent) : QDialog(parent), ui(ne
         hostsMapTable->insertRow(row);
         hostsMapTable->setItem(row, 0, new QTableWidgetItem(""));
         hostsMapTable->setItem(row, 1, new QTableWidgetItem(""));
-        hostsMapTable->setItem(row, 2, new QTableWidgetItem(""));
+        hostsMapTable->setItem(row, 2, lockSsidCell(new QTableWidgetItem("")));
         hostsMapTable->editItem(hostsMapTable->item(row, 0));
     });
     connect(removeHostBtn, &QPushButton::clicked, this, [this] {
@@ -418,7 +434,7 @@ void DialogManageRoutes::UpdateDisplayRouting(ProxorGui::Routing *conf, bool qv)
         hostsMapTable->insertRow(row);
         hostsMapTable->setItem(row, 0, new QTableWidgetItem(parts[0]));
         hostsMapTable->setItem(row, 1, new QTableWidgetItem(parts[1]));
-        hostsMapTable->setItem(row, 2, new QTableWidgetItem(parts.size() >= 3 ? parts[2] : ""));
+        hostsMapTable->setItem(row, 2, lockSsidCell(new QTableWidgetItem(parts.size() >= 3 ? parts[2] : "")));
     }
 }
 
