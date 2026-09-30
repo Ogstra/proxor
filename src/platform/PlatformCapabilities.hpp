@@ -2,7 +2,7 @@
 
 // Single truth table for platform-dependent features: what works, what is degraded, what needs an OS
 // permission and what is unavailable, with a user-facing reason for every non-Supported answer.
-// Qt Core only (no QtGui/QtWidgets, no app globals) so it is unit-tested on every CI runner.
+// Qt Core only (no GUI or widget classes, no app globals) so it is unit-tested on every CI runner.
 
 #include "main/PackageMode.hpp"
 

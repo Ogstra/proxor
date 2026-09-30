@@ -21,6 +21,7 @@
 #include "ui/dialog_vpn_settings.h"
 #include "ui/dialog_ssid_settings.h"
 #include "ui/dialog_hotkey.h"
+#include "platform/PlatformCapabilitiesApp.hpp"
 
 #include "3rdparty/fix_old_qt.h"
 #include "3rdparty/qrcodegen.hpp"
@@ -794,6 +795,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         ProxorGui_log::Write(ProxorGui_log::InferLevel(log), log);
         runOnUiThread([=] { show_log_impl(log); });
     };
+    MW_show_log("Platform: " + ProxorPlatform::DescribePlatformEnvironment(ProxorPlatform::CurrentPlatformEnvironment()));
 
     // table UI
     proxyListModel = new ProxyListModel(this);
