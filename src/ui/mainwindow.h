@@ -95,7 +95,7 @@ public:
 
     void openSettings(const QString &section = QString());
 
-    void RegisterHotkey(bool unregister);
+    QStringList RegisterHotkey(bool unregister);
 
     bool StopVPNProcess(bool unconditional = false);
 

@@ -22,6 +22,7 @@
 #include "ui/dialog_ssid_settings.h"
 #include "ui/dialog_hotkey.h"
 #include "platform/PlatformCapabilitiesApp.hpp"
+#include "platform/HotkeyReport.hpp"
 
 #include "3rdparty/fix_old_qt.h"
 #include "3rdparty/qrcodegen.hpp"
@@ -562,7 +563,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->label_inbound->installEventFilter(this);
     ui->splitter->installEventFilter(this);
     //
-    RegisterHotkey(false);
+    const QStringList hotkeyProblems = RegisterHotkey(false);
     //
     auto last_size = ProxorGui::dataStore->mw_size.split("x");
     if (last_size.length() == 2) {
@@ -796,6 +797,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         runOnUiThread([=] { show_log_impl(log); });
     };
     MW_show_log("Platform: " + ProxorPlatform::DescribePlatformEnvironment(ProxorPlatform::CurrentPlatformEnvironment()));
+    for (const auto &problem : hotkeyProblems) MW_show_log(tr("Hotkeys: %1").arg(problem));
 
     // table UI
     proxyListModel = new ProxyListModel(this);
@@ -3641,35 +3643,33 @@ void MainWindow::refresh_connection_list(const QJsonArray &arr) {
 
 inline QList<std::shared_ptr<QHotkey>> RegisteredHotkey;
 
-void MainWindow::RegisterHotkey(bool unregister) {
-    while (!RegisteredHotkey.isEmpty()) {
-        auto hk = RegisteredHotkey.takeFirst();
-        hk->deleteLater();
-    }
-    if (unregister) return;
+QStringList MainWindow::RegisterHotkey(bool unregister) {
+    // The shared_ptr destructor unregisters the OS hotkey; the objects are not QObject-parented.
+    RegisteredHotkey.clear();
+    if (unregister) return {};
 
-    QStringList regstr{
-        ProxorGui::dataStore->hotkey_mainwindow,
-        ProxorGui::dataStore->hotkey_group,
-        ProxorGui::dataStore->hotkey_route,
-        ProxorGui::dataStore->hotkey_system_proxy_menu,
+    QList<ProxorPlatform::HotkeyBinding> bindings{
+        {tr("Show main window"), ProxorGui::dataStore->hotkey_mainwindow},
+        {tr("Manage groups"), ProxorGui::dataStore->hotkey_group},
+        {tr("Routing settings"), ProxorGui::dataStore->hotkey_route},
+        {tr("System proxy menu"), ProxorGui::dataStore->hotkey_system_proxy_menu},
     };
+    auto plan = ProxorPlatform::PlanHotkeyRegistration(
+        bindings, ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::GlobalHotkeys));
 
-    for (const auto &key: regstr) {
-        if (key.isEmpty()) continue;
-        if (regstr.count(key) > 1) return; // Conflict hotkey
-    }
-    for (const auto &key: regstr) {
-        QKeySequence k(key);
+    for (const auto &b : plan.toRegister) {
+        QKeySequence k(b.sequence);
         if (k.isEmpty()) continue;
         auto hk = std::make_shared<QHotkey>(k, true);
         if (hk->isRegistered()) {
+            const QString key = b.sequence;
             RegisteredHotkey += hk;
             connect(hk.get(), &QHotkey::activated, this, [=] { HotkeyEvent(key); });
         } else {
-            hk->deleteLater();
+            plan.problems << ProxorPlatform::HotkeyRejectedText(b);
         }
     }
+    return plan.problems;
 }
 
 void MainWindow::HotkeyEvent(const QString &key) {
@@ -3689,7 +3689,18 @@ void MainWindow::HotkeyEvent(const QString &key) {
 
 #else
 
-void MainWindow::RegisterHotkey(bool unregister) {}
+QStringList MainWindow::RegisterHotkey(bool unregister) {
+    if (unregister) return {};
+    QList<ProxorPlatform::HotkeyBinding> bindings{
+        {tr("Show main window"), ProxorGui::dataStore->hotkey_mainwindow},
+        {tr("Manage groups"), ProxorGui::dataStore->hotkey_group},
+        {tr("Routing settings"), ProxorGui::dataStore->hotkey_route},
+        {tr("System proxy menu"), ProxorGui::dataStore->hotkey_system_proxy_menu},
+    };
+    return ProxorPlatform::PlanHotkeyRegistration(
+               bindings, ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::GlobalHotkeys))
+        .problems;
+}
 
 void MainWindow::HotkeyEvent(const QString &key) {}
 
