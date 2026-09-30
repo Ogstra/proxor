@@ -2182,7 +2182,13 @@ void MainWindow::proxor_set_spmode_system_proxy(bool enable, bool save) {
 
     if (save) {
         ProxorGui::dataStore->remember_spmode.removeAll("system_proxy");
+#ifdef Q_OS_MACOS
+        // Like Tun on every platform, System Proxy on macOS is remembered whether or not
+        // "Remember last profile" is on (it only comes up once a profile runs).
+        if (enable) {
+#else
         if (enable && ProxorGui::dataStore->remember_enable) {
+#endif
             ProxorGui::dataStore->remember_spmode.append("system_proxy");
         }
         ProxorGui::dataStore->Save();
