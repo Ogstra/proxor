@@ -155,9 +155,6 @@ void syncLabelColumns(QWidget *root) {
 }
 
 void polishVpnPage(QWidget *page) {
-    // TUN is not available on macOS yet: keep the page (its values are still saved), but disabled.
-    page->setEnabled(false);
-    page->setToolTip(QObject::tr("Not available on macOS yet"));
     // The vertical Line widget renders as a stray "[" with the macOS style.
     for (auto *line : page->findChildren<QFrame *>(QStringLiteral("line"))) line->hide();
     // "Pick..." was placed by absolute geometry over the group box's title, overlapping its border.

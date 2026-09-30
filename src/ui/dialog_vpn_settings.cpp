@@ -182,6 +182,12 @@ DialogVPNSettings::DialogVPNSettings(QWidget *parent) : QDialog(parent), ui(new 
             if (name.startsWith('"') && name.endsWith('"'))
                 name = name.mid(1, name.size() - 2);
             if (!name.isEmpty()) names.insert(name);
+#elif defined(Q_OS_MACOS)
+            // macOS `ps -o comm` prints the full executable path (plus a "COMM" header), while
+            // sing-box process_name rules match the executable's file name.
+            if (trimmed == QLatin1String("COMM")) continue;
+            const auto name = trimmed.section(QLatin1Char('/'), -1);
+            if (!name.isEmpty()) names.insert(name);
 #else
             if (!trimmed.isEmpty()) names.insert(trimmed);
 #endif
