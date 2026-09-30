@@ -26,6 +26,7 @@ type renderOpts struct {
 	stack       string
 	strict      bool
 	domainDNS   bool
+	vpnClients  bool
 }
 
 // renderTemplate reads the real GUI template and substitutes every placeholder
@@ -50,6 +51,9 @@ func renderTemplate(t *testing.T, o renderOpts) []byte {
 	}
 	if o.processRule {
 		process = `,{"outbound":"direct","process_name":["Telegram"]}`
+	}
+	if o.vpnClients {
+		process += `,{"outbound":"direct","process_name":["wireguard-go","openvpn","tailscaled","WireGuard"]}`
 	}
 	if o.cidrRule {
 		cidr = `,{"outbound":"direct","ip_cidr":["192.168.0.0/16"]}`
@@ -322,5 +326,16 @@ func TestValidateCITunConfig(t *testing.T) {
 	}
 	if got := tunOf(t, opts).RouteAddress; len(got) != 1 {
 		t.Fatalf("route_address = %v, want exactly the TEST-NET-2 route", got)
+	}
+}
+
+// The OS's VPN clients are appended as their own direct rule after the user's process rule.
+func TestValidateVpnClientRule(t *testing.T) {
+	cfg := renderTemplate(t, renderOpts{processRule: true, vpnClients: true})
+	if !strings.Contains(string(cfg), "WireGuard") {
+		t.Fatal("vpn client rule not rendered")
+	}
+	if _, _, err := ValidateTunConfig(cfg, 2080); err != nil {
+		t.Fatalf("config with VPN client rule rejected: %v", err)
 	}
 }

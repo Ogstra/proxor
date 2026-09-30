@@ -2,6 +2,7 @@
 #include "db/Database.hpp"
 #include "fmt/includes.h"
 #include "fmt/Preset.hpp"
+#include "platform/AutoBypass.hpp"
 #include "sys/WifiMonitor.hpp"
 
 #include <QApplication>
@@ -16,16 +17,17 @@
 
 namespace ProxorGui {
 
-    QStringList getAutoBypassExternalProcessPaths(const std::shared_ptr<BuildConfigResult> &result) {
-        QStringList paths;
+    QStringList externalCorePrograms(const std::shared_ptr<BuildConfigResult> &result) {
+        QStringList programs;
         for (const auto &extR: result->extRs) {
-            auto path = extR->program;
-            if (path.trimmed().isEmpty()) continue;
-            paths << path.replace("\\", "/");
+            auto p = extR->program.trimmed();
+            if (p.isEmpty()) continue;
+            if (QFileInfo(p).isRelative() && (p.contains('/') || p.contains('\\'))) {
+                p = QFileInfo(p).absoluteFilePath();
+            }
+            programs << p;
         }
-        // Auto-bypass known VPN clients to prevent VPN-over-VPN routing
-        paths << "wireguard.exe" << "openvpn.exe" << "tailscaled.exe";
-        return paths;
+        return programs;
     }
 
     QString genTunName() {
@@ -899,11 +901,12 @@ namespace ProxorGui {
                 status->routingRules += rule;
             }
 
-            auto autoBypassExternalProcessPaths = getAutoBypassExternalProcessPaths(status->result);
-            if (!autoBypassExternalProcessPaths.isEmpty()) {
-                QJsonObject rule{{"outbound", "bypass"},
-                                 {"process_name", QList2QJsonArray(autoBypassExternalProcessPaths)}};
-                status->routingRules += rule;
+            const auto autoBypass = ProxorPlatform::BuildAutoBypassProcesses(externalCorePrograms(status->result), ProxorPlatform::CompiledHostOs());
+            if (!autoBypass.processPaths.isEmpty()) {
+                status->routingRules += QJsonObject{{"outbound", "bypass"}, {"process_path", QList2QJsonArray(autoBypass.processPaths)}};
+            }
+            if (!autoBypass.processNames.isEmpty()) {
+                status->routingRules += QJsonObject{{"outbound", "bypass"}, {"process_name", QList2QJsonArray(autoBypass.processNames)}};
             }
         }
 
@@ -991,7 +994,13 @@ namespace ProxorGui {
             cidr_rule = "," + QJsonObject2QString(rule, false);
         }
 
-        // TODO bypass ext core process path?
+        const auto vpnClients = ProxorPlatform::KnownVpnClientProcessNames(ProxorPlatform::CompiledHostOs());
+        if (!vpnClients.isEmpty()) {
+            QJsonObject rule{{"outbound", "direct"}, {"process_name", QList2QJsonArray(vpnClients)}};
+            process_name_rule += "," + QJsonObject2QString(rule, false);
+        }
+        // External cores are not excluded here: this Tun process outlives profile switches, so it cannot know
+        // the current profile's external cores. Single-core Tun excludes them (see the internal Tun rules).
 
         // auth
         QString socks_user_pass;

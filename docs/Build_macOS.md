@@ -76,8 +76,10 @@ service. macOS releases are prereleases, so expect rough edges and report them.
   three paths above. If the app is dragged to the Trash, the service removes itself after about 35
   minutes.
 - **Limits.** `strict_route` has no effect on macOS; IPv6 traffic bypasses Tun unless "Enable IPv6"
-  is on in Tun settings; macOS per-interface DNS can bypass the Tun DNS hijack; external cores
-  (for example hysteria) are not excluded automatically; on Macs with several users each user
+  is on in Tun settings; macOS per-interface DNS can bypass the Tun DNS hijack; known VPN clients
+  (tailscaled, openvpn, wireguard-go, WireGuard) are sent direct automatically, while external
+  cores (for example hysteria) are excluded automatically only in single-core Tun, which macOS does
+  not use; on Macs with several users each user
   installs once, and System Proxy is machine-wide.
 
 ## Prerequisites
