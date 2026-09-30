@@ -11,6 +11,9 @@ if [ -n "${QT_ROOT_DIR:-}" ]; then
 elif [ -n "${CMAKE_PREFIX_PATH:-}" ]; then
     cmake_args+=(-DCMAKE_PREFIX_PATH="$CMAKE_PREFIX_PATH")
 fi
+if [ -n "${PACKAGE_MODE_ONLY:-}" ]; then
+    cmake_args+=(-DPROXOR_TEST_ONLY="$PACKAGE_MODE_ONLY")
+fi
 
 cmake "${cmake_args[@]}"
 cmake --build "$build_dir" --parallel
@@ -23,4 +26,5 @@ ctest "${ctest_args[@]}"
 # The unit tests above prove the policy is correct; this grep-level contract
 # proves it is actually called from production code. It is shell-only and
 # portable, so it rides along with the unit tests on every runner.
+export PACKAGE_MODE_ONLY="${PACKAGE_MODE_ONLY:-}"
 bash "$test_dir/test-policy-wiring.sh"

@@ -86,3 +86,19 @@ if awk '/^void MainWindow::macOnTunStopped/,/^}/' "$repo_root/src/ui/mainwindow.
   exit 1
 fi
 grep -q 'Settings > Tun settings' "$repo_root/docs/Build_macOS.md"
+
+# Feature wiring checks (phase 54+): one script per feature under wiring.d/, called with the repo root.
+wiring_dir="$repo_root/test/package_mode/wiring.d"
+if [ -n "${PACKAGE_MODE_ONLY:-}" ]; then
+  set -- "$wiring_dir/$PACKAGE_MODE_ONLY.sh"
+else
+  set -- "$wiring_dir"/*.sh
+fi
+for script in "$@"; do
+  [ -f "$script" ] || continue
+  if ! bash "$script" "$repo_root"; then
+    echo "test-policy-wiring.sh: $(basename "$script") failed" >&2
+    exit 1
+  fi
+done
+echo WIRING-OK

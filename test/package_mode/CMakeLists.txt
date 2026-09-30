@@ -90,3 +90,17 @@ target_include_directories(mac_mode_coordinator_test PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos)
 target_link_libraries(mac_mode_coordinator_test PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME mac_mode_coordinator_test COMMAND mac_mode_coordinator_test)
+
+# Feature tests, one fragment per feature (phase 54+). PROXOR_TEST_ONLY=<name> (set by run-tests.sh
+# from PACKAGE_MODE_ONLY) builds only tests.d/<name>.cmake, so parallel executors do not break each other.
+set(PROXOR_SRC "${CMAKE_CURRENT_LIST_DIR}/../../src")
+set(PROXOR_TEST_ONLY "" CACHE STRING "Only include test/package_mode/tests.d/<name>.cmake")
+if (PROXOR_TEST_ONLY)
+    set(_proxor_fragments "${CMAKE_CURRENT_LIST_DIR}/tests.d/${PROXOR_TEST_ONLY}.cmake")
+else ()
+    file(GLOB _proxor_fragments CONFIGURE_DEPENDS "${CMAKE_CURRENT_LIST_DIR}/tests.d/*.cmake")
+    list(SORT _proxor_fragments)
+endif ()
+foreach (_proxor_fragment IN LISTS _proxor_fragments)
+    include("${_proxor_fragment}")
+endforeach ()

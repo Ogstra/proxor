@@ -168,8 +168,14 @@ if (DBG_CMAKE)
 endif ()
 
 # Sources
+# Cross-platform capability and policy modules (phase 54+). One directory, globbed, so parallel work
+# adds files without editing this list.
+file(GLOB PROXOR_PLATFORM_SOURCES CONFIGURE_DEPENDS
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/platform/*.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/platform/*.hpp)
 set(PROJECT_SOURCES
         ${PLATFORM_SOURCES}
+        ${PROXOR_PLATFORM_SOURCES}
 
         src/main/main.cpp
         src/main/ProxorGui.cpp
