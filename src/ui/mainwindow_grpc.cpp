@@ -6,7 +6,10 @@
 #include "db/traffic/TrafficLooper.hpp"
 #include "rpc/gRPC.h"
 #include "main/PackagePolicy.hpp"
+#include "platform/PingPolicy.hpp"
 #include "ui/widget/MessageBoxTimer.h"
+
+#include <atomic>
 
 #include <QTimer>
 #include <QThread>
@@ -58,7 +61,13 @@ void MainWindow::setup_grpc() {
 
 // 测速
 
+#ifndef NKR_NO_GRPC
+static_assert(libcore::TcpPing == ProxorPlatform::kTcpPingMode && libcore::IcmpPing == ProxorPlatform::kIcmpPingMode, "PingPolicy mode constants must match libcore::TestMode");
+#endif
+
 inline bool speedtesting = false;
+inline std::atomic_bool icmp_unavailable_this_session{false};
+inline std::atomic_bool icmp_fallback_notice_shown{false};
 inline QList<QThread *> speedtesting_threads = {};
 
 void MainWindow::speedtest_current_group(int mode, bool test_group) {
@@ -165,8 +174,9 @@ void MainWindow::speedtest_profiles(const QList<std::shared_ptr<ProxorGui::Proxy
                     lock_write.unlock();
 
                     //
+                    const int effectiveMode = ProxorPlatform::EffectivePingMode(mode, icmp_unavailable_this_session.load());
                     libcore::TestReq req;
-                    req.set_mode((libcore::TestMode) mode);
+                    req.set_mode((libcore::TestMode) effectiveMode);
                     req.set_timeout(10 * 1000);
                     req.set_url(ProxorGui::dataStore->test_latency_url.toStdString());
 
@@ -219,14 +229,14 @@ void MainWindow::speedtest_profiles(const QList<std::shared_ptr<ProxorGui::Proxy
 
                         req.set_full_speed_url(ProxorGui::dataStore->test_download_url.toStdString());
                         req.set_full_speed_timeout(ProxorGui::dataStore->test_download_timeout);
-                    } else if (mode == libcore::TcpPing) {
+                    } else if (effectiveMode == libcore::TcpPing) {
                         if (!profile->EnsureHydrated()) {
                             profile->full_test_report = tr("Profile is not hydrated");
                             ProxorGui::profileManager->SaveProfile(profile);
                             continue;
                         }
                         req.set_address(profile->bean->DisplayAddress().toStdString());
-                    } else if (mode == libcore::IcmpPing) {
+                    } else if (effectiveMode == libcore::IcmpPing) {
                         if (!profile->EnsureHydrated()) {
                             profile->full_test_report = tr("Profile is not hydrated");
                             ProxorGui::profileManager->SaveProfile(profile);
@@ -257,6 +267,27 @@ void MainWindow::speedtest_profiles(const QList<std::shared_ptr<ProxorGui::Proxy
                             lock_results.unlock();
                         }
                         return;
+                    }
+
+                    if (ProxorPlatform::ClassifyPingResult(effectiveMode, QString::fromStdString(result.error())) == ProxorPlatform::PingOutcome::RetryWithTcp) {
+                        icmp_unavailable_this_session = true;
+                        if (!icmp_fallback_notice_shown.exchange(true)) {
+                            MW_show_log(ProxorPlatform::IcmpFallbackNotice(QString::fromStdString(result.error()))); // shown even for silent runs: never silent
+                        }
+                        libcore::TestReq tcpReq;
+                        tcpReq.set_mode(libcore::TcpPing);
+                        tcpReq.set_timeout(10 * 1000);
+                        tcpReq.set_address(profile->bean->DisplayAddress().toStdString());
+                        bool tcpOK;
+                        result = defaultClient->Test(&tcpOK, tcpReq);
+                        if (!tcpOK) {
+                            if (groupedLogs && !silent) {
+                                lock_results.lock();
+                                final_logs[profile_log_index.value(profile->id)] = tr("[%1] test error: RPC failed").arg(profile->bean->DisplayTypeAndName());
+                                lock_results.unlock();
+                            }
+                            return;
+                        }
                     }
 
                     if (result.error().empty()) {
