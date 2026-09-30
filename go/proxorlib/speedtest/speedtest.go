@@ -8,11 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptrace"
-	"os"
 	"time"
-
-	"golang.org/x/net/icmp"
-	"golang.org/x/net/ipv4"
 )
 
 const UrlTestStandard_RTT = 0
@@ -127,53 +123,4 @@ func TcpPing(address string, timeout int32) (ms int32, err error) {
 		c.Close()
 	}
 	return
-}
-
-func IcmpPing(address string, timeout int32) (int32, error) {
-	host := address
-	if h, _, err := net.SplitHostPort(address); err == nil {
-		host = h
-	}
-	dst, err := net.ResolveIPAddr("ip4", host)
-	if err != nil {
-		return 0, err
-	}
-	conn, err := icmp.ListenPacket("ip4:icmp", "0.0.0.0")
-	if err != nil {
-		return 0, err
-	}
-	defer conn.Close()
-
-	msg := icmp.Message{
-		Type: ipv4.ICMPTypeEcho,
-		Code: 0,
-		Body: &icmp.Echo{ID: os.Getpid() & 0xffff, Seq: 1, Data: []byte("proxor")},
-	}
-	wb, err := msg.Marshal(nil)
-	if err != nil {
-		return 0, err
-	}
-
-	start := time.Now()
-	if _, err := conn.WriteTo(wb, dst); err != nil {
-		return 0, err
-	}
-	if err := conn.SetReadDeadline(time.Now().Add(time.Duration(timeout) * time.Millisecond)); err != nil {
-		return 0, err
-	}
-
-	rb := make([]byte, 1500)
-	for {
-		n, _, err := conn.ReadFrom(rb)
-		if err != nil {
-			return 0, err
-		}
-		rm, err := icmp.ParseMessage(1, rb[:n])
-		if err != nil {
-			return 0, err
-		}
-		if rm.Type == ipv4.ICMPTypeEchoReply {
-			return int32(time.Since(start).Milliseconds()), nil
-		}
-	}
 }
