@@ -13,7 +13,7 @@ private slots:
         QCOMPARE(KnownVpnClientProcessNames(HostOs::MacOS), (QStringList{"wireguard-go", "openvpn", "tailscaled", "WireGuard"}));
         QVERIFY(KnownVpnClientProcessNames(HostOs::Other).isEmpty());
     }
-    void windows() {
+    void windowsHost() {
         auto r = BuildAutoBypassProcesses({"C:/cores/hysteria2.exe", "C:\\cores\\tuic.exe", "naive.exe", "", "  "}, HostOs::Windows);
         QCOMPARE(r.processPaths, (QStringList{"C:\\cores\\hysteria2.exe", "C:\\cores\\tuic.exe"}));
         QCOMPARE(r.processNames, (QStringList{"hysteria2.exe", "tuic.exe", "naive.exe", "wireguard.exe", "openvpn.exe", "tailscaled.exe"}));
@@ -24,7 +24,7 @@ private slots:
         QCOMPARE(r.processNames.count("X.exe"), 1);
         QCOMPARE(r.processNames.size(), 4);
     }
-    void linux() {
+    void linuxHost() {
         auto r = BuildAutoBypassProcesses({"/opt/cores/hysteria2", "naive"}, HostOs::Linux);
         QCOMPARE(r.processPaths, (QStringList{"/opt/cores/hysteria2"}));
         QCOMPARE(r.processNames, (QStringList{"hysteria2", "naive", "wireguard-go", "openvpn", "tailscaled"}));
@@ -32,7 +32,7 @@ private slots:
         QCOMPARE(r.processPaths.size(), 2);
         QCOMPARE(r.processNames.mid(0, 2), (QStringList{"Core", "core"}));
     }
-    void macos() {
+    void macosHost() {
         auto r = BuildAutoBypassProcesses({"/Applications/Proxor.app/Contents/MacOS/hysteria2"}, HostOs::MacOS);
         QCOMPARE(r.processPaths, (QStringList{"/Applications/Proxor.app/Contents/MacOS/hysteria2"}));
         QCOMPARE(r.processNames.first(), QString("hysteria2"));
