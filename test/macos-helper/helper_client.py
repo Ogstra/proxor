@@ -165,7 +165,9 @@ def no_service(reply):
 def cmd_hello(_args):
     try:
         _c, reply = connect_and_hello()
-    except Closed:
+    except (Closed, BrokenPipeError, ConnectionResetError):
+        # A peer the helper rejects is dropped before it reads; depending on timing the
+        # client notices on the write (broken pipe) or on the read (EOF).
         print("connection closed without a reply", file=sys.stderr)
         return 3
     print(json.dumps(reply))
