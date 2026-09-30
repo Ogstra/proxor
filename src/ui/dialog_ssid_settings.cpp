@@ -4,6 +4,8 @@
 #include "db/Database.hpp"
 #include "main/GuiUtils.hpp"
 #include "main/ProxorGui.hpp"
+#include "platform/PlatformCapabilitiesApp.hpp"
+#include "platform/CapabilityUi.hpp"
 
 #include <memory>
 #include <QLabel>
@@ -111,6 +113,13 @@ DialogSSIDSettings::DialogSSIDSettings(QWidget *parent) : QDialog(parent), ui(ne
     }
     connect(ui->buttonBox, &QDialogButtonBox::accepted, this, &DialogSSIDSettings::accept);
     connect(ui->buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
+
+    const auto ssidCapability = ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::OnDemandSsid);
+    if (ssidCapability.support != ProxorPlatform::Support::Supported) {
+        auto *note = ProxorPlatform::MakeCapabilityNote(this);
+        ui->verticalLayout->insertWidget(0, note);
+        ProxorPlatform::ApplyCapability({ui->groupBox_activation, ui->groupBox_ssids}, ssidCapability, note);
+    }
 }
 
 DialogSSIDSettings::~DialogSSIDSettings() {

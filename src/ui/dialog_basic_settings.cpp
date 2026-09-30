@@ -12,6 +12,8 @@
 #include "main/GuiUtils.hpp"
 #include "main/ProxorGui.hpp"
 #include "sys/AutoRun.hpp"
+#include "platform/PlatformCapabilitiesApp.hpp"
+#include "platform/CapabilityUi.hpp"
 
 #include <QDialogButtonBox>
 
@@ -289,6 +291,30 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     ui->ping_type->setCurrentIndex(ProxorGui::dataStore->ping_type);
     D_LOAD_BOOL(old_share_link_format)
     ui->start_with_system->setChecked(AutoRun_IsEnabled());
+    {
+        const auto autoStart = ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::AutoStart);
+        auto *autoStartNote = ProxorPlatform::MakeCapabilityNote(ui->start_with_system->parentWidget());
+        ui->verticalLayout_app_behavior->insertWidget(ui->verticalLayout_app_behavior->indexOf(ui->start_with_system) + 1, autoStartNote);
+        ProxorPlatform::ApplyCapability(ui->start_with_system, autoStart, autoStartNote);
+        if (autoStart.support == ProxorPlatform::Support::Unsupported) ui->start_with_system->setChecked(false);
+
+        const auto icmp = ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::IcmpPing);
+        if (icmp.support != ProxorPlatform::Support::Supported) {
+            ui->ping_type->setItemData(1, icmp.reason, Qt::ToolTipRole);
+            auto *icmpNote = ProxorPlatform::MakeCapabilityNote(ui->ping_type->parentWidget());
+            ui->verticalLayout_latency->insertWidget(1, icmpNote);
+            auto refreshIcmpNote = [this, icmp, icmpNote](int index) {
+                if (index == 1) {
+                    icmpNote->setText(icmp.reason);
+                    icmpNote->setVisible(true);
+                } else {
+                    icmpNote->setVisible(false);
+                }
+            };
+            connect(ui->ping_type, QOverload<int>::of(&QComboBox::currentIndexChanged), this, refreshIcmpNote);
+            refreshIcmpNote(ui->ping_type->currentIndex());
+        }
+    }
     ui->remember_enable->setChecked(ProxorGui::dataStore->remember_enable);
     ui->allow_lan->setChecked(QStringList{"::", "0.0.0.0"}.contains(ProxorGui::dataStore->inbound_address));
 
@@ -484,7 +510,8 @@ void DialogBasicSettings::accept() {
     D_SAVE_STRING(test_download_url)
     ProxorGui::dataStore->ping_type = ui->ping_type->currentIndex();
     D_SAVE_BOOL(old_share_link_format)
-    AutoRun_SetEnabled(ui->start_with_system->isChecked());
+    if (ProxorPlatform::IsUsable(ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::AutoStart)))
+        AutoRun_SetEnabled(ui->start_with_system->isChecked());
     ProxorGui::dataStore->remember_enable = ui->remember_enable->isChecked();
     ProxorGui::dataStore->inbound_address = ui->allow_lan->isChecked() ? "::" : "127.0.0.1";
 
