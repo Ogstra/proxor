@@ -23,14 +23,13 @@
 #include "ui/dialog_hotkey.h"
 #include "platform/PlatformCapabilitiesApp.hpp"
 #include "platform/HotkeyReport.hpp"
+#include "platform/QrScanPolicy.hpp"
+#include "platform/QrImageDecode.hpp"
 
 #include "3rdparty/fix_old_qt.h"
 #include "3rdparty/qrcodegen.hpp"
 #include "3rdparty/qv2ray/v2/components/proxy/QvProxyConfigurator.hpp"
 
-#ifndef NKR_NO_ZXING
-#include "3rdparty/ZxingQtReader.hpp"
-#endif
 
 #ifdef Q_OS_WIN
 #include "3rdparty/WinCommander.hpp"
@@ -54,6 +53,9 @@
 #endif
 
 #include <QClipboard>
+#include <QFileDialog>
+#include <QMimeData>
+#include <QImageReader>
 #include <QApplication>
 #include <QAbstractItemView>
 #include <QBrush>
@@ -1088,6 +1090,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 #ifdef NKR_NO_ZXING
     // on_menu_scan_qr_triggered needs the barcode reader this build does not link.
     ui->menu_scan_qr->setVisible(false);
+    ui->menu_scan_qr_image->setVisible(false);
+    ui->menu_scan_qr_clipboard->setVisible(false);
 #endif
     connect(ui->menu_tcp_ping, &QAction::triggered, this, [=]() { speedtest_current_group(0, false); });
     connect(ui->menu_url_test, &QAction::triggered, this, [=]() { speedtest_current_group(1, false); });
@@ -2756,6 +2760,15 @@ void MainWindow::on_menu_add_from_input_triggered() {
 
 void MainWindow::on_menu_add_from_clipboard_triggered() {
     auto clipboard = QApplication::clipboard()->text();
+#ifndef NKR_NO_ZXING
+    if (clipboard.trimmed().isEmpty()) {
+        const auto *mime = QApplication::clipboard()->mimeData();
+        if (mime && mime->hasImage()) {
+            on_menu_scan_qr_clipboard_triggered();
+            return;
+        }
+    }
+#endif
     ProxorGui_sub::groupUpdater->AsyncUpdate(clipboard);
 }
 
@@ -2976,28 +2989,73 @@ void MainWindow::display_qr_link(bool nkrFormat) {
     w->deleteLater();
 }
 
+void MainWindow::importQrFromImage(const QImage &image, ProxorPlatform::QrSource source) {
+    const auto text = ProxorPlatform::DecodeQrFromImage(image);
+    const auto msg = ProxorPlatform::QrScanMessage(source, {!image.isNull(), !text.isEmpty()},
+                                                   ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::ScreenQrCapture));
+    if (!msg.isEmpty()) {
+        MessageBoxInfo(software_name, msg);
+        return;
+    }
+    show_log_impl("QR Code Result:\n" + text);
+    ProxorGui_sub::groupUpdater->AsyncUpdate(text);
+}
+
+void MainWindow::on_menu_scan_qr_image_triggered() {
+    const auto path = QFileDialog::getOpenFileName(this, tr("Select an image with a QR code"), QString(),
+                                                   tr("Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp)"));
+    if (path.isEmpty()) return;
+    QImageReader reader(path);
+    reader.setAutoTransform(true);
+    importQrFromImage(reader.read(), ProxorPlatform::QrSource::ImageFile);
+}
+
+void MainWindow::on_menu_scan_qr_clipboard_triggered() {
+    const auto *mime = QApplication::clipboard()->mimeData();
+    QImage img;
+    if (mime && mime->hasImage()) img = qvariant_cast<QImage>(mime->imageData());
+    importQrFromImage(img, ProxorPlatform::QrSource::ClipboardImage);
+}
+
 void MainWindow::on_menu_scan_qr_triggered() {
 #ifndef NKR_NO_ZXING
-    using namespace ZXingQt;
+    using namespace ProxorPlatform;
+    const auto cap = CurrentCapability(Capability::ScreenQrCapture);
+    if (!IsUsable(cap)) {
+        QMessageBox box(QMessageBox::Information, software_name, QrScanMessage(QrSource::Screen, {false, false}, cap), QMessageBox::Close, this);
+        auto *fileBtn = box.addButton(tr("Choose Image File..."), QMessageBox::ActionRole);
+        auto *clipBtn = box.addButton(tr("Use Clipboard Image"), QMessageBox::ActionRole);
+        box.exec();
+        if (box.clickedButton() == fileBtn) on_menu_scan_qr_image_triggered();
+        else if (box.clickedButton() == clipBtn) on_menu_scan_qr_clipboard_triggered();
+        return;
+    }
 
     hide();
     QThread::sleep(1);
 
-    auto screen = QGuiApplication::primaryScreen();
-    auto geom = screen->geometry();
-    auto qpx = screen->grabWindow(0, geom.x(), geom.y(), geom.width(), geom.height());
+    // Primary screen first, then every other screen.
+    QList<QScreen *> screens = QGuiApplication::screens();
+    if (auto *primary = QGuiApplication::primaryScreen()) {
+        screens.removeAll(primary);
+        screens.prepend(primary);
+    }
+    bool anyImage = false;
+    QString text;
+    for (auto *screen : screens) {
+        const auto g = screen->geometry();
+        const auto image = screen->grabWindow(0, g.x(), g.y(), g.width(), g.height()).toImage();
+        if (image.isNull()) continue;
+        anyImage = true;
+        text = DecodeQrFromImage(image);
+        if (!text.isEmpty()) break;
+    }
 
     show();
 
-    auto hints = DecodeHints()
-                     .setFormats(BarcodeFormat::QRCode)
-                     .setTryRotate(false)
-                     .setBinarizer(Binarizer::FixedThreshold);
-
-    auto result = ReadBarcode(qpx.toImage(), hints);
-    const auto &text = result.text();
-    if (text.isEmpty()) {
-        MessageBoxInfo(software_name, tr("QR Code not found"));
+    const auto msg = QrScanMessage(QrSource::Screen, {anyImage, !text.isEmpty()}, cap);
+    if (!msg.isEmpty()) {
+        MessageBoxInfo(software_name, msg);
     } else {
         show_log_impl("QR Code Result:\n" + text);
         ProxorGui_sub::groupUpdater->AsyncUpdate(text);

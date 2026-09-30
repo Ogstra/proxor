@@ -24,6 +24,8 @@
 #include <utility>
 
 #include "GroupSort.hpp"
+#include "platform/QrScanPolicy.hpp"
+#include <QImage>
 
 #include "sys/WifiMonitor.hpp"
 
@@ -152,6 +154,12 @@ private slots:
     void display_qr_link(bool nkrFormat = false);
 
     void on_menu_scan_qr_triggered();
+
+    void on_menu_scan_qr_image_triggered();
+
+    void on_menu_scan_qr_clipboard_triggered();
+
+    void importQrFromImage(const QImage &image, ProxorPlatform::QrSource source);
 
     void on_menu_clear_test_result_triggered();
 
