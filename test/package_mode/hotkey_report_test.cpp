@@ -65,4 +65,4 @@ private slots:
 };
 
 QTEST_GUILESS_MAIN(HotkeyReportTest)
-#include "hotkey_report_test.cpp.moc"
+#include "hotkey_report_test.moc"
