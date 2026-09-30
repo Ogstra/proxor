@@ -121,6 +121,34 @@ jobs:
           GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go vet ./go/cmd/proxor_core/machelper/...
           (cd go/cmd/proxor_core && GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -o /dev/null -trimpath \
             -tags "with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_conntrack,with_grpc" .)
+          # ICMP ping is split per OS: prove every implementation file vets.
+          GOOS=windows go vet ./go/proxorlib/speedtest/
+          GOOS=darwin go vet ./go/proxorlib/speedtest/
+          GOOS=freebsd go vet ./go/proxorlib/speedtest/
+
+  test-go-platforms:
+    name: Go ICMP tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-15]
+    steps:
+      - name: Checking out sources
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          submodules: "recursive"
+      - name: Install Golang
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - name: Run ICMP tests
+        shell: bash
+        run: go test ./go/proxorlib/speedtest/... -count=1 -v
 
   build-cpp:
     strategy:
@@ -389,6 +417,27 @@ jobs:
       - name: Run package policy fixture
         shell: bash
         run: test/package_mode/run-tests.sh
+
+  unit-tests-macos:
+    name: Package policy tests (macos-15)
+    runs-on: macos-15
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+      HOMEBREW_NO_ANALYTICS: "1"
+    steps:
+      - name: Check out the exact source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+      - name: Install Qt and zxing-cpp
+        run: brew install qtbase zxing-cpp
+      - name: Run package policy fixture natively on macOS
+        shell: bash
+        run: CMAKE_PREFIX_PATH="$(brew --prefix)" bash test/package_mode/run-tests.sh
 
   package-windows:
     name: Package Windows release assets
