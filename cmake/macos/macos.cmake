@@ -20,7 +20,7 @@ set(PLATFORM_SOURCES
     src/sys/macos/MacHelperInstaller.h
     src/sys/macos/MacHelperInstaller.cpp
     src/sys/wifi/WifiBackendMac.mm
-    src/sys/wifi/WifiPermissionNone.cpp
+    src/sys/wifi/WifiPermissionMac.mm
     assets/macos/proxor.icns
 )
 # App icon (Dock, Finder, Launchpad): copied into Contents/Resources and named in Info.plist.
@@ -29,9 +29,10 @@ find_library(CORE_FOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
 find_library(CORE_SERVICES_FRAMEWORK CoreServices REQUIRED)
 find_library(APPKIT_FRAMEWORK AppKit REQUIRED)
 find_library(COREWLAN_FRAMEWORK CoreWLAN REQUIRED)
+find_library(CORELOCATION_FRAMEWORK CoreLocation REQUIRED)
 find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
-set_source_files_properties(src/sys/wifi/WifiBackendMac.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
-set(PLATFORM_LIBRARIES ${CORE_FOUNDATION_FRAMEWORK} ${CORE_SERVICES_FRAMEWORK} ${APPKIT_FRAMEWORK} ${COREWLAN_FRAMEWORK} ${FOUNDATION_FRAMEWORK})
+set_source_files_properties(src/sys/wifi/WifiBackendMac.mm src/sys/wifi/WifiPermissionMac.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+set(PLATFORM_LIBRARIES ${CORE_FOUNDATION_FRAMEWORK} ${CORE_SERVICES_FRAMEWORK} ${APPKIT_FRAMEWORK} ${COREWLAN_FRAMEWORK} ${CORELOCATION_FRAMEWORK} ${FOUNDATION_FRAMEWORK})
 # Keep user config out of the signed bundle (Throne: NKR_PACKAGE_MACOS -> NKR_CPP_USE_APPDATA).
 add_compile_definitions(NKR_CPP_USE_APPDATA)
 add_link_options(-Wl,-dead_strip)

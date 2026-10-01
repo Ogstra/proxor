@@ -377,6 +377,15 @@ if (APPLE)
             MACOSX_BUNDLE_BUNDLE_VERSION "${NKR_VERSION}"
             MACOSX_BUNDLE_ICON_FILE "proxor.icns"
     )
+    # Location usage strings: macOS hides the Wi-Fi network name unless the app is authorized for
+    # Location Services (phase 51, On-Demand). Idempotent, re-applied after every link.
+    set(PROXOR_LOCATION_USAGE "Proxor reads the name of the Wi-Fi network you are connected to so On-Demand and per-network host rules can work. The name never leaves this Mac.")
+    # The template-generated Info.plist can be read-only (copied from a read-only source), so make it writable first.
+    add_custom_command(TARGET ${PROXOR_GUI_TARGET} POST_BUILD
+            COMMAND /bin/chmod u+w "$<TARGET_BUNDLE_CONTENT_DIR:${PROXOR_GUI_TARGET}>/Info.plist"
+            COMMAND /usr/bin/plutil -replace NSLocationWhenInUseUsageDescription -string "${PROXOR_LOCATION_USAGE}" "$<TARGET_BUNDLE_CONTENT_DIR:${PROXOR_GUI_TARGET}>/Info.plist"
+            COMMAND /usr/bin/plutil -replace NSLocationUsageDescription -string "${PROXOR_LOCATION_USAGE}" "$<TARGET_BUNDLE_CONTENT_DIR:${PROXOR_GUI_TARGET}>/Info.plist"
+            VERBATIM)
 endif ()
 
 # Target Link
