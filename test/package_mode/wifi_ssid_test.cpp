@@ -70,8 +70,7 @@ private slots:
         QVERIFY(!HostsSkipDiffers(m, "Cafe", "Bar"));
         QVERIFY(!HostsSkipDiffers(m, "Home", "Home"));
         QVERIFY(!HostsSkipDiffers("a.lan 10.0.0.1", "", "Home"));
-        QVERIFY(!HostsSkipDiffers("a.lan 10.0.0.1 Home, Office", "Home", "Office"));
-        QVERIFY(HostsSkipDiffers("a.lan 10.0.0.1 Home, Office", "", " Office"));
+        QVERIFY(HostsSkipDiffers("a.lan 10.0.0.1  Home", "", "Home"));
         QVERIFY(!HostsSkipDiffers(m, "", "home"));
     }
     void changeTracker() {
