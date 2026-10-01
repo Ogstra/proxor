@@ -98,8 +98,9 @@ private slots:
                 QCOMPARE(s.support, Support::Supported);
                 QVERIFY(s.reason.isEmpty());
             }
-        QCOMPARE(Q(Capability::OnDemandSsid, Env(HostOs::MacOS, PackageMode::NativeOrPortable, DisplaySession::NotApplicable)).support,
-                 Support::Unsupported);
+        auto mac = Q(Capability::OnDemandSsid, Env(HostOs::MacOS, PackageMode::NativeOrPortable, DisplaySession::NotApplicable));
+        QCOMPARE(mac.support, Support::Supported);
+        QVERIFY(mac.reason.isEmpty());
         QCOMPARE(Q(Capability::OnDemandSsid, Env(HostOs::Windows, PackageMode::NativeOrPortable, DisplaySession::NotApplicable)).support,
                  Support::Supported);
     }

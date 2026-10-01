@@ -93,7 +93,10 @@ CapabilityStatus QuerySsid(const PlatformEnvironment &env) {
         case HostOs::Windows:
             return {};
         case HostOs::MacOS:
-            return Unsupported(T("Wi-Fi network detection is not available on macOS yet, so On-Demand rules and \"Skip on SSIDs\" never trigger. Your settings are kept."));
+            // Supported: CoreWLAN reads the SSID; the Location permission is a runtime state shown in the
+            // On-Demand tab, not a static capability, so the page and the Hosts column stay editable
+            // before permission is granted.
+            return {};
         case HostOs::Linux:
             return {};
         case HostOs::Other:
