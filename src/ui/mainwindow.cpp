@@ -9,6 +9,7 @@
 #include "sys/ExternalProcess.hpp"
 #include "sys/WifiMonitor.hpp"
 #include "sys/wifi/WifiBackend.hpp"
+#include "sys/wifi/WifiPermission.hpp"
 #include "main/PackagePolicy.hpp"
 
 #include "ui/ThemeManager.hpp"
@@ -1218,7 +1219,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     wifi_monitor = new WifiMonitor(CreatePlatformWifiBackend(), 5000, this);
     WifiMonitor::setAppInstance(wifi_monitor);
     connect(wifi_monitor, &WifiMonitor::ssidChanged, this, &MainWindow::onWifiSsidChanged);
-    wifi_monitor->setActive(true);
+    connect(wifi_monitor, &WifiMonitor::readingChanged, this, &MainWindow::onWifiReadingChanged);
+    refreshWifiMonitoring();
 
     connect(qApp, &QGuiApplication::commitDataRequest, this, &MainWindow::on_commitDataRequest);
 
@@ -1482,34 +1484,112 @@ std::shared_ptr<ProxorGui::ProxyEntity> MainWindow::resolveSsidOnDemandProfile()
     return best.profile;
 }
 
+void MainWindow::refreshWifiMonitoring() {
+    if (wifi_monitor == nullptr || ProxorGui::dataStore == nullptr) return;
+    const QString hosts = ProxorGui::dataStore->routing != nullptr ? ProxorGui::dataStore->routing->hosts_mapping : QString();
+    const bool needed = ProxorWifi::MonitoringNeeded(ProxorGui::dataStore->ssid_on_demand_enabled,
+                                                     ProxorGui::dataStore->ssid_trigger_list, hosts);
+    if (needed != wifi_monitor->isActive()) {
+        wifi_monitor->setActive(needed);
+        if (MW_show_log) {
+            MW_show_log(needed ? tr("[Wi-Fi] Watching the Wi-Fi network (On-Demand or \"Skip on SSIDs\" is configured).")
+                               : tr("[Wi-Fi] Stopped watching the Wi-Fi network: nothing uses it."));
+        }
+    }
+
+    const auto perm = ProxorWifi::CurrentWifiPermission();
+    switch (ProxorWifi::DecidePermissionPrompt(perm, needed, wifi_permission_asked)) {
+        case ProxorWifi::PermissionPrompt::ExplainThenRequest: {
+            wifi_permission_asked = true;
+            QTimer::singleShot(0, this, [this, perm] {
+                QMessageBox box(GetMessageBoxParent());
+                box.setIcon(QMessageBox::Information);
+                box.setWindowTitle(tr("Wi-Fi network name"));
+                box.setText(ProxorWifi::DescribePermission(perm));
+                auto *cont = box.addButton(tr("Continue..."), QMessageBox::AcceptRole);
+                box.addButton(tr("Not Now"), QMessageBox::RejectRole);
+                box.exec();
+                if (box.clickedButton() == cont) {
+                    ProxorWifi::RequestWifiPermission(this, [this](ProxorWifi::PermissionState s) {
+                        if (MW_show_log) {
+                            MW_show_log(tr("[Wi-Fi] Permission answer: %1")
+                                            .arg(s == ProxorWifi::PermissionState::Granted ? tr("allowed") : ProxorWifi::DescribePermission(s)));
+                        }
+                        wifi_monitor->refreshNow();
+                    });
+                } else if (MW_show_log) {
+                    MW_show_log(tr("[Wi-Fi] Permission not requested; On-Demand cannot see the Wi-Fi network until it is allowed (Settings > On-Demand)."));
+                }
+            });
+            break;
+        }
+        case ProxorWifi::PermissionPrompt::PointToSettings:
+            if (!wifi_settings_hint_logged) {
+                wifi_settings_hint_logged = true;
+                if (MW_show_log) MW_show_log("[Wi-Fi] " + ProxorWifi::DescribePermission(perm));
+            }
+            break;
+        case ProxorWifi::PermissionPrompt::None:
+            break;
+    }
+}
+
+void MainWindow::onWifiReadingChanged(const ProxorWifi::WifiReading &reading) {
+    const auto text = ProxorWifi::DescribeReading(reading);
+    if (text == wifi_last_logged_status) return;
+    wifi_last_logged_status = text;
+    if (MW_show_log) MW_show_log("[Wi-Fi] " + text);
+}
+
 void MainWindow::onWifiSsidChanged(const QString &ssid) {
+    const QString previous = wifi_hosts_ssid;
+    wifi_hosts_ssid = ssid;
+    const bool viaTrigger = started_via_ssid_trigger;
+    const int startedId = ProxorGui::dataStore->started_id;
+
+    if (applyOnDemandForSsid(ssid)) return;
+
     if (startup_tun_pending || startup_tun_failed) return;
-    if (!ProxorGui::dataStore->ssid_on_demand_enabled) return;
+    if (ProxorGui::dataStore->started_id < 0) return;
+    if (ProxorGui::dataStore->routing == nullptr) return;
+    if (!ProxorWifi::HostsSkipDiffers(ProxorGui::dataStore->routing->hosts_mapping, previous, ssid)) return;
+
+    MW_show_log(tr("[Hosts] Wi-Fi network changed to %1: restarting the profile so \"Skip on SSIDs\" applies.")
+                    .arg(ssid.isEmpty() ? tr("no Wi-Fi network") : "\"" + ssid + "\""));
+    proxor_start(startedId, viaTrigger);
+}
+
+bool MainWindow::applyOnDemandForSsid(const QString &ssid) {
+    if (startup_tun_pending || startup_tun_failed) return false;
+    if (!ProxorGui::dataStore->ssid_on_demand_enabled) return false;
 
     bool isTrigger = !ssid.isEmpty() &&
                      ProxorGui::dataStore->ssid_trigger_list.contains(ssid, Qt::CaseSensitive);
 
     if (isTrigger) {
-        if (ProxorGui::dataStore->started_id >= 0) return;
-        if (auto_start_consumed_ssid == ssid) return;
+        if (ProxorGui::dataStore->started_id >= 0) return false;
+        if (auto_start_consumed_ssid == ssid) return false;
 
         auto targetProfile = resolveSsidOnDemandProfile();
         if (targetProfile == nullptr) {
             MW_show_log(tr("[On-Demand] Trigger SSID \"%1\" detected but no target profile could be resolved").arg(ssid));
-            return;
+            return false;
         }
 
         auto_start_consumed_ssid = ssid;
         MW_show_log(tr("[On-Demand] Trigger SSID \"%1\" detected — starting profile %2")
                         .arg(ssid, targetProfile->DisplayTypeAndNameSummary()));
         proxor_start(targetProfile->id, true);
+        return true;
     } else {
         auto_start_consumed_ssid.clear();
         if (started_via_ssid_trigger && ProxorGui::dataStore->started_id >= 0) {
             MW_show_log(tr("[On-Demand] Non-trigger SSID \"%1\" — stopping proxy").arg(ssid));
             proxor_stop(false, false);
+            return true;
         }
     }
+    return false;
 }
 
 // Group tab manage
@@ -1717,6 +1797,7 @@ void MainWindow::dialog_message_impl(const QString &sender, const QString &info)
         refresh_status();
 #endif
         auto suggestRestartProxy = ProxorGui::dataStore->Save();
+        refreshWifiMonitoring();
         if (info.contains("RouteChanged")) {
             suggestRestartProxy = true;
         }

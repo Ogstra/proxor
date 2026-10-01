@@ -189,6 +189,8 @@ private slots:
 
     void onWifiSsidChanged(const QString &ssid);
 
+    void onWifiReadingChanged(const ProxorWifi::WifiReading &reading);
+
 private:
     Ui::MainWindow *ui;
     QSystemTrayIcon *tray;
@@ -224,6 +226,12 @@ private:
     //
     ProxorGui_sys::CoreProcess *core_process = nullptr;
     WifiMonitor *wifi_monitor = nullptr;
+    bool wifi_permission_asked = false;
+    bool wifi_settings_hint_logged = false;
+    QString wifi_hosts_ssid;
+    QString wifi_last_logged_status;
+    void refreshWifiMonitoring();
+    bool applyOnDemandForSsid(const QString &ssid);
     qint64 vpn_pid = 0;
     //
     bool update_staged = false;
