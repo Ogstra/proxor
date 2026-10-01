@@ -308,6 +308,7 @@ jobs:
           "$appimage" --appimage-extract >/dev/null
           test -x squashfs-root/usr/bin/proxor
           test -x squashfs-root/usr/bin/proxor_core
+          ls squashfs-root/usr/lib/libQt6DBus.so.6* >/dev/null
           test -s squashfs-root/usr/share/proxor/geosite.db
           desktop-file-validate squashfs-root/usr/share/applications/proxor.desktop
           set +e
@@ -414,6 +415,10 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: bash packaging/linux/tests/test-stage-native-root.sh
+      - name: Install dbus-run-session for the NetworkManager reader test
+        if: runner.os == 'Linux'
+        shell: bash
+        run: command -v dbus-run-session || { sudo apt-get update && sudo apt-get install -y --no-install-recommends dbus; }
       - name: Run package policy fixture
         shell: bash
         run: test/package_mode/run-tests.sh

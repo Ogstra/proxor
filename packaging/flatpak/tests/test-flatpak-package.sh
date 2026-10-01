@@ -27,7 +27,9 @@ grep -Fqx '  - --socket=wayland' "$manifest"
 grep -Fqx '  - --socket=fallback-x11' "$manifest"
 grep -Fqx '  - --device=dri' "$manifest"
 grep -Fqx '  - --share=network' "$manifest"
-test "$(grep -c '^  - --' "$manifest")" -eq 5
+grep -Fqx '  - --system-talk-name=org.freedesktop.NetworkManager' "$manifest"
+test "$(grep -c '^  - --' "$manifest")" -eq 6
+test "$(grep -c -- '--system-talk-name=' "$manifest")" -eq 1
 ! grep -Eq -- '--device=all|--filesystem=host|--socket=system-bus|--talk-name=|pkexec|setcap|curl|go[[:space:]]+mod[[:space:]]+download' "$manifest" "$wrapper" "$root/packaging/flatpak/build-offline.sh"
 grep -Fq 'generated-go-sources.json' "$manifest"
 grep -Fqx '        dest: .flatpak-input' "$manifest"
