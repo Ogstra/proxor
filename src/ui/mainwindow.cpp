@@ -28,6 +28,7 @@
 #include "platform/QrScanPolicy.hpp"
 #include "platform/QrImageDecode.hpp"
 #include "platform/LinuxSystemProxyPlan.hpp"
+#include "platform/TrayPolicy.hpp"
 
 #include "3rdparty/fix_old_qt.h"
 #include "3rdparty/qrcodegen.hpp"
@@ -401,6 +402,27 @@ QList<int> mergeVisibleGroupOrder(const QList<int> &oldOrder, const QList<int> &
 void UI_InitMainWindow() {
     mainwindow = new MainWindow;
 }
+
+namespace {
+// No tray host (GNOME without AppIndicator, Flatpak, bare WM) must never leave an invisible process.
+bool noTrayCloseNoticeShown = false;
+
+void ApplyStartupVisibility(MainWindow *w, int waitedMs) {
+    using namespace ProxorPlatform;
+    const auto tray = CurrentCapability(Capability::SystemTray);
+    switch (DecideStartupVisibility(ProxorGui::dataStore->flag_tray, tray, waitedMs, 10000)) {
+        case StartupVisibility::StayHidden:
+            return;
+        case StartupVisibility::WaitForTray:
+            QTimer::singleShot(500, w, [w, waitedMs] { ApplyStartupVisibility(w, waitedMs + 500); });
+            return;
+        case StartupVisibility::ShowWindow:
+            w->show();
+            if (ProxorGui::dataStore->flag_tray && MW_show_log) MW_show_log(NoTrayStartupNotice(tray));
+            return;
+    }
+}
+} // namespace
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow) {
     mainwindow = this;
@@ -1297,7 +1319,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ProxorMac::InstallDialogPolish();
     ProxorMac::PolishMainWindow(this);
 #endif
-    if (!ProxorGui::dataStore->flag_tray) show();
+    ApplyStartupVisibility(this, 0);
 
     // Restore spmode after the window has entered the event loop so prompts
     // like the Tun admin warning are shown the same way as manual activation.
@@ -1366,6 +1388,16 @@ void MainWindow::closeEvent(QCloseEvent *event) {
 #else
     if (tray->isVisible()) {
 #endif
+        const auto trayCap = ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::SystemTray);
+        if (ProxorPlatform::DecideCloseAction(trayCap) == ProxorPlatform::CloseAction::Minimize) {
+            showMinimized();
+            event->ignore();
+            if (!noTrayCloseNoticeShown) {
+                noTrayCloseNoticeShown = true;
+                MessageBoxInfo(software_name, ProxorPlatform::NoTrayCloseNotice(trayCap));
+            }
+            return;
+        }
         ui->proxyListTable->clearSelection();
         hide();          // 隐藏窗口
         event->ignore(); // 忽略事件

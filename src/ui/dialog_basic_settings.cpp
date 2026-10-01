@@ -15,6 +15,7 @@
 #include "platform/PlatformCapabilitiesApp.hpp"
 #include "platform/CapabilityUi.hpp"
 
+#include <QBoxLayout>
 #include <QDialogButtonBox>
 
 #include <QFileDialog>
@@ -340,6 +341,13 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     D_LOAD_BOOL(check_update_on_start)
     D_LOAD_BOOL(check_include_pre)
     D_LOAD_BOOL(start_minimal)
+    {
+        const auto tray = ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::SystemTray);
+        auto *trayNote = ProxorPlatform::MakeCapabilityNote(ui->start_minimal->parentWidget());
+        if (auto *box = qobject_cast<QBoxLayout *>(ui->start_minimal->parentWidget()->layout()))
+            box->insertWidget(box->indexOf(ui->start_minimal) + 1, trayNote);
+        ProxorPlatform::ApplyCapability(ui->start_minimal, tray, trayNote);
+    }
     D_LOAD_INT(max_log_line)
     //
     if (ProxorGui::dataStore->traffic_loop_interval == 500) {
