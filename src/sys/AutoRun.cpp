@@ -50,6 +50,7 @@ bool AutoRun_IsEnabled() {
 
     return settings.value(name).toString() == Windows_GenAutoRunString();
 }
+QString AutoRun_RefreshStaleEntry() { return {}; }
 
 #endif
 
@@ -140,16 +141,18 @@ bool AutoRun_IsEnabled() {
     CFRelease(urlRef);
     return returnValue;
 }
+QString AutoRun_RefreshStaleEntry() { return {}; }
 
 #endif
 
 #ifdef Q_OS_LINUX
 
-#include <QStandardPaths>
+#include <QFile>
+#include <QFileInfo>
 #include <QProcessEnvironment>
-#include <QTextStream>
+#include <QStandardPaths>
 
-#define NEWLINE "\n"
+#include "platform/LinuxAutostart.hpp"
 
 //  launchatlogin.cpp
 //  ShadowClash
@@ -157,73 +160,55 @@ bool AutoRun_IsEnabled() {
 //  Created by TheWanderingCoel on 2018/6/12.
 //  Copyright © 2019 Coel Wu. All rights reserved.
 //
-QString getUserAutostartDir_private() {
+static QString getUserAutostartDir_private() {
     QString config = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
     config += QLatin1String("/autostart/");
     return config;
 }
 
-QString desktopEntryQuote(QString value) {
-    value.replace('\\', QStringLiteral("\\\\"));
-    value.replace('"', QStringLiteral("\\\""));
-    return QStringLiteral("\"") + value + QStringLiteral("\"");
+static QString autostartFilePath() {
+    return getUserAutostartDir_private() + QCoreApplication::applicationName() + QLatin1String(".desktop");
+}
+
+static ProxorPlatform::AutostartInputs CurrentAutostartInputs() {
+    ProxorPlatform::AutostartInputs in;
+    in.packageMode = ProxorGui::CurrentPackageMode();
+    in.fromLauncher = qEnvironmentVariable("NKR_FROM_LAUNCHER") == "1";
+    in.launcherPath = QApplication::applicationDirPath() + "/launcher";
+    in.appImagePath = QProcessEnvironment::systemEnvironment().value("APPIMAGE");
+    in.applicationFilePath = QApplication::applicationFilePath();
+    // Only when the wrapper really exists: otherwise the GUI binary is the best we have.
+    const QString wrapper = ProxorPlatform::NativeWrapperPathFor(ProxorGui::PackageRootPath());
+    if (QFileInfo::exists(wrapper)) in.nativeWrapperPath = wrapper;
+    in.useAppdata = ProxorGui::dataStore->flag_use_appdata;
+    in.appdataDir = ProxorGui::dataStore->appdataDir;
+    return in;
+}
+
+static void logAutostartFailure(const QString &path) {
+    if (MW_show_log) MW_show_log(QObject::tr("Start with system: cannot write %1").arg(path));
 }
 
 void AutoRun_SetEnabled(bool enable) {
     // From https://github.com/nextcloud/desktop/blob/master/src/common/utility_unix.cpp
     QString appName = QCoreApplication::applicationName();
     QString userAutoStartPath = getUserAutostartDir_private();
-    QString desktopFileLocation = userAutoStartPath + appName + QLatin1String(".desktop");
-    QStringList appCmdList;
-
-    // Launcher mode
-    if (qEnvironmentVariable("NKR_FROM_LAUNCHER") == "1") {
-        appCmdList << QApplication::applicationDirPath() + "/launcher"
-                   << "--";
-    } else {
-        if (QProcessEnvironment::systemEnvironment().contains("APPIMAGE")) {
-            appCmdList << QProcessEnvironment::systemEnvironment().value("APPIMAGE");
-        } else {
-            appCmdList << QApplication::applicationFilePath();
-        }
-    }
-
-    appCmdList << "-tray";
-
-    if (ProxorGui::dataStore->flag_use_appdata) {
-        appCmdList << "-appdata";
-    }
+    QString desktopFileLocation = autostartFilePath();
 
     if (enable) {
         if (!QDir().exists(userAutoStartPath) && !QDir().mkpath(userAutoStartPath)) {
-            // qCWarning(lcUtility) << "Could not create autostart folder"
-            // << userAutoStartPath;
+            logAutostartFailure(userAutoStartPath);
             return;
         }
 
         QFile iniFile(desktopFileLocation);
-
         if (!iniFile.open(QIODevice::WriteOnly)) {
-            // qCWarning(lcUtility) << "Could not write auto start entry" <<
-            // desktopFileLocation;
+            logAutostartFailure(desktopFileLocation);
             return;
         }
 
-        QTextStream ts(&iniFile);
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-        ts.setCodec("UTF-8");
-#endif
-        QStringList escapedCommand;
-        for (const auto &argument : appCmdList) escapedCommand << desktopEntryQuote(argument);
-        ts << QLatin1String("[Desktop Entry]") << NEWLINE
-            << QLatin1String("Name=") << appName << NEWLINE
-           << QLatin1String("Exec=") << escapedCommand.join(" ") << NEWLINE
-           << QLatin1String("Terminal=") << "false" << NEWLINE
-           << QLatin1String("Categories=") << "Network" << NEWLINE
-           << QLatin1String("Type=") << "Application" << NEWLINE
-           << QLatin1String("StartupNotify=") << "false" << NEWLINE
-           << QLatin1String("X-GNOME-Autostart-enabled=") << "true" << NEWLINE;
-        ts.flush();
+        const auto command = ProxorPlatform::LinuxAutostartCommand(CurrentAutostartInputs());
+        iniFile.write(ProxorPlatform::LinuxAutostartDesktopEntry(appName, command).toUtf8());
         iniFile.close();
     } else {
         QFile::remove(desktopFileLocation);
@@ -231,9 +216,37 @@ void AutoRun_SetEnabled(bool enable) {
 }
 
 bool AutoRun_IsEnabled() {
-    QString appName = QCoreApplication::applicationName();
-    QString desktopFileLocation = getUserAutostartDir_private() + appName + QLatin1String(".desktop");
-    return QFile::exists(desktopFileLocation);
+    return QFile::exists(autostartFilePath());
+}
+
+QString AutoRun_RefreshStaleEntry() {
+    if (IsFlatpak(ProxorGui::CurrentPackageMode())) return {}; // the Background portal owns it
+
+    QFile file(autostartFilePath());
+    if (!file.exists() || !file.open(QIODevice::ReadOnly)) return {};
+    const QString text = QString::fromUtf8(file.readAll());
+    file.close();
+
+    // The user (or the desktop's startup-apps tool) turned it off: leave it alone.
+    if (ProxorPlatform::IsAutostartEntryDisabled(text)) return {};
+
+    const auto existing = ProxorPlatform::ParseDesktopEntryExec(text);
+    const auto expected = ProxorPlatform::LinuxAutostartCommand(CurrentAutostartInputs());
+    if (!ProxorPlatform::ShouldRefreshAutostart(existing, expected, QApplication::applicationFilePath())) return {};
+
+    // Keep unknown keys: change only the Exec line. No Exec line at all -> regenerate.
+    QString updated = existing.isEmpty()
+        ? ProxorPlatform::LinuxAutostartDesktopEntry(QCoreApplication::applicationName(), expected)
+        : ProxorPlatform::ReplaceDesktopEntryExec(text, expected);
+    QFile out(autostartFilePath());
+    if (!out.open(QIODevice::WriteOnly)) {
+        logAutostartFailure(autostartFilePath());
+        return {};
+    }
+    out.write(updated.toUtf8());
+    out.close();
+    return "Start with system: updated the autostart entry to run " + expected.first() +
+           " (the old entry could not start Proxor).";
 }
 
 #endif

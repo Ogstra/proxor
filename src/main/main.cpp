@@ -12,6 +12,7 @@
 
 #include "3rdparty/RunGuard.hpp"
 #include "main/ProxorGui.hpp"
+#include "sys/AutoRun.hpp"
 #include "sys/LogFile.hpp"
 
 #include "ui/mainwindow_interface.h"
@@ -233,6 +234,8 @@ int main(int argc, char* argv[]) {
 
     // Datastore & Flags
     if (ProxorGui::dataStore->start_minimal) ProxorGui::dataStore->flag_tray = true;
+    if (const auto autostartNote = AutoRun_RefreshStaleEntry(); !autostartNote.isEmpty())
+        ProxorGui_log::Write(ProxorGui_log::Level::Info, autostartNote);
 
     // load routing
     ProxorGui::dataStore->routing = std::make_unique<ProxorGui::Routing>();
