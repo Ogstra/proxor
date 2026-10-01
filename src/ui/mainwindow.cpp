@@ -8,6 +8,7 @@
 #include "sub/GroupUpdater.hpp"
 #include "sys/ExternalProcess.hpp"
 #include "sys/WifiMonitor.hpp"
+#include "sys/wifi/WifiBackend.hpp"
 #include "main/PackagePolicy.hpp"
 
 #include "ui/ThemeManager.hpp"
@@ -1214,9 +1215,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         },
         DS_cores);
 
-    wifi_monitor = new WifiMonitor(this);
+    wifi_monitor = new WifiMonitor(CreatePlatformWifiBackend(), 5000, this);
+    WifiMonitor::setAppInstance(wifi_monitor);
     connect(wifi_monitor, &WifiMonitor::ssidChanged, this, &MainWindow::onWifiSsidChanged);
-    wifi_monitor->start();
+    wifi_monitor->setActive(true);
 
     connect(qApp, &QGuiApplication::commitDataRequest, this, &MainWindow::on_commitDataRequest);
 

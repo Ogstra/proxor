@@ -1,54 +1,106 @@
-#include "WifiMonitor.hpp"
-#include <QProcess>
-#include <QStringList>
+#include "sys/WifiMonitor.hpp"
 
-QString WifiMonitor::s_cachedSsid = QString();
+#include <QDebug>
+#include <QMetaObject>
+#include <QMutex>
+#include <QMutexLocker>
+
+namespace {
+QMutex g_mutex;
+QString g_cachedSsid;
+WifiMonitor *g_app = nullptr;
+} // namespace
 
 QString WifiMonitor::cachedSsid() {
-    return s_cachedSsid;
+    QMutexLocker lock(&g_mutex);
+    return g_cachedSsid;
 }
 
-WifiMonitor::WifiMonitor(QObject *parent) : QObject(parent) {
-    m_timer = new QTimer(this);
-    m_timer->setInterval(5000);
-    connect(m_timer, &QTimer::timeout, this, &WifiMonitor::poll);
+WifiMonitor *WifiMonitor::appInstance() {
+    QMutexLocker lock(&g_mutex);
+    return g_app;
 }
 
-void WifiMonitor::start() {
-    poll();           // immediate first check
-    m_timer->start();
+void WifiMonitor::setAppInstance(WifiMonitor *monitor) {
+    QMutexLocker lock(&g_mutex);
+    g_app = monitor;
 }
 
-void WifiMonitor::stop() {
-    m_timer->stop();
+WifiMonitor::WifiMonitor(std::unique_ptr<WifiBackend> backend, int intervalMs, QObject *parent)
+    : QObject(parent), backend_(std::move(backend)) {
+    qRegisterMetaType<ProxorWifi::WifiReading>();
+    worker_ = new QThread;
+    worker_->setObjectName(QStringLiteral("WifiMonitor"));
+    reader_ = new QObject;
+    reader_->moveToThread(worker_);
+    worker_->start();
+
+    timer_ = new QTimer(this);
+    timer_->setInterval(intervalMs);
+    connect(timer_, &QTimer::timeout, this, &WifiMonitor::requestRead);
 }
 
-void WifiMonitor::poll() {
-    auto ssid = currentSsid();
-    s_cachedSsid = ssid;
-    if (ssid != m_lastSsid) {
-        m_lastSsid = ssid;
-        emit ssidChanged(ssid);
+WifiMonitor::~WifiMonitor() {
+    timer_->stop();
+    if (appInstance() == this) setAppInstance(nullptr);
+    worker_->quit();
+    if (worker_->wait(5000)) {
+        reader_->moveToThread(QThread::currentThread());
+        delete reader_;
+        delete worker_;
+    } else {
+        // The backend broke its ~4 s contract. Leak the thread and the backend rather than crash.
+        qWarning("WifiMonitor: the Wi-Fi backend did not return in time; leaving its thread running");
+        backend_.release();
     }
 }
 
-QString WifiMonitor::currentSsid() {
-    QProcess proc;
-    proc.start("netsh", {"wlan", "show", "interfaces"});
-    if (!proc.waitForFinished(3000)) {
-        proc.kill();
-        return QString();
+void WifiMonitor::setActive(bool active) {
+    if (active == active_) return;
+    active_ = active;
+    if (active) {
+        timer_->start();
+        requestRead();
+    } else {
+        timer_->stop();
     }
-    auto output = QString::fromLocal8Bit(proc.readAllStandardOutput());
-    for (const auto &line : output.split('\n')) {
-        auto trimmed = line.trimmed();
-        // Match "SSID" but not "BSSID"
-        if (trimmed.startsWith("SSID") && !trimmed.startsWith("BSSID")) {
-            auto idx = trimmed.indexOf(':');
-            if (idx >= 0) {
-                return trimmed.mid(idx + 1).trimmed();
-            }
-        }
+}
+
+bool WifiMonitor::isActive() const { return active_; }
+
+void WifiMonitor::refreshNow() { requestRead(); }
+
+ProxorWifi::WifiReading WifiMonitor::lastReading() const { return tracker_.last(); }
+bool WifiMonitor::hasReading() const { return hasReading_; }
+QString WifiMonitor::currentSsid() const { return tracker_.ssid(); }
+
+void WifiMonitor::requestRead() {
+    if (inFlight_) {
+        again_ = true;
+        return;
     }
-    return QString();  // no WiFi or not connected
+    inFlight_ = true;
+    QMetaObject::invokeMethod(
+        reader_,
+        [this, backend = backend_.get()] {
+            const ProxorWifi::WifiReading reading = backend->read();
+            QMetaObject::invokeMethod(this, [this, reading] { onReadingReady(reading); }, Qt::QueuedConnection);
+        },
+        Qt::QueuedConnection);
+}
+
+void WifiMonitor::onReadingReady(const ProxorWifi::WifiReading &reading) {
+    inFlight_ = false;
+    hasReading_ = true;
+    const auto update = tracker_.apply(reading);
+    {
+        QMutexLocker lock(&g_mutex);
+        g_cachedSsid = tracker_.ssid();
+    }
+    if (update.readingChanged) emit readingChanged(reading);
+    if (update.ssidChanged) emit ssidChanged(update.ssid);
+    if (again_) {
+        again_ = false;
+        requestRead();
+    }
 }
