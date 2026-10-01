@@ -182,7 +182,68 @@ private slots:
 
     void describeIsStable() {
         QCOMPARE(DescribePlatformEnvironment(Env(HostOs::Linux, PackageMode::Flatpak, DisplaySession::Wayland)),
-                 QString("os=linux package=flatpak session=wayland"));
+                 QString("os=linux package=flatpak session=wayland tray=yes desktop=unknown"));
+        auto env = Env(HostOs::Linux, PackageMode::Deb, DisplaySession::X11);
+        env.trayAvailable = false;
+        env.desktop = LinuxDesktopFamily::Gnome;
+        QCOMPARE(DescribePlatformEnvironment(env), QString("os=linux package=deb session=x11 tray=no desktop=gnome"));
+    }
+
+    void systemTrayRowWindowsMacAlwaysSupported() {
+        for (auto os : {HostOs::Windows, HostOs::MacOS})
+            for (auto mode : kAllModes) {
+                auto env = Env(os, mode, DisplaySession::NotApplicable);
+                env.trayAvailable = false;
+                QCOMPARE(Q(Capability::SystemTray, env).support, Support::Supported);
+            }
+        QCOMPARE(Q(Capability::SystemTray, Env(HostOs::Other, PackageMode::NativeOrPortable, DisplaySession::NotApplicable)).support,
+                 Support::Unsupported);
+    }
+
+    void systemTrayRowLinuxWithTrayIsSupported() {
+        for (auto mode : kAllModes)
+            for (auto session : kAllSessions) {
+                auto env = Env(HostOs::Linux, mode, session);
+                env.trayAvailable = true;
+                QCOMPARE(Q(Capability::SystemTray, env).support, Support::Supported);
+            }
+    }
+
+    void systemTrayRowLinuxGnomeNoTrayMentionsAppIndicator() {
+        auto env = Env(HostOs::Linux, PackageMode::Deb, DisplaySession::Wayland);
+        env.trayAvailable = false;
+        env.desktop = LinuxDesktopFamily::Gnome;
+        const auto s = Q(Capability::SystemTray, env);
+        QCOMPARE(s.support, Support::Unsupported);
+        QVERIFY(s.reason.contains("AppIndicator"));
+    }
+
+    void systemTrayRowLinuxFlatpakNoTrayMentionsFlatpak() {
+        for (auto d : {LinuxDesktopFamily::Gnome, LinuxDesktopFamily::Kde, LinuxDesktopFamily::Unknown}) {
+            auto env = Env(HostOs::Linux, PackageMode::Flatpak, DisplaySession::Wayland);
+            env.trayAvailable = false;
+            env.desktop = d;
+            const auto s = Q(Capability::SystemTray, env);
+            QCOMPARE(s.support, Support::Unsupported);
+            QVERIFY(s.reason.contains("Flatpak"));
+        }
+    }
+
+    void systemTrayRowLinuxOtherDesktopsGenericReason() {
+        for (auto d : {LinuxDesktopFamily::Kde, LinuxDesktopFamily::Xfce, LinuxDesktopFamily::Other, LinuxDesktopFamily::Unknown}) {
+            auto env = Env(HostOs::Linux, PackageMode::Rpm, DisplaySession::X11);
+            env.trayAvailable = false;
+            env.desktop = d;
+            const auto s = Q(Capability::SystemTray, env);
+            QCOMPARE(s.support, Support::Unsupported);
+            QVERIFY(s.reason.contains("no system tray"));
+            QVERIFY(!s.reason.contains("AppIndicator"));
+        }
+    }
+
+    void systemTrayIsListedAndNamed() {
+        QVERIFY(AllCapabilities().contains(Capability::SystemTray));
+        QCOMPARE(CapabilityName(Capability::SystemTray), QString("system-tray"));
     }
 };
 
