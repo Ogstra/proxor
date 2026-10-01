@@ -88,14 +88,14 @@ CapabilityStatus QueryAutoStart(const PlatformEnvironment &env) {
 }
 
 CapabilityStatus QuerySsid(const PlatformEnvironment &env) {
-    // Phase 51 flips these rows once SSID detection exists on Linux and macOS.
+    // Linux reads the SSID from NetworkManager (phase 51); macOS flips in plan 51-06.
     switch (env.os) {
         case HostOs::Windows:
             return {};
         case HostOs::MacOS:
             return Unsupported(T("Wi-Fi network detection is not available on macOS yet, so On-Demand rules and \"Skip on SSIDs\" never trigger. Your settings are kept."));
         case HostOs::Linux:
-            return Unsupported(T("Wi-Fi network detection is not available on Linux yet, so On-Demand rules and \"Skip on SSIDs\" never trigger. Your settings are kept."));
+            return {};
         case HostOs::Other:
             break;
     }

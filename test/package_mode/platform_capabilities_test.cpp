@@ -91,9 +91,13 @@ private slots:
         QCOMPARE(Q(Capability::GlobalHotkeys, env).support, Support::Supported);
     }
 
-    void onDemandSsidUnsupportedOnLinuxAndMacos() {
-        QCOMPARE(Q(Capability::OnDemandSsid, Env(HostOs::Linux, PackageMode::Deb, DisplaySession::X11)).support,
-                 Support::Unsupported);
+    void onDemandSsidPerPlatform() {
+        for (auto mode : kAllModes)
+            for (auto session : kAllSessions) {
+                auto s = Q(Capability::OnDemandSsid, Env(HostOs::Linux, mode, session));
+                QCOMPARE(s.support, Support::Supported);
+                QVERIFY(s.reason.isEmpty());
+            }
         QCOMPARE(Q(Capability::OnDemandSsid, Env(HostOs::MacOS, PackageMode::NativeOrPortable, DisplaySession::NotApplicable)).support,
                  Support::Unsupported);
         QCOMPARE(Q(Capability::OnDemandSsid, Env(HostOs::Windows, PackageMode::NativeOrPortable, DisplaySession::NotApplicable)).support,
