@@ -1,4 +1,5 @@
 #include "fake_portal.hpp"
+#include "sys/DesktopPortal.hpp"
 #include "sys/linux/XdgPortal.hpp"
 
 #include <QDBusConnection>
@@ -246,6 +247,34 @@ private slots:
         const Got g = run(c, 2000, &ctx, &flagWhenRan);
         QCOMPARE(g.count, 1);
         QVERIFY(flagWhenRan);
+    }
+
+    void probeWithoutFakeIsAllZeroFast() {
+        XdgPortalClient c(QDBusConnection::sessionBus());
+        QElapsedTimer t;
+        t.start();
+        const PortalVersions v = ProbePortalVersions(c, false, "proxor", 1500);
+        QVERIFY2(t.elapsed() < 800, qPrintable(QString::number(t.elapsed())));
+        QCOMPARE(v.background + v.screenshot + v.globalShortcuts, 0u);
+        QVERIFY(!v.detail.isEmpty());
+    }
+
+    // Runs last (the probe result is cached for the process); QTest runs slots in declaration order.
+    void portalsDoesNotBlockWhenProbeAlreadyDone() {
+        FakePortal fake;
+        QVERIFY(fake.start());
+        fake.setVersion(kBackground, 1);
+        fake.setVersion(kScreenshot, 2);
+        fake.setVersion(kShortcuts, 1);
+        StartPortalProbe();
+        QTest::qWait(300);
+        QElapsedTimer t;
+        t.start();
+        const PortalVersions &v = Portals();
+        QVERIFY2(t.elapsed() < 50, qPrintable(QString::number(t.elapsed())));
+        QCOMPARE(v.background, 1u);
+        QCOMPARE(v.screenshot, 2u);
+        QCOMPARE(v.globalShortcuts, 1u);
     }
 };
 

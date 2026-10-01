@@ -1,5 +1,5 @@
 #pragma once
-// freedesktop portal client over QtDBus. QtCore + QtDBus only (no widgets, no ProxorGui) so tests compile it anywhere.
+// freedesktop portal client over QtDBus. QtCore + QtDBus only, so tests compile it on every runner.
 #include "sys/DesktopPortal.hpp"
 
 #include <QDBusConnection>

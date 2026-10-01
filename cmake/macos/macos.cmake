@@ -2,6 +2,7 @@
 # so this uses add_compile_definitions rather than nkr_add_compile_definitions.
 enable_language(OBJCXX)
 set(PLATFORM_SOURCES
+    src/sys/DesktopPortalNone.cpp
     src/ui/mac/MacPlatform.h
     src/ui/mac/MacPlatform.mm
     src/ui/mac/MacLook.h
