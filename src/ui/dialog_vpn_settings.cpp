@@ -5,11 +5,14 @@
 #include "main/ProxorGui.hpp"
 #include "platform/PlatformCapabilitiesApp.hpp"
 #include "platform/CapabilityUi.hpp"
+#include "platform/PlatformCapabilities.hpp"
+#include "platform/ProcessNames.hpp"
 #include "ui/mainwindow_interface.h"
 
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QEvent>
+#include <QLabel>
 #include <QListWidget>
 #include <QMessageBox>
 #include <QProcess>
@@ -189,16 +192,25 @@ DialogVPNSettings::DialogVPNSettings(QWidget *parent) : QDialog(parent), ui(new 
     ui->whitelist_mode->setChecked(ProxorGui::dataStore->vpn_rule_white);
 
     connect(ui->btn_pick_process, &QPushButton::clicked, this, [this] {
+        QSet<QString> names;
+        int skippedNames = 0;
+        const bool readProc = ProxorPlatform::CompiledHostOs() == ProxorPlatform::HostOs::Linux;
+        if (readProc) {
+            const auto list = ProxorPlatform::ListLinuxProcessNames();
+            for (const auto &n : list.names) names.insert(n);
+            skippedNames = list.skipped;
+        }
         QProcess proc;
+        if (!readProc) {
 #ifdef Q_OS_WIN
         proc.start("tasklist", {"/fo", "csv", "/nh"});
 #else
         proc.start("ps", {"-eo", "comm"});
 #endif
         if (!proc.waitForFinished(4000)) return;
+        }
 
-        QSet<QString> names;
-        const QString out = proc.readAllStandardOutput();
+        const QString out = readProc ? QString() : QString(proc.readAllStandardOutput());
         for (const auto &line : out.split('\n')) {
             const auto trimmed = line.trimmed();
             if (trimmed.isEmpty()) continue;
@@ -234,6 +246,11 @@ DialogVPNSettings::DialogVPNSettings(QWidget *parent) : QDialog(parent), ui(new 
         for (const auto &name : sorted)
             list->addItem(name);
         auto *btns = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dlg);
+        if (skippedNames > 0) {
+            auto *note = new QLabel(tr("%n process(es) of other users are not listed: their full names cannot be read without administrator rights.", "", skippedNames), dlg);
+            note->setWordWrap(true);
+            layout->addWidget(note);
+        }
         layout->addWidget(list);
         layout->addWidget(btns);
         connect(btns, &QDialogButtonBox::accepted, dlg, &QDialog::accept);
