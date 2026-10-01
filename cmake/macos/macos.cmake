@@ -19,6 +19,8 @@ set(PLATFORM_SOURCES
     src/sys/macos/MacModeCoordinator.cpp
     src/sys/macos/MacHelperInstaller.h
     src/sys/macos/MacHelperInstaller.cpp
+    src/sys/wifi/WifiBackendNone.cpp
+    src/sys/wifi/WifiPermissionNone.cpp
     assets/macos/proxor.icns
 )
 # App icon (Dock, Finder, Launchpad): copied into Contents/Resources and named in Info.plist.

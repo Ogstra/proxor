@@ -1,4 +1,4 @@
-set(PLATFORM_SOURCES 3rdparty/WinCommander.cpp src/sys/windows/guihelper.cpp src/sys/windows/MiniDump.cpp src/sys/windows/ActiveNetworkType.cpp)
+set(PLATFORM_SOURCES 3rdparty/WinCommander.cpp src/sys/windows/guihelper.cpp src/sys/windows/MiniDump.cpp src/sys/windows/ActiveNetworkType.cpp src/sys/wifi/WifiBackendWindows.cpp src/sys/wifi/WifiPermissionNone.cpp)
 set(PLATFORM_LIBRARIES wininet wsock32 ws2_32 user32 rasapi32 iphlpapi dwmapi)
 
 include(cmake/windows/generate_product_version.cmake)
