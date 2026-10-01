@@ -105,6 +105,37 @@ CapabilityStatus QuerySsid(const PlatformEnvironment &env) {
     return Unsupported(T("Wi-Fi network detection is not available on this platform, so On-Demand rules and \"Skip on SSIDs\" never trigger. Your settings are kept."));
 }
 
+CapabilityStatus QuerySystemTray(const PlatformEnvironment &env) {
+    switch (env.os) {
+        case HostOs::Windows:
+        case HostOs::MacOS:
+            return {};
+        case HostOs::Other:
+            return Unsupported(T("This platform has no system tray support."));
+        case HostOs::Linux:
+            break;
+    }
+    if (env.trayAvailable) return {};
+    if (IsFlatpak(env.packageMode))
+        return Unsupported(T("The Flatpak cannot reach a system tray on this desktop. Proxor keeps its window open (minimized) instead of hiding it. On GNOME, install the \"AppIndicator and KStatusNotifierItem Support\" extension."));
+    if (env.desktop == LinuxDesktopFamily::Gnome)
+        return Unsupported(T("GNOME shows tray icons only with the \"AppIndicator and KStatusNotifierItem Support\" extension. Without a tray Proxor keeps its window open (minimized) instead of hiding it."));
+    return Unsupported(T("This desktop has no system tray. Proxor keeps its window open (minimized) instead of hiding it."));
+}
+
+QString DesktopName(LinuxDesktopFamily family) {
+    switch (family) {
+        case LinuxDesktopFamily::Unknown: return QStringLiteral("unknown");
+        case LinuxDesktopFamily::Gnome: return QStringLiteral("gnome");
+        case LinuxDesktopFamily::Kde: return QStringLiteral("kde");
+        case LinuxDesktopFamily::Cinnamon: return QStringLiteral("cinnamon");
+        case LinuxDesktopFamily::Mate: return QStringLiteral("mate");
+        case LinuxDesktopFamily::Xfce: return QStringLiteral("xfce");
+        case LinuxDesktopFamily::Other: return QStringLiteral("other");
+    }
+    return QStringLiteral("unknown");
+}
+
 } // namespace
 
 HostOs CompiledHostOs() {
@@ -154,6 +185,8 @@ CapabilityStatus QueryCapability(Capability capability, const PlatformEnvironmen
             if (env.os == HostOs::Linux && env.packageMode == PackageMode::AppImage)
                 return Unsupported(T("The AppImage always runs Tun as a separate privileged process; single-core Tun needs a native package."));
             return {};
+        case Capability::SystemTray:
+            return QuerySystemTray(env);
     }
     return {};
 }
@@ -171,6 +204,7 @@ QString CapabilityName(Capability capability) {
         case Capability::TunMode: return QStringLiteral("tun-mode");
         case Capability::TunStrictRoute: return QStringLiteral("tun-strict-route");
         case Capability::TunSingleCore: return QStringLiteral("tun-single-core");
+        case Capability::SystemTray: return QStringLiteral("system-tray");
     }
     return QStringLiteral("unknown");
 }
@@ -191,13 +225,16 @@ QString DescribePlatformEnvironment(const PlatformEnvironment &env) {
         case DisplaySession::Wayland: session = QStringLiteral("wayland"); break;
         case DisplaySession::Unknown: session = QStringLiteral("unknown"); break;
     }
-    return QStringLiteral("os=%1 package=%2 session=%3").arg(os, PackageModeName(env.packageMode), session);
+    return QStringLiteral("os=%1 package=%2 session=%3 tray=%4 desktop=%5")
+        .arg(os, PackageModeName(env.packageMode), session, env.trayAvailable ? QStringLiteral("yes") : QStringLiteral("no"),
+             DesktopName(env.desktop));
 }
 
 QList<Capability> AllCapabilities() {
     return {Capability::GlobalHotkeys, Capability::ScreenQrCapture, Capability::QrImageImport,
             Capability::IcmpPing,      Capability::AutoStart,       Capability::OnDemandSsid,
-            Capability::TunMode,       Capability::TunStrictRoute,  Capability::TunSingleCore};
+            Capability::TunMode,       Capability::TunStrictRoute,  Capability::TunSingleCore,
+            Capability::SystemTray};
 }
 
 } // namespace ProxorPlatform

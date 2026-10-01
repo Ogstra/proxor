@@ -5,6 +5,7 @@
 // Qt Core only (no GUI or widget classes, no app globals) so it is unit-tested on every CI runner.
 
 #include "main/PackageMode.hpp"
+#include "platform/LinuxDesktop.hpp"
 
 #include <QList>
 #include <QString>
@@ -20,6 +21,8 @@ struct PlatformEnvironment {
     DisplaySession session = DisplaySession::NotApplicable;
     bool hotkeyBackendBuilt = true; // false in NKR_NO_QHOTKEY builds
     bool qrReaderBuilt = true;      // false in NKR_NO_ZXING builds
+    bool trayAvailable = true;      // QSystemTrayIcon::isSystemTrayAvailable() in the app
+    LinuxDesktopFamily desktop = LinuxDesktopFamily::Unknown; // Linux only; Unknown elsewhere
 };
 
 enum class Capability {
@@ -31,7 +34,8 @@ enum class Capability {
     OnDemandSsid,
     TunMode,
     TunStrictRoute,
-    TunSingleCore
+    TunSingleCore,
+    SystemTray
 };
 
 enum class Support { Supported, Degraded, NeedsPermission, Unsupported };
