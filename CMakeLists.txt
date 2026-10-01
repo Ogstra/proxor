@@ -311,6 +311,11 @@ set(PROJECT_SOURCES
         ${QV2RAY_RC}
   )
 
+# A platform list (cmake/<os>/<os>.cmake) may replace a shared source with its own implementation.
+if (PLATFORM_REPLACED_SOURCES)
+    list(REMOVE_ITEM PROJECT_SOURCES ${PLATFORM_REPLACED_SOURCES})
+endif ()
+
 set(PROXOR_GUI_TARGET proxor)
 
 # Qt exe

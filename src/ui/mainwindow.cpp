@@ -27,6 +27,7 @@
 #include "platform/HotkeyReport.hpp"
 #include "platform/QrScanPolicy.hpp"
 #include "platform/QrImageDecode.hpp"
+#include "platform/LinuxSystemProxyPlan.hpp"
 
 #include "3rdparty/fix_old_qt.h"
 #include "3rdparty/qrcodegen.hpp"
@@ -2270,6 +2271,11 @@ void MainWindow::proxor_set_spmode_system_proxy(bool enable, bool save) {
         }
     }
 #endif
+
+    if (const auto problem = ProxorPlatform::TakeSystemProxyProblem(); !problem.isEmpty()) {
+        MW_show_log("[System Proxy] " + problem);
+        if (!enable) MessageBoxWarning(software_name, problem);
+    }
 
     if (save) {
         ProxorGui::dataStore->remember_spmode.removeAll("system_proxy");
