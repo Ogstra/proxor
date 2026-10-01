@@ -12,7 +12,9 @@ image="debian@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07e
 package_dir="$(CDPATH= cd -- "$(dirname -- "$deb")" && pwd)"
 package_name="$(basename "$deb")"
 
-docker run --rm -v "$package_dir:/packages:ro" "$image" bash -ceu '
+fixture="$(CDPATH= cd -- "$(dirname "$0")/../../.." && pwd)/test/package_mode/fixtures/linux-autostart-native.desktop"
+[ -f "$fixture" ] || { echo "autostart fixture not found: $fixture" >&2; exit 1; }
+docker run --rm -v "$package_dir:/packages:ro" -v "$fixture:/fixtures/autostart.desktop:ro" "$image" bash -ceu '
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
   apt-get install -y --no-install-recommends desktop-file-utils lintian xvfb xauth \
@@ -64,4 +66,27 @@ docker run --rm -v "$package_dir:/packages:ro" "$image" bash -ceu '
   fi
   grep -q "Install channel: deb" "$log" || {
     echo "no channel line in $log"; cat "$log"; exit 1; }
+  # G-02: the autostart entry the app writes for native packages must start Proxor.
+  # The entry comes from the committed fixture, so a change there forces a change here.
+  desktop-file-validate /fixtures/autostart.desktop
+  exec_line="$(sed -n "s/^Exec=//p" /fixtures/autostart.desktop)"
+  test "$exec_line" = "\"/usr/bin/proxor\" \"-tray\" \"-appdata\""
+  rm -rf "$HOME/.config/proxor"
+  set +e
+  xvfb-run -a timeout 10s /usr/bin/proxor -tray -appdata -many > /tmp/autostart-run.log 2>&1
+  rc=$?
+  set -e
+  test "$rc" -eq 0 -o "$rc" -eq 124 || { cat /tmp/autostart-run.log; exit 1; }
+  ! grep -Eq "could not find the Qt platform plugin|could not load the Qt platform plugin" /tmp/autostart-run.log
+  alog="$(ls -t "$HOME"/.config/proxor/config/logs/proxor-*.log 2>/dev/null | head -n1)"
+  if [ -z "$alog" ]; then
+    echo "no startup log from the autostart command"
+    find / -maxdepth 7 -name "proxor-*.log" 2>/dev/null | head
+    cat /tmp/autostart-run.log
+    exit 1
+  fi
+  grep -q "Install channel: deb" "$alog" || { echo "no channel line in $alog"; cat "$alog"; exit 1; }
+  # For the record only (not asserted): the old entry ran the GUI binary directly.
+  set +e; xvfb-run -a timeout 5s /usr/lib/proxor/proxor -many > /tmp/direct-run.log 2>&1; echo "direct launch rc=$?"; set -e
+  grep -i "platform plugin" /tmp/direct-run.log || true
 ' bash "$package_name"

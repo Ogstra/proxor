@@ -621,6 +621,13 @@ jobs:
           name: release-assets-deb
           path: ${{ runner.temp }}/deb-work/proxor_*.deb
           if-no-files-found: error
+      - name: Upload preview Debian package for manual testing
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag == ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Proxor-${{ github.sha }}-deb-preview
+          path: ${{ runner.temp }}/deb-work/proxor_*.deb
+          if-no-files-found: error
 
   package-rpm:
     name: Build and smoke native Fedora RPM
@@ -654,6 +661,13 @@ jobs:
         with:
           name: release-assets-rpm
           path: ${{ runner.temp }}/rpm-work/rpmbuild/RPMS/x86_64/*.rpm
+          if-no-files-found: error
+      - name: Upload preview Fedora package for manual testing
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag == ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Proxor-${{ github.sha }}-rpm-preview
+          path: ${{ runner.temp }}/rpm-work/rpmbuild/RPMS/x86_64/proxor-*.rpm
           if-no-files-found: error
 
   package-arch:
