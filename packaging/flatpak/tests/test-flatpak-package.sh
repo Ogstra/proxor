@@ -28,9 +28,14 @@ grep -Fqx '  - --socket=fallback-x11' "$manifest"
 grep -Fqx '  - --device=dri' "$manifest"
 grep -Fqx '  - --share=network' "$manifest"
 grep -Fqx '  - --system-talk-name=org.freedesktop.NetworkManager' "$manifest"
-test "$(grep -c '^  - --' "$manifest")" -eq 6
+grep -Fqx '  - --talk-name=org.kde.StatusNotifierWatcher' "$manifest"
+test "$(grep -c '^  - --' "$manifest")" -eq 7
+test "$(grep -c -- '--talk-name=' "$manifest")" -eq 1
 test "$(grep -c -- '--system-talk-name=' "$manifest")" -eq 1
-! grep -Eq -- '--device=all|--filesystem=host|--socket=system-bus|--talk-name=|pkexec|setcap|curl|go[[:space:]]+mod[[:space:]]+download' "$manifest" "$wrapper" "$root/packaging/flatpak/build-offline.sh"
+forbidden='--device=all|--filesystem=host|--socket=system-bus|--talk-name=|pkexec|setcap|curl|go[[:space:]]+mod[[:space:]]+download'
+! grep -Eq -- "$forbidden" "$wrapper" "$root/packaging/flatpak/build-offline.sh"
+# The tray's StatusNotifierWatcher talk-name is the only session-bus name the manifest may declare.
+! grep -vFx '  - --talk-name=org.kde.StatusNotifierWatcher' "$manifest" | grep -Eq -- "$forbidden"
 grep -Fq 'generated-go-sources.json' "$manifest"
 grep -Fqx '        dest: .flatpak-input' "$manifest"
 grep -Fqx '        dest: .flatpak-input/geodata' "$manifest"
