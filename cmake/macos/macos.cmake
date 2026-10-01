@@ -19,7 +19,7 @@ set(PLATFORM_SOURCES
     src/sys/macos/MacModeCoordinator.cpp
     src/sys/macos/MacHelperInstaller.h
     src/sys/macos/MacHelperInstaller.cpp
-    src/sys/wifi/WifiBackendNone.cpp
+    src/sys/wifi/WifiBackendMac.mm
     src/sys/wifi/WifiPermissionNone.cpp
     assets/macos/proxor.icns
 )
@@ -28,7 +28,10 @@ set_source_files_properties(assets/macos/proxor.icns PROPERTIES MACOSX_PACKAGE_L
 find_library(CORE_FOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
 find_library(CORE_SERVICES_FRAMEWORK CoreServices REQUIRED)
 find_library(APPKIT_FRAMEWORK AppKit REQUIRED)
-set(PLATFORM_LIBRARIES ${CORE_FOUNDATION_FRAMEWORK} ${CORE_SERVICES_FRAMEWORK} ${APPKIT_FRAMEWORK})
+find_library(COREWLAN_FRAMEWORK CoreWLAN REQUIRED)
+find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
+set_source_files_properties(src/sys/wifi/WifiBackendMac.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+set(PLATFORM_LIBRARIES ${CORE_FOUNDATION_FRAMEWORK} ${CORE_SERVICES_FRAMEWORK} ${APPKIT_FRAMEWORK} ${COREWLAN_FRAMEWORK} ${FOUNDATION_FRAMEWORK})
 # Keep user config out of the signed bundle (Throne: NKR_PACKAGE_MACOS -> NKR_CPP_USE_APPDATA).
 add_compile_definitions(NKR_CPP_USE_APPDATA)
 add_link_options(-Wl,-dead_strip)
