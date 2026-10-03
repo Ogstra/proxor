@@ -104,6 +104,19 @@ private slots:
         QVERIFY(!ShouldRefreshAutostart(expected, expected, "/usr/lib/proxor/proxor"));
         QVERIFY(!ShouldRefreshAutostart({"/home/u/Proxor.AppImage", "-tray"}, expected, "/usr/lib/proxor/proxor"));
     }
+
+    void flatpakCommandline() {
+        QCOMPARE(FlatpakAutostartCommandline(true, ""), (QStringList{"proxor", "-tray", "-appdata"}));
+        QCOMPARE(FlatpakAutostartCommandline(false, ""), (QStringList{"proxor", "-tray"}));
+        QCOMPARE(FlatpakAutostartCommandline(true, "/x y"), (QStringList{"proxor", "-tray", "-appdata", "/x y"}));
+    }
+
+    void flatpakRequestOnlyOnChange() {
+        QVERIFY(!ShouldRequestFlatpakAutostart(true, true));
+        QVERIFY(!ShouldRequestFlatpakAutostart(false, false));
+        QVERIFY(ShouldRequestFlatpakAutostart(true, false));
+        QVERIFY(ShouldRequestFlatpakAutostart(false, true));
+    }
 };
 
 QTEST_APPLESS_MAIN(AutostartTest)
