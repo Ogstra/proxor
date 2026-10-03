@@ -13,6 +13,7 @@
 #include "3rdparty/RunGuard.hpp"
 #include "main/ProxorGui.hpp"
 #include "sys/AutoRun.hpp"
+#include "sys/DesktopPortal.hpp"
 #include "sys/LogFile.hpp"
 
 #include "ui/mainwindow_interface.h"
@@ -49,6 +50,8 @@ int main(int argc, char* argv[]) {
 #ifdef Q_OS_LINUX
     QGuiApplication::setDesktopFileName(QStringLiteral("proxor"));
 #endif
+    // Probe the desktop portals on a worker thread while the app starts (no-op on Windows/macOS).
+    ProxorDesktop::StartPortalProbe();
     // The tray icon is initialized later; set this now so Linux taskbars identify the
     // first top-level window even while the proxy is inactive.
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/proxor/proxor.png")));

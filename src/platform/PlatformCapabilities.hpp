@@ -23,7 +23,13 @@ struct PlatformEnvironment {
     bool qrReaderBuilt = true;      // false in NKR_NO_ZXING builds
     bool trayAvailable = true;      // QSystemTrayIcon::isSystemTrayAvailable() in the app
     LinuxDesktopFamily desktop = LinuxDesktopFamily::Unknown; // Linux only; Unknown elsewhere
+    uint backgroundPortal = 0;      // ProxorDesktop::Portals().background (0 = absent)
+    uint screenshotPortal = 0;
+    uint globalShortcutsPortal = 0;
 };
+
+enum class HotkeyBackend { None, Native, Portal };
+enum class ScreenCaptureBackend { None, Native, Portal };
 
 enum class Capability {
     GlobalHotkeys,
@@ -48,6 +54,8 @@ struct CapabilityStatus {
 HostOs CompiledHostOs();
 DisplaySession SessionFromEnvironment(HostOs os, const QString &qpaPlatformName, bool waylandDisplaySet);
 CapabilityStatus QueryCapability(Capability capability, const PlatformEnvironment &env);
+HotkeyBackend SelectHotkeyBackend(const PlatformEnvironment &env);
+ScreenCaptureBackend SelectScreenCaptureBackend(const PlatformEnvironment &env);
 bool IsUsable(const CapabilityStatus &status);
 QString CapabilityName(Capability capability);
 QString DescribePlatformEnvironment(const PlatformEnvironment &env);

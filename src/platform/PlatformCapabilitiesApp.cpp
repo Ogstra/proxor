@@ -3,6 +3,7 @@
 #include "main/ProxorGui.hpp"
 
 #include "platform/LinuxDesktop.hpp"
+#include "sys/DesktopPortal.hpp"
 
 #include <QGuiApplication>
 #include <QSystemTrayIcon>
@@ -18,6 +19,11 @@ PlatformEnvironment CurrentPlatformEnvironment() {
     // Fresh on every call: a tray host can appear later (right after login).
     env.trayAvailable = QSystemTrayIcon::isSystemTrayAvailable();
     if (env.os == HostOs::Linux) env.desktop = DetectLinuxDesktop(LinuxDesktopEnvFromProcess()).family;
+    // Probed on a worker thread since startup (StartPortalProbe in main); zeros on Windows/macOS.
+    const auto &portals = ProxorDesktop::Portals();
+    env.backgroundPortal = portals.background;
+    env.screenshotPortal = portals.screenshot;
+    env.globalShortcutsPortal = portals.globalShortcuts;
 #ifdef NKR_NO_QHOTKEY
     env.hotkeyBackendBuilt = false;
 #endif

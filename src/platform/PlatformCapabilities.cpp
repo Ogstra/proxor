@@ -17,6 +17,24 @@ bool IsLinuxFlatpak(const PlatformEnvironment &env) { return env.os == HostOs::L
 QString NoQrReader() { return T("This build of Proxor has no QR code reader."); }
 QString FlatpakTun() { return T("Tun Mode is not available in the Flatpak sandbox. These settings apply to the native packages and the AppImage."); }
 
+// Linux backend choice shared by hotkeys and screen capture: the desktop portal where it is offered;
+// the Flatpak and Wayland have no native fallback; XWayland/unknown sessions fall back to the native path.
+template <typename Backend>
+Backend LinuxBackend(const PlatformEnvironment &env, uint portalVersion) {
+    const bool portal = portalVersion >= 1;
+    if (IsFlatpak(env.packageMode) || env.session == DisplaySession::Wayland)
+        return portal ? Backend::Portal : Backend::None;
+    switch (env.session) {
+        case DisplaySession::XWayland:
+        case DisplaySession::Unknown:
+            return portal ? Backend::Portal : Backend::Native;
+        case DisplaySession::X11:
+        case DisplaySession::NotApplicable:
+            break;
+    }
+    return Backend::Native;
+}
+
 CapabilityStatus QueryHotkeys(const PlatformEnvironment &env) {
     if (!env.hotkeyBackendBuilt) return Unsupported(T("This build of Proxor has no global hotkey support."));
     switch (env.os) {
@@ -28,17 +46,22 @@ CapabilityStatus QueryHotkeys(const PlatformEnvironment &env) {
         case HostOs::Linux:
             break;
     }
-    if (IsFlatpak(env.packageMode))
-        return Unsupported(T("Global hotkeys are not available in the Flatpak: the sandbox cannot grab keys, and the desktop GlobalShortcuts portal is not supported yet."));
+    switch (SelectHotkeyBackend(env)) {
+        case HotkeyBackend::Portal:
+            return Degraded(T("Your desktop manages these hotkeys: it asks you to confirm them the first time and may assign different keys. Change them later in the desktop's keyboard shortcut settings."));
+        case HotkeyBackend::None:
+            if (IsFlatpak(env.packageMode))
+                return Unsupported(T("Global hotkeys need the desktop's GlobalShortcuts portal (KDE Plasma 5.27 or later, GNOME 48 or later), which this desktop does not offer. The Flatpak cannot grab keys by itself."));
+            return Unsupported(T("Global hotkeys in a Wayland session need the desktop's GlobalShortcuts portal (KDE Plasma 5.27 or later, GNOME 48 or later), which this desktop does not offer."));
+        case HotkeyBackend::Native:
+            break;
+    }
     switch (env.session) {
-        case DisplaySession::Wayland:
-            return Unsupported(T("Global hotkeys are not available in a Wayland session: Proxor can register them only under X11."));
         case DisplaySession::XWayland:
             return Degraded(T("Proxor runs through XWayland here, so hotkeys may work only while a Proxor window has focus."));
         case DisplaySession::Unknown:
             return Degraded(T("Proxor cannot tell whether this session allows global hotkeys."));
-        case DisplaySession::X11:
-        case DisplaySession::NotApplicable:
+        default:
             break;
     }
     return {};
@@ -57,17 +80,20 @@ CapabilityStatus QueryScreenCapture(const PlatformEnvironment &env) {
         case HostOs::Linux:
             break;
     }
-    if (IsFlatpak(env.packageMode))
-        return Unsupported(T("Screen capture is not available in the Flatpak. Add the QR code from an image file or the clipboard instead."));
+    switch (SelectScreenCaptureBackend(env)) {
+        case ScreenCaptureBackend::Portal:
+            return {};
+        case ScreenCaptureBackend::None:
+            return Unsupported(T("Screen capture needs the desktop's Screenshot portal, which this desktop does not offer. Add the QR code from an image file or the clipboard instead."));
+        case ScreenCaptureBackend::Native:
+            break;
+    }
     switch (env.session) {
-        case DisplaySession::Wayland:
-            return Unsupported(T("Screen capture is not available in a Wayland session. Add the QR code from an image file or the clipboard instead."));
         case DisplaySession::XWayland:
             return Degraded(T("Proxor runs through XWayland here and can capture only X11 windows. If the code is not found, add it from an image file or the clipboard."));
         case DisplaySession::Unknown:
             return Degraded(T("Proxor cannot tell whether this session allows screen capture. If the code is not found, add it from an image file or the clipboard."));
-        case DisplaySession::X11:
-        case DisplaySession::NotApplicable:
+        default:
             break;
     }
     return {};
@@ -81,9 +107,11 @@ CapabilityStatus QueryIcmp(const PlatformEnvironment &env) {
 CapabilityStatus QueryAutoStart(const PlatformEnvironment &env) {
     if (env.os == HostOs::MacOS)
         return Unsupported(T("Start with system is not available on macOS yet. Add Proxor in System Settings > General > Login Items instead."));
-    if (IsLinuxFlatpak(env))
-        return Unsupported(T("Start with system is not available in the Flatpak yet. Add Proxor to your desktop's autostart settings instead."));
-    // Native Linux packages are Supported here; the native-package Exec bug (G-02) is phase 52's fix.
+    if (IsLinuxFlatpak(env)) {
+        if (env.backgroundPortal >= 1) return {};
+        return Unsupported(T("Start with system in the Flatpak needs the desktop's Background portal, which this desktop does not offer. Add Proxor to your desktop's autostart settings instead."));
+    }
+    // Native Linux packages are Supported here: native packages start through the /usr/bin/proxor wrapper (52-02).
     return {};
 }
 
@@ -191,6 +219,34 @@ CapabilityStatus QueryCapability(Capability capability, const PlatformEnvironmen
     return {};
 }
 
+HotkeyBackend SelectHotkeyBackend(const PlatformEnvironment &env) {
+    if (!env.hotkeyBackendBuilt) return HotkeyBackend::None;
+    switch (env.os) {
+        case HostOs::Windows:
+        case HostOs::MacOS:
+            return HotkeyBackend::Native;
+        case HostOs::Other:
+            return HotkeyBackend::None;
+        case HostOs::Linux:
+            break;
+    }
+    return LinuxBackend<HotkeyBackend>(env, env.globalShortcutsPortal);
+}
+
+ScreenCaptureBackend SelectScreenCaptureBackend(const PlatformEnvironment &env) {
+    if (!env.qrReaderBuilt) return ScreenCaptureBackend::None;
+    switch (env.os) {
+        case HostOs::Windows:
+        case HostOs::MacOS:
+            return ScreenCaptureBackend::Native;
+        case HostOs::Other:
+            return ScreenCaptureBackend::None;
+        case HostOs::Linux:
+            break;
+    }
+    return LinuxBackend<ScreenCaptureBackend>(env, env.screenshotPortal);
+}
+
 bool IsUsable(const CapabilityStatus &status) { return status.support != Support::Unsupported; }
 
 QString CapabilityName(Capability capability) {
@@ -225,9 +281,12 @@ QString DescribePlatformEnvironment(const PlatformEnvironment &env) {
         case DisplaySession::Wayland: session = QStringLiteral("wayland"); break;
         case DisplaySession::Unknown: session = QStringLiteral("unknown"); break;
     }
-    return QStringLiteral("os=%1 package=%2 session=%3 tray=%4 desktop=%5")
+    return QStringLiteral("os=%1 package=%2 session=%3 tray=%4 desktop=%5 portals=background:%6,screenshot:%7,shortcuts:%8")
         .arg(os, PackageModeName(env.packageMode), session, env.trayAvailable ? QStringLiteral("yes") : QStringLiteral("no"),
-             DesktopName(env.desktop));
+             DesktopName(env.desktop))
+        .arg(env.backgroundPortal)
+        .arg(env.screenshotPortal)
+        .arg(env.globalShortcutsPortal);
 }
 
 QList<Capability> AllCapabilities() {
