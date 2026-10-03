@@ -153,6 +153,7 @@ QString AutoRun_RefreshStaleEntry() { return {}; }
 #include <QStandardPaths>
 
 #include "platform/LinuxAutostart.hpp"
+#include "sys/DesktopPortal.hpp"
 
 //  launchatlogin.cpp
 //  ShadowClash
@@ -189,7 +190,58 @@ static void logAutostartFailure(const QString &path) {
     if (MW_show_log) MW_show_log(QObject::tr("Start with system: cannot write %1").arg(path));
 }
 
+// Flatpak: the sandbox's own autostart directory is never seen by the host session, so the desktop is asked
+// through the Background portal. This marker records what the desktop granted (it is the checkbox state).
+static QString flatpakAutostartMarker() {
+    return QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation) + QLatin1String("/flatpak-autostart");
+}
+
+static void SetFlatpakAutostart(bool enable) {
+    // Older versions wrote a file the host never reads; clean it up once.
+    QFile::remove(autostartFilePath());
+    if (!ProxorPlatform::ShouldRequestFlatpakAutostart(enable, AutoRun_IsEnabled())) return;
+
+    const auto commandline = ProxorPlatform::FlatpakAutostartCommandline(ProxorGui::dataStore->flag_use_appdata,
+                                                                        ProxorGui::dataStore->appdataDir);
+    ProxorDesktop::RequestAutostart(
+        enable, commandline, QObject::tr("Start Proxor in the tray when you log in."), qApp,
+        [enable](const ProxorDesktop::AutostartResult &r) {
+            const QString marker = flatpakAutostartMarker();
+            if (r.result.outcome == ProxorDesktop::PortalOutcome::Granted) {
+                if (r.autostart) {
+                    QDir().mkpath(QFileInfo(marker).absolutePath());
+                    QFile f(marker);
+                    if (f.open(QIODevice::WriteOnly)) f.close();
+                } else {
+                    QFile::remove(marker);
+                }
+                if (MW_show_log) {
+                    MW_show_log(r.autostart ? QObject::tr("Start with system: the desktop will start Proxor when you log in.")
+                                            : QObject::tr("Start with system: turned off."));
+                }
+                return;
+            }
+            if (enable) {
+                QFile::remove(marker);
+                MessageBoxWarning(software_name,
+                                  QObject::tr("Proxor could not be set to start when you log in: %1 You can allow it in your "
+                                              "desktop settings (GNOME: Settings > Apps > Proxor > Run in Background; "
+                                              "KDE: System Settings > Autostart) and turn the option on again.")
+                                      .arg(r.result.detail));
+            } else {
+                MessageBoxWarning(software_name,
+                                  QObject::tr("Proxor could not stop starting when you log in: %1 Remove it in your "
+                                              "desktop's autostart settings.")
+                                      .arg(r.result.detail));
+            }
+        });
+}
+
 void AutoRun_SetEnabled(bool enable) {
+    if (IsFlatpak(ProxorGui::CurrentPackageMode())) {
+        SetFlatpakAutostart(enable);
+        return;
+    }
     // From https://github.com/nextcloud/desktop/blob/master/src/common/utility_unix.cpp
     QString appName = QCoreApplication::applicationName();
     QString userAutoStartPath = getUserAutostartDir_private();
@@ -216,6 +268,7 @@ void AutoRun_SetEnabled(bool enable) {
 }
 
 bool AutoRun_IsEnabled() {
+    if (IsFlatpak(ProxorGui::CurrentPackageMode())) return QFile::exists(flatpakAutostartMarker());
     return QFile::exists(autostartFilePath());
 }
 
