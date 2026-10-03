@@ -29,6 +29,8 @@
 #include "platform/QrImageDecode.hpp"
 #include "platform/LinuxSystemProxyPlan.hpp"
 #include "platform/TrayPolicy.hpp"
+#include "platform/PortalShortcutTrigger.hpp"
+#include "sys/DesktopPortal.hpp"
 
 #include "3rdparty/fix_old_qt.h"
 #include "3rdparty/qrcodegen.hpp"
@@ -3142,13 +3144,47 @@ void MainWindow::on_menu_scan_qr_triggered() {
 #ifndef NKR_NO_ZXING
     using namespace ProxorPlatform;
     const auto cap = CurrentCapability(Capability::ScreenQrCapture);
-    if (!IsUsable(cap)) {
-        QMessageBox box(QMessageBox::Information, software_name, QrScanMessage(QrSource::Screen, {false, false}, cap), QMessageBox::Close, this);
+    auto offerAlternatives = [this](const QString &message) {
+        QMessageBox box(QMessageBox::Information, software_name, message, QMessageBox::Close, this);
         auto *fileBtn = box.addButton(tr("Choose Image File..."), QMessageBox::ActionRole);
         auto *clipBtn = box.addButton(tr("Use Clipboard Image"), QMessageBox::ActionRole);
         box.exec();
         if (box.clickedButton() == fileBtn) on_menu_scan_qr_image_triggered();
         else if (box.clickedButton() == clipBtn) on_menu_scan_qr_clipboard_triggered();
+    };
+    if (!IsUsable(cap)) {
+        offerAlternatives(QrScanMessage(QrSource::Screen, {false, false}, cap));
+        return;
+    }
+
+    if (SelectScreenCaptureBackend(CurrentPlatformEnvironment()) == ScreenCaptureBackend::Portal) {
+        hide();
+        QTimer::singleShot(400, this, [this, cap, offerAlternatives] {
+            ProxorDesktop::TakeScreenshot(QString(), this, [this, cap, offerAlternatives](const ProxorDesktop::ScreenshotResult &r) {
+                show();
+                if (r.result.outcome == ProxorDesktop::PortalOutcome::Cancelled) {
+                    show_log_impl(tr("Scan QR code from screen: %1").arg(r.result.detail));
+                    return;
+                }
+                if (r.result.outcome != ProxorDesktop::PortalOutcome::Granted) {
+                    offerAlternatives(tr("The desktop did not provide a screenshot: %1 Add the QR code from an image file or the clipboard instead.").arg(r.result.detail));
+                    return;
+                }
+                QImageReader reader(r.imagePath);
+                reader.setAutoTransform(true);
+                const auto image = reader.read();
+                if (r.temporary) QFile::remove(r.imagePath);
+                else show_log_impl(tr("Scan QR code from screen: the desktop saved the screenshot at %1 and Proxor leaves it there (GNOME keeps screenshots in Pictures/Screenshots). Delete it if you do not need it.").arg(r.imagePath));
+                const auto text = DecodeQrFromImage(image);
+                const auto msg = QrScanMessage(QrSource::Screen, {!image.isNull(), !text.isEmpty()}, cap);
+                if (!msg.isEmpty()) {
+                    MessageBoxInfo(software_name, msg);
+                    return;
+                }
+                show_log_impl("QR Code Result:\n" + text);
+                ProxorGui_sub::groupUpdater->AsyncUpdate(text);
+            });
+        });
         return;
     }
 
@@ -3821,10 +3857,13 @@ void MainWindow::refresh_connection_list(const QJsonArray &arr) {
 #include <QHotkey>
 
 inline QList<std::shared_ptr<QHotkey>> RegisteredHotkey;
+inline std::unique_ptr<ProxorDesktop::GlobalShortcutSession> PortalHotkeySession;
 
 QStringList MainWindow::RegisterHotkey(bool unregister) {
     // The shared_ptr destructor unregisters the OS hotkey; the objects are not QObject-parented.
     RegisteredHotkey.clear();
+    // Closes the old portal session (asynchronously, so shutdown never blocks the UI thread).
+    PortalHotkeySession.reset();
     if (unregister) return {};
 
     QList<ProxorPlatform::HotkeyBinding> bindings{
@@ -3835,6 +3874,45 @@ QStringList MainWindow::RegisterHotkey(bool unregister) {
     };
     auto plan = ProxorPlatform::PlanHotkeyRegistration(
         bindings, ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::GlobalHotkeys));
+
+    if (ProxorPlatform::SelectHotkeyBackend(ProxorPlatform::CurrentPlatformEnvironment()) == ProxorPlatform::HotkeyBackend::Portal) {
+        // Stable ids per action; the desktop remembers bindings by id.
+        const QHash<QString, QString> idForAction{
+            {tr("Show main window"), "show-main-window"}, {tr("Manage groups"), "manage-groups"},
+            {tr("Routing settings"), "routing-settings"}, {tr("System proxy menu"), "system-proxy-menu"}};
+        QList<ProxorDesktop::ShortcutRequest> requests;
+        QHash<QString, QString> sequenceForId, actionForId;
+        for (const auto &b : plan.toRegister) {
+            const auto id = idForAction.value(b.action);
+            requests << ProxorDesktop::ShortcutRequest{id, b.action, ProxorPlatform::PortalTriggerFromKeySequence(b.sequence)};
+            sequenceForId.insert(id, b.sequence);
+            actionForId.insert(id, b.action);
+        }
+        if (!requests.isEmpty()) {
+            PortalHotkeySession = ProxorDesktop::CreateGlobalShortcutSession(this);
+            if (PortalHotkeySession) {
+                PortalHotkeySession->onActivated = [this, sequenceForId](const QString &id) { HotkeyEvent(sequenceForId.value(id)); };
+                PortalHotkeySession->bind(requests, QString(), [requests, actionForId](const QList<ProxorDesktop::BoundShortcut> &bound, const ProxorDesktop::PortalResult &r) {
+                    if (!MW_show_log) return;
+                    if (r.outcome != ProxorDesktop::PortalOutcome::Granted) {
+                        MW_show_log(QObject::tr("Hotkeys: %1").arg(r.detail));
+                        return;
+                    }
+                    for (const auto &req : requests) {
+                        auto it = std::find_if(bound.begin(), bound.end(), [&](const auto &x) { return x.id == req.id; });
+                        if (it == bound.end())
+                            MW_show_log(QObject::tr("Hotkeys: the desktop did not bind \"%1\". Set it in the desktop's keyboard shortcut settings.").arg(actionForId.value(req.id)));
+                        else
+                            MW_show_log(QObject::tr("Hotkeys: \"%1\" is bound to %2 by the desktop.")
+                                            .arg(actionForId.value(req.id), it->triggerDescription.isEmpty() ? QObject::tr("a key you choose in the desktop's settings") : it->triggerDescription));
+                    }
+                });
+            } else {
+                plan.problems << tr("Global hotkeys: the desktop's GlobalShortcuts portal could not be used.");
+            }
+        }
+        return plan.problems;
+    }
 
     for (const auto &b : plan.toRegister) {
         QKeySequence k(b.sequence);
