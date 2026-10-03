@@ -26,7 +26,8 @@ private slots:
     void nativeEntryEqualsGoldenFixture() {
         QFile f(PROXOR_AUTOSTART_FIXTURE);
         QVERIFY(f.open(QIODevice::ReadOnly));
-        const QString golden = QString::fromUtf8(f.readAll());
+        // A Windows checkout turns the fixture into CRLF (text=auto); the entry is always LF.
+        const QString golden = QString::fromUtf8(f.readAll()).replace("\r\n", "\n");
         QCOMPARE(LinuxAutostartDesktopEntry("proxor", LinuxAutostartCommand(native(PackageMode::Deb))), golden);
     }
 
