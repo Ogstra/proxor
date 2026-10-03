@@ -15,7 +15,8 @@ if (TARGET Qt6::DBus)
         ${CMAKE_CURRENT_LIST_DIR}/../fake_portal.cpp
         ${CMAKE_CURRENT_LIST_DIR}/../fake_portal.hpp
         ${PROXOR_SRC}/sys/linux/XdgPortal.cpp
-        ${PROXOR_SRC}/sys/linux/PortalGlobalShortcuts.cpp)
+        ${PROXOR_SRC}/sys/linux/PortalGlobalShortcuts.cpp
+        ${PROXOR_SRC}/sys/linux/DesktopPortalLinux.cpp)
     target_include_directories(portal_shortcuts_test PRIVATE ${PROXOR_SRC} ${PROXOR_SRC}/sys/linux ${CMAKE_CURRENT_LIST_DIR}/..)
     target_link_libraries(portal_shortcuts_test PRIVATE Qt6::Core Qt6::DBus Qt6::Test)
     if (PROXOR_DBUS_RUN_SESSION AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
