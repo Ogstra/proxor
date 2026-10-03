@@ -123,4 +123,17 @@ bool ShouldRefreshAutostart(const QStringList &existing, const QStringList &expe
     return existing.first() == ownBinaryPath;
 }
 
+QStringList FlatpakAutostartCommandline(bool useAppdata, const QString &appdataDir) {
+    QStringList cmd{QStringLiteral("proxor"), QStringLiteral("-tray")};
+    if (useAppdata) {
+        cmd << QStringLiteral("-appdata");
+        if (!appdataDir.isEmpty()) cmd << appdataDir;
+    }
+    return cmd;
+}
+
+bool ShouldRequestFlatpakAutostart(bool enable, bool markerEnabled) {
+    return enable != markerEnabled;
+}
+
 } // namespace ProxorPlatform

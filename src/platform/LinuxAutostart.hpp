@@ -43,4 +43,10 @@ QStringList ParseDesktopEntryExec(const QString &entryText);
 // i.e. this install wrote the entry that cannot start.
 bool ShouldRefreshAutostart(const QStringList &existing, const QStringList &expected, const QString &ownBinaryPath);
 
+// Flatpak: the command INSIDE the sandbox for the Background portal: proxor -tray [-appdata [dir]].
+QStringList FlatpakAutostartCommandline(bool useAppdata, const QString &appdataDir);
+
+// The portal is asked only when the request differs from what the desktop last granted.
+bool ShouldRequestFlatpakAutostart(bool enable, bool markerEnabled);
+
 } // namespace ProxorPlatform
