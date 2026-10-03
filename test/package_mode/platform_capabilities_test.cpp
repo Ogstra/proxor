@@ -44,11 +44,13 @@ private slots:
 
     void linuxWaylandDisablesHotkeysAndScreenCapture() {
         auto env = Env(HostOs::Linux, PackageMode::Deb, DisplaySession::Wayland);
-        for (auto c : {Capability::GlobalHotkeys, Capability::ScreenQrCapture}) {
-            auto s = Q(c, env);
-            QCOMPARE(s.support, Support::Unsupported);
-            QVERIFY(s.reason.contains("Wayland"));
-        }
+        auto h = Q(Capability::GlobalHotkeys, env);
+        QCOMPARE(h.support, Support::Unsupported);
+        QVERIFY(h.reason.contains("Wayland"));
+        QVERIFY(h.reason.contains("GNOME 48"));
+        auto sc = Q(Capability::ScreenQrCapture, env);
+        QCOMPARE(sc.support, Support::Unsupported);
+        QVERIFY(sc.reason.contains("Screenshot portal"));
     }
 
     void flatpakDisablesHotkeysScreenAutostartTunStrictRouteAndSingleCore() {
@@ -137,6 +139,121 @@ private slots:
         }
     }
 
+    void hotkeyBackendSelection() {
+        auto with = [](HostOs os, PackageMode m, DisplaySession s, uint v) {
+            auto e = Env(os, m, s);
+            e.globalShortcutsPortal = v;
+            return SelectHotkeyBackend(e);
+        };
+        for (uint v : {0u, 1u}) {
+            QCOMPARE(with(HostOs::Windows, PackageMode::NativeOrPortable, DisplaySession::NotApplicable, v), HotkeyBackend::Native);
+            QCOMPARE(with(HostOs::MacOS, PackageMode::NativeOrPortable, DisplaySession::NotApplicable, v), HotkeyBackend::Native);
+            QCOMPARE(with(HostOs::Other, PackageMode::NativeOrPortable, DisplaySession::NotApplicable, v), HotkeyBackend::None);
+            QCOMPARE(with(HostOs::Linux, PackageMode::Deb, DisplaySession::X11, v), HotkeyBackend::Native);
+        }
+        QCOMPARE(with(HostOs::Linux, PackageMode::Deb, DisplaySession::Wayland, 0), HotkeyBackend::None);
+        QCOMPARE(with(HostOs::Linux, PackageMode::Deb, DisplaySession::Wayland, 1), HotkeyBackend::Portal);
+        QCOMPARE(with(HostOs::Linux, PackageMode::Deb, DisplaySession::XWayland, 0), HotkeyBackend::Native);
+        QCOMPARE(with(HostOs::Linux, PackageMode::Deb, DisplaySession::XWayland, 1), HotkeyBackend::Portal);
+        QCOMPARE(with(HostOs::Linux, PackageMode::Deb, DisplaySession::Unknown, 1), HotkeyBackend::Portal);
+        for (auto s : kAllSessions) {
+            QCOMPARE(with(HostOs::Linux, PackageMode::Flatpak, s, 0), HotkeyBackend::None);
+            QCOMPARE(with(HostOs::Linux, PackageMode::Flatpak, s, 1), HotkeyBackend::Portal);
+        }
+        for (auto os : kAllOs) {
+            auto e = Env(os, PackageMode::NativeOrPortable, DisplaySession::Wayland);
+            e.globalShortcutsPortal = 1;
+            e.hotkeyBackendBuilt = false;
+            QCOMPARE(SelectHotkeyBackend(e), HotkeyBackend::None);
+        }
+    }
+
+    void screenCaptureBackendSelection() {
+        auto with = [](HostOs os, PackageMode m, DisplaySession s, uint v) {
+            auto e = Env(os, m, s);
+            e.screenshotPortal = v;
+            return SelectScreenCaptureBackend(e);
+        };
+        for (uint v : {0u, 1u}) {
+            QCOMPARE(with(HostOs::Windows, PackageMode::NativeOrPortable, DisplaySession::NotApplicable, v), ScreenCaptureBackend::Native);
+            QCOMPARE(with(HostOs::MacOS, PackageMode::NativeOrPortable, DisplaySession::NotApplicable, v), ScreenCaptureBackend::Native);
+            QCOMPARE(with(HostOs::Linux, PackageMode::Deb, DisplaySession::X11, v), ScreenCaptureBackend::Native);
+        }
+        QCOMPARE(with(HostOs::Linux, PackageMode::Deb, DisplaySession::Wayland, 0), ScreenCaptureBackend::None);
+        QCOMPARE(with(HostOs::Linux, PackageMode::Deb, DisplaySession::Wayland, 2), ScreenCaptureBackend::Portal);
+        QCOMPARE(with(HostOs::Linux, PackageMode::Deb, DisplaySession::XWayland, 0), ScreenCaptureBackend::Native);
+        QCOMPARE(with(HostOs::Linux, PackageMode::Deb, DisplaySession::XWayland, 2), ScreenCaptureBackend::Portal);
+        QCOMPARE(with(HostOs::Linux, PackageMode::Flatpak, DisplaySession::X11, 0), ScreenCaptureBackend::None);
+        QCOMPARE(with(HostOs::Linux, PackageMode::Flatpak, DisplaySession::X11, 1), ScreenCaptureBackend::Portal);
+        auto e = Env(HostOs::Linux, PackageMode::Deb, DisplaySession::X11);
+        e.qrReaderBuilt = false;
+        QCOMPARE(SelectScreenCaptureBackend(e), ScreenCaptureBackend::None);
+    }
+
+    void hotkeyRowFollowsPortal() {
+        auto env = Env(HostOs::Linux, PackageMode::Deb, DisplaySession::Wayland);
+        env.globalShortcutsPortal = 1;
+        auto s = Q(Capability::GlobalHotkeys, env);
+        QCOMPARE(s.support, Support::Degraded);
+        QVERIFY(IsUsable(s));
+        QVERIFY(s.reason.contains("desktop manages"));
+        env.globalShortcutsPortal = 0;
+        s = Q(Capability::GlobalHotkeys, env);
+        QCOMPARE(s.support, Support::Unsupported);
+        QVERIFY(s.reason.contains("GNOME 48"));
+        env = Env(HostOs::Linux, PackageMode::Flatpak, DisplaySession::X11);
+        s = Q(Capability::GlobalHotkeys, env);
+        QCOMPARE(s.support, Support::Unsupported);
+        QVERIFY(s.reason.contains("Flatpak"));
+        QCOMPARE(Q(Capability::GlobalHotkeys, Env(HostOs::Linux, PackageMode::Deb, DisplaySession::X11)).support, Support::Supported);
+        auto xw = Q(Capability::GlobalHotkeys, Env(HostOs::Linux, PackageMode::AppImage, DisplaySession::XWayland));
+        QCOMPARE(xw.support, Support::Degraded);
+        QVERIFY(xw.reason.contains("XWayland"));
+    }
+
+    void screenRowFollowsPortal() {
+        for (auto mode : {PackageMode::Deb, PackageMode::Flatpak}) {
+            auto env = Env(HostOs::Linux, mode, DisplaySession::Wayland);
+            env.screenshotPortal = 1;
+            QCOMPARE(Q(Capability::ScreenQrCapture, env).support, Support::Supported);
+            env.screenshotPortal = 0;
+            auto s = Q(Capability::ScreenQrCapture, env);
+            QCOMPARE(s.support, Support::Unsupported);
+            QVERIFY(s.reason.contains("Screenshot portal"));
+        }
+    }
+
+    void autostartRowFollowsBackgroundPortal() {
+        auto env = Env(HostOs::Linux, PackageMode::Flatpak, DisplaySession::Wayland);
+        auto s = Q(Capability::AutoStart, env);
+        QCOMPARE(s.support, Support::Unsupported);
+        QVERIFY(s.reason.contains("Background portal"));
+        env.backgroundPortal = 1;
+        s = Q(Capability::AutoStart, env);
+        QCOMPARE(s.support, Support::Supported);
+        QVERIFY(s.reason.isEmpty());
+        QCOMPARE(Q(Capability::AutoStart, Env(HostOs::Linux, PackageMode::Deb, DisplaySession::X11)).support, Support::Supported);
+    }
+
+    void windowsAndMacAnswersIgnorePortals() {
+        for (auto os : {HostOs::Windows, HostOs::MacOS})
+            for (auto mode : kAllModes)
+                for (auto session : kAllSessions)
+                    for (auto c : AllCapabilities()) {
+                        auto base = Env(os, mode, session);
+                        auto withPortals = base;
+                        withPortals.backgroundPortal = withPortals.screenshotPortal = withPortals.globalShortcutsPortal = 1;
+                        auto a = Q(c, base), b = Q(c, withPortals);
+                        QCOMPARE(a.support, b.support);
+                        QCOMPARE(a.reason, b.reason);
+                    }
+        // The pre-52-09 macOS answers, spelled out.
+        auto mac = Env(HostOs::MacOS, PackageMode::NativeOrPortable, DisplaySession::NotApplicable);
+        QCOMPARE(Q(Capability::GlobalHotkeys, mac).support, Support::Supported);
+        QCOMPARE(Q(Capability::ScreenQrCapture, mac).support, Support::NeedsPermission);
+        QCOMPARE(Q(Capability::AutoStart, mac).support, Support::Unsupported);
+    }
+
     void sessionFromEnvironmentTable() {
         QCOMPARE(SessionFromEnvironment(HostOs::Windows, "windows", false), DisplaySession::NotApplicable);
         QCOMPARE(SessionFromEnvironment(HostOs::Windows, "windows", true), DisplaySession::NotApplicable);
@@ -182,11 +299,14 @@ private slots:
 
     void describeIsStable() {
         QCOMPARE(DescribePlatformEnvironment(Env(HostOs::Linux, PackageMode::Flatpak, DisplaySession::Wayland)),
-                 QString("os=linux package=flatpak session=wayland tray=yes desktop=unknown"));
+                 QString("os=linux package=flatpak session=wayland tray=yes desktop=unknown portals=background:0,screenshot:0,shortcuts:0"));
         auto env = Env(HostOs::Linux, PackageMode::Deb, DisplaySession::X11);
         env.trayAvailable = false;
         env.desktop = LinuxDesktopFamily::Gnome;
-        QCOMPARE(DescribePlatformEnvironment(env), QString("os=linux package=deb session=x11 tray=no desktop=gnome"));
+        QCOMPARE(DescribePlatformEnvironment(env), QString("os=linux package=deb session=x11 tray=no desktop=gnome portals=background:0,screenshot:0,shortcuts:0"));
+        env.backgroundPortal = 1;
+        env.screenshotPortal = 2;
+        QVERIFY(DescribePlatformEnvironment(env).endsWith("portals=background:1,screenshot:2,shortcuts:0"));
     }
 
     void systemTrayRowWindowsMacAlwaysSupported() {
