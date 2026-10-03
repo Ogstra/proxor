@@ -573,6 +573,12 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 		if err = file.Sync(); err != nil {
 			return fail(err)
 		}
+		// Close before the rename below: Windows refuses to rename a file that still has
+		// an open handle ("The process cannot access the file because it is being used by
+		// another process"). The deferred Close stays as the safety net for early returns.
+		if err = file.Close(); err != nil {
+			return fail(err)
+		}
 
 		if updateChecksumsURL == "" {
 			return fail(fmt.Errorf("the release published no SHA256SUMS asset; refusing to apply an unverifiable download"))
@@ -601,7 +607,7 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 			return fail(err)
 		}
 
-		if err = os.Rename(partPath, destination); err != nil {
+		if err = renameWithRetry(partPath, destination); err != nil {
 			return fail(err)
 		}
 
@@ -627,4 +633,22 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 		ret.Error = "Unknown update action."
 		return ret, nil
 	}
+}
+
+// renameFile is os.Rename; the tests replace it.
+var renameFile = os.Rename
+
+// renameWithRetry renames a finished download into place. On Windows a virus scanner or the
+// search indexer can hold the new file open for a moment right after it is written, which
+// makes the rename fail with a sharing violation, so a few short retries are made before the
+// error is reported. Other platforms succeed on the first try.
+func renameWithRetry(from, to string) error {
+	var err error
+	for attempt := 0; attempt < 10; attempt++ {
+		if err = renameFile(from, to); err == nil {
+			return nil
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	return err
 }
