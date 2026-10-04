@@ -51,6 +51,7 @@
 
 #ifdef Q_OS_MACOS
 #include "ui/mac/MacPlatform.h"
+#include "platform/MacReopenPolicy.hpp"
 #include "ui/mac/MacLook.h"
 #include "ui/mac/MacDialogs.h"
 #include "sys/macos/MacHelperClient.h"
@@ -1061,6 +1062,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     mac_status_item->setVisible(true);
     ProxorMac::InstallQuitInterceptor(this, [this] {
         if (!ProxorGui::dataStore->prepare_exit) on_menu_exit_triggered();
+    });
+    // Dock icon click (kAEReopenApplication): bring the hidden or minimized window back. Never fires at launch.
+    ProxorMac::InstallReopenHandler(this, [this] {
+        if (ProxorPlatform::DecideReopen(isVisible(), isMinimized(), ProxorGui::dataStore->prepare_exit) != ProxorPlatform::ReopenAction::ShowWindow) return;
+        ProxorGui_log::Write(ProxorGui_log::Level::Info, ProxorPlatform::ReopenLogLine());
+        ActivateWindow(this);
     });
 #else
     tray->setIcon(Icon::GetTrayIcon(Icon::NONE));

@@ -25,7 +25,9 @@
 #include <QWidget>
 #include <QImage>
 #include <QMenu>
+#include <QMetaObject>
 #include <QObject>
+#include <QPointer>
 #include <QPixmap>
 #include <QString>
 #include <QTimer>
@@ -159,6 +161,58 @@ void InstallQuitInterceptor(QObject *owner, std::function<void()> onQuit) {
 
 void AllowQuit() {
     g_allowQuit = true;
+}
+
+// Dock reopen. Qt's own QCocoaApplicationDelegate applicationShouldHandleReopen only re-sends
+// ApplicationActive, which cannot be told apart from a plain activation and never shows a hidden
+// window (53-RESEARCH Q1). The explicit kAEReopenApplication Apple event fires on every Dock click /
+// `open -a` of the running app and never at launch (Q2-Q4). This file is compiled WITHOUT ARC, so the
+// handler object is retained manually for the app lifetime.
+struct ReopenState {
+    QPointer<QObject> owner;
+    std::function<void()> onReopen;
+};
+
+}
+
+@interface ProxorReopenHandler : NSObject {
+    ProxorMac::ReopenState *m_state;
+}
+- (instancetype)initWithState:(ProxorMac::ReopenState *)state;
+- (void)handleReopen:(NSAppleEventDescriptor *)event withReplyEvent:(NSAppleEventDescriptor *)reply;
+@end
+
+@implementation ProxorReopenHandler
+- (instancetype)initWithState:(ProxorMac::ReopenState *)state {
+    self = [super init];
+    if (self) m_state = state;
+    return self;
+}
+- (void)dealloc {
+    delete m_state;
+    [super dealloc];
+}
+- (void)handleReopen:(NSAppleEventDescriptor *)event withReplyEvent:(NSAppleEventDescriptor *)reply {
+    Q_UNUSED(event);
+    Q_UNUSED(reply);
+    if (!m_state || m_state->owner.isNull() || !m_state->onReopen) return;
+    QMetaObject::invokeMethod(m_state->owner.data(), m_state->onReopen, Qt::QueuedConnection);
+}
+@end
+
+namespace ProxorMac {
+
+void InstallReopenHandler(QObject *owner, std::function<void()> onReopen) {
+    if (!owner || !onReopen) return;
+    // After NSApplication finished launching: an earlier registration is overwritten by AppKit.
+    QTimer::singleShot(0, owner, [owner, onReopen = std::move(onReopen)]() mutable {
+        auto *state = new ReopenState{QPointer<QObject>(owner), std::move(onReopen)};
+        ProxorReopenHandler *h = [[ProxorReopenHandler alloc] initWithState:state]; // kept for the app lifetime
+        [[NSAppleEventManager sharedAppleEventManager] setEventHandler:h
+                                                           andSelector:@selector(handleReopen:withReplyEvent:)
+                                                         forEventClass:kCoreEventClass
+                                                            andEventID:kAEReopenApplication];
+    });
 }
 
 void PopupMenuAt(QMenu *menu, QWidget *anchor, const QPoint &posInAnchor) {

@@ -37,6 +37,11 @@ void InstallQuitInterceptor(QObject *owner, std::function<void()> onQuit);
 // -[NSApp terminate:], which sends one more *spontaneous* QEvent::Quit; once this has been called the
 // interceptor lets every Quit through so the process can actually exit instead of looping.
 void AllowQuit();
+// Calls onReopen on the UI thread each time the user reopens Proxor (Dock icon click, `open -a` on the
+// running app): an NSAppleEventManager handler for kAEReopenApplication, installed once the event loop runs.
+// Never fires at launch. onReopen decides whether anything must be shown.
+void InstallReopenHandler(QObject *owner, std::function<void()> onReopen);
+
 // Pops `menu` up as a native NSMenu just below `anchor` (a widget of a visible window) and returns
 // when it is dismissed. Replaces QMenu::popup for toolbar buttons so the menu looks and behaves
 // like the menu-bar menus (rounded, shortcuts, submenu arrows).
