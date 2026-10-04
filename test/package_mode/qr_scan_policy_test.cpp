@@ -39,6 +39,32 @@ private slots:
         QVERIFY(QrScanMessage(QrSource::ClipboardImage, {false, false}, {}).contains("The clipboard does not contain an image"));
         QVERIFY(QrScanMessage(QrSource::ClipboardImage, {true, false}, {}).contains("No QR code found in the clipboard image"));
     }
+    void macDecision() {
+        const auto g = DecideMacScreenScan(true, false);
+        QVERIFY(g.capture && !g.requestAccess);
+        const auto g2 = DecideMacScreenScan(true, true);
+        QVERIFY(g2.capture && !g2.requestAccess);
+        const auto first = DecideMacScreenScan(false, false);
+        QVERIFY(!first.capture && first.requestAccess);
+        const auto again = DecideMacScreenScan(false, true);
+        QVERIFY(!again.capture && !again.requestAccess);
+    }
+    void macMessage() {
+        const auto m = MacScreenRecordingMessage();
+        QVERIFY(m.contains("Screen Recording"));
+        QVERIFY(m.contains("System Settings"));
+        QVERIFY(m.contains("quit and reopen Proxor", Qt::CaseInsensitive));
+        QVERIFY(m.contains("image file", Qt::CaseInsensitive));
+        QVERIFY(m.contains("clipboard", Qt::CaseInsensitive));
+        QVERIFY(m.contains("off and on again"));
+        QVERIFY(m.contains("brew upgrade"));
+        QVERIFY(!m.contains("not found", Qt::CaseInsensitive));
+    }
+    void macGrantedMiss() {
+        const auto m = QrScanMessage(QrSource::Screen, {true, false}, {Support::Supported, {}});
+        QCOMPARE(m, QString("QR Code not found. You can also use Add from QR Code in Image File."));
+        QVERIFY(!m.contains("Screen Recording"));
+    }
 };
 
 QTEST_APPLESS_MAIN(QrScanPolicyTest)
