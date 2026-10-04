@@ -82,6 +82,41 @@ service. macOS releases are prereleases, so expect rough edges and report them.
   not use; on Macs with several users each user
   installs once, and System Proxy is machine-wide.
 
+## Desktop integration
+
+- **Start with system.** Settings > Start with system writes a user LaunchAgent,
+  `~/Library/LaunchAgents/io.github.Ogstra.Proxor.autostart.plist`, that runs
+  `open -a <Proxor.app> --args -tray` at login (plus `-appdata <dir>` for a custom data folder), so
+  Proxor starts in the menu bar with the window hidden. macOS lists it in System Settings >
+  General > Login Items & Extensions, where it can be turned off; when it is, Settings shows
+  "Start with system is turned off in System Settings > General > Login Items & Extensions." with a
+  button that opens Login Items. The agent takes effect at your next login. Turning the option off
+  removes the file. `brew upgrade --cask proxor` keeps it; `brew uninstall --zap` removes it. If the
+  agent points at another copy of Proxor, Settings says so and turning the option on here moves it.
+- **Updates.** The update check finds new versions of `proxor-<version>-macos-arm64.zip`. Every
+  macOS release is a prerelease, so macOS always includes prereleases. A Homebrew install
+  (`/Applications/Proxor.app` or `~/Applications/Proxor.app` with the cask present in Caskroom)
+  shows `brew upgrade --cask proxor` with a Copy button, and the hint to run `brew update` first if
+  Homebrew says Proxor is already up to date. Any other copy shows the zip name and the release
+  page, and says to quit Proxor and replace Proxor.app. There is no in-app download on macOS.
+- **Scan QR code from screen.** Needs the Screen Recording permission. The first scan makes macOS
+  ask for it; if it is not granted Proxor says so and offers a button that opens System Settings >
+  Privacy & Security > Screen & System Audio Recording (plus the image file and clipboard
+  alternatives). After allowing Proxor, quit and reopen it. macOS ties the permission to the app
+  signature (ad-hoc), so after each update turn Proxor off and on again in that list (or remove it
+  with "-" and add it back). The screen is captured through Qt (`QScreen::grabWindow`).
+- **Dock icon.** When the window is hidden (closed to the menu bar, or started with `-tray`),
+  clicking the Dock icon brings the main window back and raises it. Launching never opens it.
+- **Theme.** See Notes: Fusion follows the macOS light/dark appearance; the System theme is hidden.
+
+Does NOT work yet on macOS:
+
+- macOS in-app self-update does NOT work yet: Proxor is ad-hoc signed and not notarized, and a
+  running app cannot replace its own signed bundle; the dialog gives the
+  `brew upgrade --cask proxor` or zip instructions instead.
+- The System (native macOS) theme is not available yet; it is hidden and Fusion is used.
+- A DMG installer does not exist yet.
+
 ## Prerequisites
 
 - Xcode Command Line Tools (`xcode-select --install`)
@@ -149,7 +184,8 @@ open deployment/macos-arm64/Proxor.app
 ```
 
 Config lives at `~/Library/Preferences/proxor` by default (macOS `QStandardPaths::AppConfigLocation`,
-confirmed at runtime as `Install channel: portable` in the app log). The default mixed
+confirmed at runtime in the app log as `Install channel: homebrew` for the Homebrew cask and
+`Install channel: macos-app` for any other copy). The default mixed
 (SOCKS5 + HTTP) inbound listens on `127.0.0.1:2080`.
 
 ## Notes
@@ -157,9 +193,10 @@ confirmed at runtime as `Install channel: portable` in the app log). The default
 - The bundle is ad-hoc signed (`codesign --sign -`) and not notarized.
 - If the bundle is ever copied through a download, AirDrop, or a zip, clear the quarantine
   attribute first: `xattr -dr com.apple.quarantine Proxor.app`, or right-click and choose Open.
-- Not supported on macOS yet: autorun, in-app self-update (update with
-  `brew upgrade --cask proxor`), a DMG installer, and an app icon (`.icns`). Tun Mode and System
-  Proxy are supported; see [Tun and System Proxy](#tun-and-system-proxy).
+- Not supported on macOS yet: a DMG installer and in-app self-update (updates go through
+  Homebrew, see [Updates](#desktop-integration)). The app icon exists (`proxor.icns`). Start with
+  system, Tun Mode and System Proxy are supported; see [Desktop integration](#desktop-integration)
+  and [Tun and System Proxy](#tun-and-system-proxy).
 - The menu-bar icon is an app-owned `NSStatusItem`, not `QSystemTrayIcon`: Qt 6.11's tray icon
   crashes on macOS 27 when its menu opens (it reads `-[NSEvent clickCount]` on a system-defined
   event). Settings > Appearance > Tray Icon has a "Colored menu bar icon" checkbox; unchecked, the
@@ -168,10 +205,10 @@ confirmed at runtime as `Install channel: portable` in the app log). The default
 - Cmd+Q and Dock > Quit run Proxor's normal exit (they stop `proxor_core` too). Exit, Settings and
   About stay in Proxor's own menus; the macOS application menu carries its own Settings... (Cmd+,)
   and About Proxor entries.
-- "Windows Classic" is not offered on macOS, and the System theme is the native macOS look,
-  following the OS light/dark appearance live: a toolbar with native push buttons, flat tabs and
-  headers, rounded fields, and native `NSMenu` popups. The runtime look lives in `src/ui/mac/`
-  (`MacPlatform.mm`, `MacLook.cpp`, `MacDialogs.cpp`); the shared `.ui` files are not edited for it.
+- "Windows Classic" is not offered on macOS. The System (native macOS) theme is not available yet
+  and is hidden on macOS; Fusion is the default and follows the macOS light/dark appearance live
+  when the theme Mode is System. Light and Dark force one appearance. Settings > Appearance says
+  so. (The native-look code in `src/ui/mac/` is kept for a future System theme.)
 - Subscription requests send `User-Agent: Proxor/macOS/<version>`, `X-Device-OS: macOS` and
   `X-Device-Model: <hw.model>` (for example `Mac15,6`). The "include computer/user name" options
   do not apply on macOS and are hidden.
