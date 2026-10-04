@@ -29,6 +29,8 @@ private slots:
     void copyingGuidanceDoesNotCloseTheDialog();
     void sentenceGuidanceHasNoLineEdit();
     void guidanceRowSitsAboveButtonBox();
+    void homebrewGuidanceShowsBrewCommandWithCopyButton();
+    void macAppGuidanceShowsSentenceOnly();
 };
 
 void DialogUpdateAvailableTest::emptyGuidanceHasNoRowAndRespectsAllowUpdater() {
@@ -110,6 +112,32 @@ void DialogUpdateAvailableTest::guidanceRowSitsAboveButtonBox() {
     QVERIFY(guidanceIndex >= 0);
     QVERIFY(buttonBoxIndex >= 0);
     QVERIFY(guidanceIndex < buttonBoxIndex);
+}
+
+void DialogUpdateAvailableTest::homebrewGuidanceShowsBrewCommandWithCopyButton() {
+    const QString command = QStringLiteral("brew upgrade --cask proxor");
+    DialogUpdateAvailable dialog("1.6.11", "proxor-1.6.12-macos-arm64.zip", "Release", {},
+                                  /*allowUpdater=*/false, nullptr, command);
+
+    auto *lineEdit = dialog.findChild<QLineEdit *>("lineEditGuidance");
+    QVERIFY(lineEdit != nullptr);
+    QCOMPARE(lineEdit->text(), QStringLiteral("brew upgrade --cask proxor"));
+    QVERIFY(dialog.findChild<QPushButton *>("buttonCopyGuidance") != nullptr);
+    QVERIFY(findButtonByText(dialog, QObject::tr("Download and Restart")) == nullptr);
+}
+
+void DialogUpdateAvailableTest::macAppGuidanceShowsSentenceOnly() {
+    const QString sentence = QStringLiteral("Download proxor-1.6.12-macos-arm64.zip from the release page, quit Proxor, and replace Proxor.app in your Applications folder with the one inside the zip.");
+    DialogUpdateAvailable dialog("1.6.11", "proxor-1.6.12-macos-arm64.zip", "Release", {},
+                                  /*allowUpdater=*/false, nullptr, sentence);
+
+    auto *label = dialog.findChild<QLabel *>("labelGuidanceIntro");
+    QVERIFY(label != nullptr);
+    QCOMPARE(label->text(), sentence);
+    QVERIFY(label->text().contains(QStringLiteral("proxor-1.6.12-macos-arm64.zip")));
+    QVERIFY(dialog.findChild<QLineEdit *>("lineEditGuidance") == nullptr);
+    QVERIFY(dialog.findChild<QPushButton *>("buttonCopyGuidance") == nullptr);
+    QVERIFY(findButtonByText(dialog, QObject::tr("Download and Restart")) == nullptr);
 }
 
 QTEST_MAIN(DialogUpdateAvailableTest)

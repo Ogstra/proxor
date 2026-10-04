@@ -19,6 +19,10 @@ private slots:
     void updateGuidanceTextFallsBackToReleasePageWordingWithoutAssetName();
     void updateGuidanceTextIsEmptyForPortableAndAppImage();
     void appImageApplyIsRefusedForEveryUnmetConditionInOrder();
+    void homebrewGuidanceIsTheBrewCommand();
+    void macAppGuidanceIsASentenceNamingTheZip();
+    void macChannelsAlwaysIncludePrereleasesOthersFollowTheSetting();
+    void prereleaseSettingNoteOnlyForMacChannels();
 };
 
 void PackagePolicyTest::wingetAllowsCheckAndSuppressesEverySelfUpdateStep() {
@@ -168,6 +172,65 @@ void PackagePolicyTest::appImageApplyIsRefusedForEveryUnmetConditionInOrder() {
         const auto decision = DecideAppImageApply({true, true, true, true});
         QVERIFY(decision.replaceTarget);
         QVERIFY(decision.reason.isEmpty());
+    }
+}
+
+void PackagePolicyTest::homebrewGuidanceIsTheBrewCommand() {
+    const auto decision = DecidePackageUpdate(PackageMode::Homebrew);
+    QVERIFY(decision.allowCheck);
+    QVERIFY(!decision.allowDownload);
+    QVERIFY(!decision.allowApply);
+    QVERIFY(!decision.allowUpdaterLaunch);
+    QCOMPARE(decision.guidance, QStringLiteral("brew upgrade --cask proxor"));
+    // No trailing period: the dialog shows it as a command with a Copy button.
+    QCOMPARE(UpdateGuidanceText(PackageMode::Homebrew, QStringLiteral("anything.zip")),
+             QStringLiteral("brew upgrade --cask proxor"));
+    QCOMPARE(UpdateGuidanceText(PackageMode::Homebrew, {}), QStringLiteral("brew upgrade --cask proxor"));
+}
+
+void PackagePolicyTest::macAppGuidanceIsASentenceNamingTheZip() {
+    const auto decision = DecidePackageUpdate(PackageMode::MacApp);
+    QVERIFY(decision.allowCheck);
+    QVERIFY(!decision.allowDownload);
+    QVERIFY(!decision.allowApply);
+    QVERIFY(!decision.allowUpdaterLaunch);
+    QVERIFY(decision.guidance.endsWith(QLatin1Char('.')));
+    QVERIFY(decision.guidance.contains(QStringLiteral("%1")));
+    QVERIFY(decision.guidance.contains(QStringLiteral("Proxor.app")));
+
+    const auto text = UpdateGuidanceText(PackageMode::MacApp, QStringLiteral("proxor-1.6.12-macos-arm64.zip"));
+    QVERIFY(text.contains(QStringLiteral("proxor-1.6.12-macos-arm64.zip")));
+    QVERIFY(text.endsWith(QLatin1Char('.')));
+    const auto noAsset = UpdateGuidanceText(PackageMode::MacApp, {});
+    QVERIFY(!noAsset.contains(QStringLiteral("%1")));
+    QVERIFY(noAsset.contains(QStringLiteral("Proxor.app")));
+}
+
+void PackagePolicyTest::macChannelsAlwaysIncludePrereleasesOthersFollowTheSetting() {
+    QVERIFY(UpdateIncludesPrereleases(PackageMode::Homebrew, false));
+    QVERIFY(UpdateIncludesPrereleases(PackageMode::MacApp, false));
+    QVERIFY(UpdateIncludesPrereleases(PackageMode::Homebrew, true));
+    const PackageMode modes[] = {
+        PackageMode::NativeOrPortable, PackageMode::Winget, PackageMode::Flatpak,
+        PackageMode::AppImage,         PackageMode::Deb,    PackageMode::Rpm,
+        PackageMode::Arch,             PackageMode::NativeUnknownManager,
+    };
+    for (const auto mode : modes) {
+        QCOMPARE(UpdateIncludesPrereleases(mode, true), true);
+        QCOMPARE(UpdateIncludesPrereleases(mode, false), false);
+    }
+}
+
+void PackagePolicyTest::prereleaseSettingNoteOnlyForMacChannels() {
+    QVERIFY(!PrereleaseSettingNote(PackageMode::Homebrew).isEmpty());
+    QVERIFY(!PrereleaseSettingNote(PackageMode::MacApp).isEmpty());
+    const PackageMode modes[] = {
+        PackageMode::NativeOrPortable, PackageMode::Winget, PackageMode::Flatpak,
+        PackageMode::AppImage,         PackageMode::Deb,    PackageMode::Rpm,
+        PackageMode::Arch,             PackageMode::NativeUnknownManager,
+    };
+    for (const auto mode : modes) {
+        QVERIFY(PrereleaseSettingNote(mode).isEmpty());
     }
 }
 
