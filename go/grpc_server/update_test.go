@@ -29,6 +29,7 @@ func TestUpdateArchiveSuffixes(t *testing.T) {
 		{goos: "linux", goarch: "amd64", expected: []string{"linux64.AppImage"}},
 		{goos: "linux", goarch: "arm64", wantErr: true},
 		{goos: "darwin", goarch: "amd64", wantErr: true},
+		{goos: "darwin", goarch: "arm64", expected: []string{"-macos-arm64.zip"}},
 	}
 
 	for _, tt := range tests {
@@ -479,5 +480,63 @@ func TestUpdateUserAgent(t *testing.T) {
 	const want = "Proxor-Updater/"
 	if updateUserAgentPrefix != want {
 		t.Fatalf("updateUserAgentPrefix = %q, want %q", updateUserAgentPrefix, want)
+	}
+}
+
+func TestDarwinChannelsResolveMacZip(t *testing.T) {
+	for _, channel := range []string{"homebrew", "macos-app", "", "portable"} {
+		got, err := suffixesForChannel(channel, "darwin", "arm64")
+		if err != nil {
+			t.Fatalf("channel %q: unexpected error: %v", channel, err)
+		}
+		if len(got) != 1 || got[0] != "-macos-arm64.zip" {
+			t.Fatalf("channel %q: expected [-macos-arm64.zip], got %v", channel, got)
+		}
+	}
+	_, err := updateArchiveSuffixes("darwin", "amd64")
+	if err == nil || !strings.Contains(err.Error(), "Apple silicon") {
+		t.Fatalf("darwin/amd64: expected an Apple silicon only error, got %v", err)
+	}
+}
+
+// Every Proxor release is a prerelease, so the macOS check only finds anything when
+// prereleases are included (the GUI forces that on macOS).
+func TestMacReleasesNeedPrereleases(t *testing.T) {
+	mk := func(v string) githubRelease {
+		return githubRelease{
+			TagName:    "proxor-" + v,
+			Prerelease: true,
+			Assets: []githubReleaseAsset{
+				{Name: "proxor-" + v + "-macos-arm64.zip", BrowserDownloadURL: "https://example.com/" + v + "-mac.zip"},
+				{Name: "proxor-" + v + "-windows64.zip"},
+				{Name: "SHA256SUMS"},
+			},
+		}
+	}
+	releases := []githubRelease{mk("1.6.11"), mk("1.6.12"), mk("1.6.10")}
+	suffixes := []string{"-macos-arm64.zip"}
+
+	release, asset, selection := matchingReleaseAsset(releases, "1.6.10", suffixes, true)
+	if release == nil || asset == nil || selection != updateSelectionAvailable {
+		t.Fatalf("expected an update with prereleases, got release=%v asset=%v selection=%v", release, asset, selection)
+	}
+	if asset.Name != "proxor-1.6.12-macos-arm64.zip" {
+		t.Fatalf("expected the newest macOS zip, got %s", asset.Name)
+	}
+
+	_, _, selection = matchingReleaseAsset(releases, "1.6.10", suffixes, false)
+	if selection != updateSelectionNoCompatible {
+		t.Fatalf("expected no compatible package without prereleases, got %v", selection)
+	}
+}
+
+func TestSelfUpdateRefusal(t *testing.T) {
+	if msg := selfUpdateRefusal("darwin"); !strings.Contains(msg, "brew upgrade --cask proxor") {
+		t.Fatalf("darwin refusal must name the brew command, got %q", msg)
+	}
+	for _, goos := range []string{"windows", "linux"} {
+		if msg := selfUpdateRefusal(goos); msg != "" {
+			t.Fatalf("%s must not refuse, got %q", goos, msg)
+		}
 	}
 }
