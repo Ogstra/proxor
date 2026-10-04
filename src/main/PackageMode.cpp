@@ -56,6 +56,29 @@ PackageMode DetectPackageMode(const QString &packageRoot,
     return PackageMode::NativeOrPortable;
 }
 
+PackageMode DetectMacPackageMode(const QString &appBundlePath,
+                                 const QString &homeDir,
+                                 const QStringList &caskroomDirs) {
+    const QFileInfo bundle(appBundlePath);
+    if (bundle.fileName() != QStringLiteral("Proxor.app")) {
+        return PackageMode::MacApp;
+    }
+    const QString parent = QDir::cleanPath(bundle.absolutePath());
+    const bool inApplications =
+        parent == QStringLiteral("/Applications") ||
+        (!homeDir.isEmpty() && parent == QDir::cleanPath(QDir(homeDir).filePath(QStringLiteral("Applications"))));
+    if (!inApplications) {
+        return PackageMode::MacApp;
+    }
+    for (const auto &dir : caskroomDirs) {
+        // QDir::Dirs | NoDotAndDotDot skips hidden entries unless QDir::Hidden is given.
+        if (!QDir(dir).entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty()) {
+            return PackageMode::Homebrew;
+        }
+    }
+    return PackageMode::MacApp;
+}
+
 bool IsPackageManagerManaged(PackageMode mode) {
     switch (mode) {
         case PackageMode::Winget:
@@ -64,9 +87,11 @@ bool IsPackageManagerManaged(PackageMode mode) {
         case PackageMode::Rpm:
         case PackageMode::Arch:
         case PackageMode::NativeUnknownManager:
+        case PackageMode::Homebrew:
             return true;
         case PackageMode::AppImage:
         case PackageMode::NativeOrPortable:
+        case PackageMode::MacApp:
             return false;
     }
     return false;
@@ -106,6 +131,8 @@ QString PackageModeName(PackageMode mode) {
         case PackageMode::Rpm: return QStringLiteral("rpm");
         case PackageMode::Arch: return QStringLiteral("arch");
         case PackageMode::NativeUnknownManager: return QStringLiteral("unknown-package-manager");
+        case PackageMode::Homebrew: return QStringLiteral("homebrew");
+        case PackageMode::MacApp: return QStringLiteral("macos-app");
     }
     return QStringLiteral("portable");
 }
