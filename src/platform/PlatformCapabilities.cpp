@@ -105,8 +105,7 @@ CapabilityStatus QueryIcmp(const PlatformEnvironment &env) {
 }
 
 CapabilityStatus QueryAutoStart(const PlatformEnvironment &env) {
-    if (env.os == HostOs::MacOS)
-        return Unsupported(T("Start with system is not available on macOS yet. Add Proxor in System Settings > General > Login Items instead."));
+    if (env.os == HostOs::MacOS) return {}; // phase 53: user LaunchAgent / SMAppService; runtime state is shown by Settings
     if (IsLinuxFlatpak(env)) {
         if (env.backgroundPortal >= 1) return {};
         return Unsupported(T("Start with system in the Flatpak needs the desktop's Background portal, which this desktop does not offer. Add Proxor to your desktop's autostart settings instead."));
