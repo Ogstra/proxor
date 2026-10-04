@@ -8,8 +8,10 @@
 
 // macOS headers (possibly OBJ-c)
 #if defined(Q_OS_MACOS)
-#include <CoreFoundation/CoreFoundation.h>
-#include <CoreServices/CoreServices.h>
+#include <QFile>
+#include <QFileInfo>
+
+#include "sys/macos/MacLoginItem.h"
 #endif
 
 #ifdef Q_OS_WIN
@@ -56,92 +58,85 @@ QString AutoRun_RefreshStaleEntry() { return {}; }
 
 #ifdef Q_OS_MACOS
 
+// "Start with system" is a user LaunchAgent that runs `open -a <this app> --args -tray` at login; the old
+// shared-file-list login item API is unsupported since macOS 10.11 and does nothing on current macOS.
+namespace {
+
+QString agentFile() {
+    return ProxorPlatform::MacLaunchAgentFile(ProxorMac::LaunchAgentsDir(), ProxorPlatform::MacAutostartLabel());
+}
+
+// A custom -appdata directory is carried into the agent; the default location needs no argument.
+ProxorPlatform::MacLaunchAgentSpec expectedSpec() {
+    return ProxorPlatform::DefaultMacLaunchAgentSpec(ProxorMac::CurrentAppBundlePath(),
+                                                     ProxorGui::dataStore->appdataDir);
+}
+
+QStringList readExisting() {
+    QFile f(agentFile());
+    if (!f.open(QIODevice::ReadOnly)) return {};
+    return ProxorPlatform::ParseMacLaunchAgentArguments(f.readAll());
+}
+
+void reportAgentFailure(const QString &what) {
+    const QString text = QObject::tr("Start with system: %1").arg(what);
+    if (MW_show_log) MW_show_log(text);
+    MessageBoxWarning(software_name, text);
+}
+
+} // namespace
+
 void AutoRun_SetEnabled(bool enable) {
-    // From
-    // https://github.com/nextcloud/desktop/blob/master/src/common/utility_mac.cpp
-    QString filePath = QDir(QCoreApplication::applicationDirPath() + QLatin1String("/../..")).absolutePath();
-    CFStringRef folderCFStr = CFStringCreateWithCString(0, filePath.toUtf8().data(), kCFStringEncodingUTF8);
-    CFURLRef urlRef = CFURLCreateWithFileSystemPath(0, folderCFStr, kCFURLPOSIXPathStyle, true);
-    LSSharedFileListRef loginItems = LSSharedFileListCreate(0, kLSSharedFileListSessionLoginItems, 0);
-
-    if (loginItems && enable) {
-        // Insert an item to the list.
-        LSSharedFileListItemRef item =
-            LSSharedFileListInsertItemURL(loginItems, kLSSharedFileListItemLast, 0, 0, urlRef, 0, 0);
-
-        if (item) CFRelease(item);
-
-        CFRelease(loginItems);
-    } else if (loginItems && !enable) {
-        // We need to iterate over the items and check which one is "ours".
-        UInt32 seedValue;
-        CFArrayRef itemsArray = LSSharedFileListCopySnapshot(loginItems, &seedValue);
-        CFStringRef appUrlRefString = CFURLGetString(urlRef);
-
-        for (int i = 0; i < CFArrayGetCount(itemsArray); i++) {
-            LSSharedFileListItemRef item = (LSSharedFileListItemRef) CFArrayGetValueAtIndex(itemsArray, i);
-            CFURLRef itemUrlRef = NULL;
-
-            if (LSSharedFileListItemResolve(item, 0, &itemUrlRef, NULL) == noErr && itemUrlRef) {
-                CFStringRef itemUrlString = CFURLGetString(itemUrlRef);
-
-                if (CFStringCompare(itemUrlString, appUrlRefString, 0) == kCFCompareEqualTo) {
-                    LSSharedFileListItemRemove(loginItems, item); // remove it!
-                }
-
-                CFRelease(itemUrlRef);
-            }
+    const QString file = agentFile();
+    QString error;
+    if (enable) {
+        if (!ProxorMac::WriteLaunchAgent(file, ProxorPlatform::MacLaunchAgentPlist(expectedSpec()), &error)) {
+            reportAgentFailure(QObject::tr("cannot write %1: %2").arg(file, error));
+            return;
         }
-
-        CFRelease(itemsArray);
-        CFRelease(loginItems);
+        if (MW_show_log)
+            MW_show_log(QObject::tr("Start with system: Proxor will start in the menu bar when you log in (%1).").arg(file));
+        if (ProxorMac::LegacyAgentStatus(file) == ProxorPlatform::MacLoginItemStatus::RequiresApproval) {
+            const auto view = ProxorPlatform::DecideMacAutostartView(
+                true, ProxorPlatform::MacLaunchAgentTarget(readExisting()), ProxorMac::CurrentAppBundlePath(),
+                ProxorPlatform::MacLoginItemStatus::RequiresApproval);
+            if (MW_show_log) MW_show_log(view.note);
+            ProxorMac::OpenLoginItemsSettings();
+        }
+    } else {
+        if (!ProxorMac::RemoveLaunchAgent(file, ProxorPlatform::MacAutostartLabel(), &error)) {
+            reportAgentFailure(QObject::tr("cannot turn off: %1").arg(error));
+            return;
+        }
+        if (MW_show_log) MW_show_log(QObject::tr("Start with system: turned off."));
     }
-
-    CFRelease(folderCFStr);
-    CFRelease(urlRef);
 }
 
 bool AutoRun_IsEnabled() {
-    // From
-    // https://github.com/nextcloud/desktop/blob/master/src/common/utility_mac.cpp
-    // this is quite some duplicate code with setLaunchOnStartup, at some
-    // point we should fix this FIXME.
-    bool returnValue = false;
-    QString filePath = QDir(QCoreApplication::applicationDirPath() + QLatin1String("/../..")).absolutePath();
-    CFStringRef folderCFStr = CFStringCreateWithCString(0, filePath.toUtf8().data(), kCFStringEncodingUTF8);
-    CFURLRef urlRef = CFURLCreateWithFileSystemPath(0, folderCFStr, kCFURLPOSIXPathStyle, true);
-    LSSharedFileListRef loginItems = LSSharedFileListCreate(0, kLSSharedFileListSessionLoginItems, 0);
-
-    if (loginItems) {
-        // We need to iterate over the items and check which one is "ours".
-        UInt32 seedValue;
-        CFArrayRef itemsArray = LSSharedFileListCopySnapshot(loginItems, &seedValue);
-        CFStringRef appUrlRefString = CFURLGetString(urlRef); // no need for release
-
-        for (int i = 0; i < CFArrayGetCount(itemsArray); i++) {
-            LSSharedFileListItemRef item = (LSSharedFileListItemRef) CFArrayGetValueAtIndex(itemsArray, i);
-            CFURLRef itemUrlRef = NULL;
-
-            if (LSSharedFileListItemResolve(item, 0, &itemUrlRef, NULL) == noErr && itemUrlRef) {
-                CFStringRef itemUrlString = CFURLGetString(itemUrlRef);
-
-                if (CFStringCompare(itemUrlString, appUrlRefString, 0) == kCFCompareEqualTo) {
-                    returnValue = true;
-                }
-
-                CFRelease(itemUrlRef);
-            }
-        }
-
-        CFRelease(itemsArray);
-    }
-
-    CFRelease(loginItems);
-    CFRelease(folderCFStr);
-    CFRelease(urlRef);
-    return returnValue;
+    const QString file = agentFile();
+    return ProxorPlatform::DecideMacAutostartView(QFile::exists(file),
+                                                  ProxorPlatform::MacLaunchAgentTarget(readExisting()),
+                                                  ProxorMac::CurrentAppBundlePath(),
+                                                  ProxorMac::LegacyAgentStatus(file))
+        .checked;
 }
-QString AutoRun_RefreshStaleEntry() { return {}; }
+
+QString AutoRun_RefreshStaleEntry() {
+    const QString file = agentFile();
+    if (!QFile::exists(file)) return {};
+    const QStringList existing = readExisting();
+    const QStringList expected = ProxorPlatform::MacLaunchAgentArguments(expectedSpec());
+    if (!ProxorPlatform::ShouldRefreshMacLaunchAgent(
+            existing, expected, QFileInfo::exists(ProxorPlatform::MacLaunchAgentTarget(existing))))
+        return {};
+    QString error;
+    if (!ProxorMac::WriteLaunchAgent(file, ProxorPlatform::MacLaunchAgentPlist(expectedSpec()), &error)) {
+        if (MW_show_log) MW_show_log(QObject::tr("Start with system: cannot write %1: %2").arg(file, error));
+        return {};
+    }
+    return "Start with system: updated the login agent to start " + ProxorMac::CurrentAppBundlePath() +
+           " (the old one pointed at a Proxor that no longer exists).";
+}
 
 #endif
 
