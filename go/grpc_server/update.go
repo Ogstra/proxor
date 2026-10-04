@@ -105,9 +105,22 @@ func updateArchiveSuffixes(goos, goarch string) ([]string, error) {
 		return []string{"linux64.AppImage"}, nil
 	case goos == "linux" && goarch == "arm64":
 		return nil, fmt.Errorf("self-update is not available for Linux/%s", goarch)
+	case goos == "darwin" && goarch == "arm64":
+		return []string{"-macos-arm64.zip"}, nil
+	case goos == "darwin":
+		return nil, fmt.Errorf("Proxor for macOS is published for Apple silicon (arm64) only; no update package exists for %s/%s", goos, goarch)
 	default:
 		return nil, fmt.Errorf("self-update is not available on %s/%s", goos, goarch)
 	}
+}
+
+// selfUpdateRefusal returns a non-empty message when the core must not download or apply
+// an update itself on goos. macOS is updated by Homebrew or by replacing the app by hand.
+func selfUpdateRefusal(goos string) string {
+	if goos == "darwin" {
+		return "Proxor on macOS is updated by Homebrew: run brew upgrade --cask proxor (or download the macOS zip from the release page)."
+	}
+	return ""
 }
 
 // suffixesForChannel resolves the asset name suffix published for the channel the GUI
@@ -507,6 +520,10 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 		return ret, nil
 
 	case gen.UpdateAction_Download:
+		if msg := selfUpdateRefusal(runtime.GOOS); msg != "" {
+			ret.Error = msg
+			return ret, nil
+		}
 		if updateDownloadURL == "" || updateAssetName == "" {
 			ret.Error = "No update package is queued for download."
 			return ret, nil
