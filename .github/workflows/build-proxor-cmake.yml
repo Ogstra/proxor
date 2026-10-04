@@ -859,6 +859,43 @@ jobs:
           fi
           kill "$pid" || true
           pkill -f 'Proxor.app/Contents/MacOS/proxor_core' || true
+      # Informational: package-macos gates publish-release, and a hosted runner without a usable GUI
+      # session must not block a tagged build. Every failure path is a warning followed by exit 0.
+      - name: Dock reopen check (informational, never blocks a release)
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          app="$PWD/deployment/macos-arm64/Proxor.app"
+          smoke="$RUNNER_TEMP/proxor-reopen"
+          mkdir -p "$smoke"
+          # App log path: ProxorGui_log (src/sys/LogFile.cpp) writes logs/proxor-YYYY-MM-DD.log under
+          # QDir::current(), i.e. the process working directory. Start in $smoke and also search fallbacks.
+          cd "$smoke"
+          "$app/Contents/MacOS/Proxor" -many -appdata "$smoke" -tray >"$RUNNER_TEMP/reopen.log" 2>&1 &
+          pid=$!
+          sleep 10
+          dirs=("$smoke" "$PWD" "$app/Contents/MacOS")
+          logfile() { find "${dirs[@]}" -name 'proxor-*.log' -type f 2>/dev/null | head -n1; }
+          warn() {
+            echo "::warning title=Dock reopen::$1"
+            echo "searched for proxor-*.log under: ${dirs[*]}"; echo "log file found: $(logfile)"
+            tail -n 40 "$(logfile)" 2>/dev/null || true; tail -n 20 "$RUNNER_TEMP/reopen.log" 2>/dev/null || true
+            pkill -f "$app/Contents/MacOS/Proxor" || true; pkill -f 'Proxor.app/Contents/MacOS/proxor_core' || true
+            exit 0
+          }
+          kill -0 "$pid" 2>/dev/null || warn "Proxor exited before the reopen check"
+          if grep -q "Dock: reopen" "$(logfile)" 2>/dev/null; then warn "reopen line logged before any reopen"; fi
+          open -a "$app" || warn "open -a failed (no usable GUI session on this runner?)"
+          sleep 5
+          if [ "$(pgrep -f "$app/Contents/MacOS/Proxor" | wc -l)" -gt 1 ]; then warn "open -a started a second instance"; fi
+          if grep -q "Dock: reopen, showing the main window" "$(logfile)" 2>/dev/null; then
+            echo "Dock reopen: OK"
+          else
+            warn "open -a did not log the reopen (hidden window not shown, or exec'd instance not reachable, see 53-RESEARCH Q3)"
+          fi
+          kill "$pid" 2>/dev/null || true
+          pkill -f 'Proxor.app/Contents/MacOS/proxor_core' || true
       - name: Upload immutable macOS release asset
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
