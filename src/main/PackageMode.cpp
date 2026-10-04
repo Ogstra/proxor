@@ -72,9 +72,12 @@ PackageMode DetectMacPackageMode(const QString &appBundlePath,
         return PackageMode::MacApp;
     }
     for (const auto &dir : caskroomDirs) {
-        // QDir::Dirs | NoDotAndDotDot skips hidden entries unless QDir::Hidden is given.
-        if (!QDir(dir).entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty()) {
-            return PackageMode::Homebrew;
+        // Hidden means a leading dot here; QDir::Hidden is a file attribute on Windows, not the name.
+        const QStringList entries = QDir(dir).entryList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden);
+        for (const QString &entry : entries) {
+            if (!entry.startsWith(QLatin1Char('.'))) {
+                return PackageMode::Homebrew;
+            }
         }
     }
     return PackageMode::MacApp;
