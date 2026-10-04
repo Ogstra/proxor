@@ -35,4 +35,20 @@ QString QrScanMessage(QrSource source, const QrScanResult &result, const Capabil
     return {};
 }
 
+MacScreenScanDecision DecideMacScreenScan(bool preflightGranted, bool requestedThisSession) {
+    MacScreenScanDecision d;
+    if (preflightGranted) d.capture = true;
+    else if (!requestedThisSession) d.requestAccess = true;
+    return d;
+}
+
+QString MacScreenRecordingMessage() {
+    return T("Proxor needs the Screen Recording permission to look for a QR code on the screen. "
+             "Allow Proxor in System Settings > Privacy & Security > Screen & System Audio Recording, "
+             "then quit and reopen Proxor (macOS applies the permission after a restart). "
+             "If Proxor is already listed and turned on, turn it off and on again: macOS ties the permission "
+             "to the app's signature, which changes with every Proxor update (brew upgrade). "
+             "Adding the QR code from an image file or the clipboard needs no permission.");
+}
+
 } // namespace ProxorPlatform

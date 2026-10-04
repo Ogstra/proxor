@@ -18,4 +18,14 @@ struct QrScanResult {
 // Empty when decoded; otherwise the user-facing message for this source/result/capability.
 QString QrScanMessage(QrSource source, const QrScanResult &result, const CapabilityStatus &screenCapture);
 
+// macOS Screen Recording gate (phase 53). granted -> capture; not granted and not yet requested this
+// session -> request access; otherwise only explain.
+struct MacScreenScanDecision {
+    bool capture = false;
+    bool requestAccess = false;
+};
+MacScreenScanDecision DecideMacScreenScan(bool preflightGranted, bool requestedThisSession);
+// Explicit permission text; never says "not found".
+QString MacScreenRecordingMessage();
+
 } // namespace ProxorPlatform
