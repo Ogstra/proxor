@@ -441,6 +441,8 @@ jobs:
       - name: Install Qt and zxing-cpp
         run: brew install qtbase zxing-cpp
       - name: Run package policy fixture natively on macOS
+        # A hung test must end this step with its log, not cancel the whole job at the job limit.
+        timeout-minutes: 20
         shell: bash
         run: CMAKE_PREFIX_PATH="$(brew --prefix)" bash test/package_mode/run-tests.sh
 
