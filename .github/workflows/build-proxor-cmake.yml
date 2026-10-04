@@ -896,6 +896,41 @@ jobs:
           fi
           kill "$pid" 2>/dev/null || true
           pkill -f 'Proxor.app/Contents/MacOS/proxor_core' || true
+      # Informational: same reason as the Dock reopen check. Failures are warnings followed by exit 0.
+      - name: Start with system through launchd (informational, never blocks a release)
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          label="io.github.Ogstra.Proxor.autostart-ci"
+          agent="$HOME/Library/LaunchAgents/$label.plist"
+          trap 'launchctl bootout "gui/$(id -u)/$label" 2>/dev/null; rm -f "$agent"' EXIT
+          app="$PWD/deployment/macos-arm64/Proxor.app"
+          mkdir -p "$HOME/Library/LaunchAgents"
+          # The committed fixture with only three CI changes: label, app path, and an isolated config (-many -appdata).
+          sed -e "s#<string>io.github.Ogstra.Proxor.autostart</string>#<string>$label</string>#" \
+              -e "s#<string>/Applications/Proxor.app</string>#<string>$app</string>#" \
+              test/package_mode/fixtures/macos-launch-agent.plist > "$agent"
+          n="$(/usr/libexec/PlistBuddy -c "Print :ProgramArguments" "$agent" | grep -c '^    ')"
+          /usr/libexec/PlistBuddy -c "Add :ProgramArguments:$n string -many" -c "Add :ProgramArguments:$((n+1)) string -appdata" -c "Add :ProgramArguments:$((n+2)) string $RUNNER_TEMP/proxor-launchd" "$agent"
+          plutil -lint "$agent"
+          if ! launchctl bootstrap "gui/$(id -u)" "$agent"; then
+            echo "::warning title=launchd autostart check skipped::gui/$(id -u) bootstrap was refused on this runner; the LaunchAgent text is covered by mac_login_item_policy_test"
+            exit 0
+          fi
+          ok=0
+          for i in $(seq 1 20); do
+            if pgrep -f "$app/Contents/MacOS/Proxor.*-tray" >/dev/null; then ok=1; break; fi
+            sleep 1
+          done
+          ps -axo pid,args | grep -F "$app/Contents/MacOS/Proxor" | grep -v grep || true
+          launchctl bootout "gui/$(id -u)/$label" || true
+          rm -f "$agent"
+          pkill -f "$app/Contents/MacOS/Proxor" || true
+          pkill -f 'Proxor.app/Contents/MacOS/proxor_core' || true
+          if [ "$ok" = 1 ]; then echo "launchd autostart: OK"
+          else echo "::warning title=launchd autostart::launchd ran the agent but Proxor did not start with -tray within 20 seconds"; fi
+          exit 0
       - name: Upload immutable macOS release asset
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
