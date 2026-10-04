@@ -32,6 +32,12 @@
 #include <QPalette>
 #include <QStandardItemModel>
 #include <QTimer>
+#ifdef Q_OS_MACOS
+#include <QFile>
+#include <QPushButton>
+#include "platform/MacLoginItemPolicy.hpp"
+#include "sys/macos/MacLoginItem.h"
+#endif
 
 namespace {
 // On Windows the native style resolves light and dark from the OS setting itself, so the
@@ -298,6 +304,29 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
         ui->verticalLayout_app_behavior->insertWidget(ui->verticalLayout_app_behavior->indexOf(ui->start_with_system) + 1, autoStartNote);
         ProxorPlatform::ApplyCapability(ui->start_with_system, autoStart, autoStartNote);
         if (autoStart.support == ProxorPlatform::Support::Unsupported) ui->start_with_system->setChecked(false);
+#ifdef Q_OS_MACOS
+        // macOS has its own say over login items: show what it will really do and let the user fix it.
+        mac_autostart_loaded = ui->start_with_system->isChecked();
+        {
+            const auto agent = ProxorPlatform::MacLaunchAgentFile(ProxorMac::LaunchAgentsDir(), ProxorPlatform::MacAutostartLabel());
+            QStringList args;
+            if (QFile f(agent); f.open(QIODevice::ReadOnly)) args = ProxorPlatform::ParseMacLaunchAgentArguments(f.readAll());
+            const auto view = ProxorPlatform::DecideMacAutostartView(QFile::exists(agent), ProxorPlatform::MacLaunchAgentTarget(args),
+                                                                     ProxorMac::CurrentAppBundlePath(), ProxorMac::LegacyAgentStatus(agent));
+            if (!view.note.isEmpty()) {
+                autoStartNote->setText(view.note);
+                autoStartNote->setVisible(true);
+            }
+            if (view.needsAttention || autoStart.support == ProxorPlatform::Support::Unsupported) {
+                auto *openLogin = new QPushButton(tr("Open Login Items Settings"), ui->start_with_system->parentWidget());
+                ui->verticalLayout_app_behavior->insertWidget(ui->verticalLayout_app_behavior->indexOf(autoStartNote) + 1, openLogin);
+                connect(openLogin, &QPushButton::clicked, this, [this] {
+                    if (!ProxorMac::OpenLoginItemsSettings())
+                        MessageBoxWarning(tr("Login Items"), tr("Could not open System Settings. Open %1 yourself.").arg(ProxorPlatform::MacLoginItemsLocation()));
+                });
+            }
+        }
+#endif
 
         const auto icmp = ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::IcmpPing);
         if (icmp.support != ProxorPlatform::Support::Supported) {
@@ -532,8 +561,15 @@ void DialogBasicSettings::accept() {
     D_SAVE_STRING(test_download_url)
     ProxorGui::dataStore->ping_type = ui->ping_type->currentIndex();
     D_SAVE_BOOL(old_share_link_format)
+#ifdef Q_OS_MACOS
+    // Only a real change touches the login agent: saving other settings must not rewrite or delete it.
+    if (ProxorPlatform::IsUsable(ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::AutoStart)) &&
+        ui->start_with_system->isChecked() != mac_autostart_loaded)
+        AutoRun_SetEnabled(ui->start_with_system->isChecked());
+#else
     if (ProxorPlatform::IsUsable(ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::AutoStart)))
         AutoRun_SetEnabled(ui->start_with_system->isChecked());
+#endif
     ProxorGui::dataStore->remember_enable = ui->remember_enable->isChecked();
     ProxorGui::dataStore->inbound_address = ui->allow_lan->isChecked() ? "::" : "127.0.0.1";
 
