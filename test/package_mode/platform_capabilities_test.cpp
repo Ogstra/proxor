@@ -75,10 +75,10 @@ private slots:
         QCOMPARE(s.support, Support::NeedsPermission);
         QVERIFY(s.reason.contains("Screen Recording"));
     }
-    void macosAutostartUnsupported() {
+    void macosAutostartAnswer() {
         auto s = Q(Capability::AutoStart, Env(HostOs::MacOS, PackageMode::NativeOrPortable, DisplaySession::NotApplicable));
-        QCOMPARE(s.support, Support::Unsupported);
-        QVERIFY(s.reason.contains("Login Items"));
+        QCOMPARE(s.support, Support::Supported);
+        QVERIFY(s.reason.isEmpty());
     }
     void macosStrictRouteUnsupported() {
         auto env = Env(HostOs::MacOS, PackageMode::NativeOrPortable, DisplaySession::NotApplicable);
@@ -251,7 +251,7 @@ private slots:
         auto mac = Env(HostOs::MacOS, PackageMode::NativeOrPortable, DisplaySession::NotApplicable);
         QCOMPARE(Q(Capability::GlobalHotkeys, mac).support, Support::Supported);
         QCOMPARE(Q(Capability::ScreenQrCapture, mac).support, Support::NeedsPermission);
-        QCOMPARE(Q(Capability::AutoStart, mac).support, Support::Unsupported);
+        QCOMPARE(Q(Capability::AutoStart, mac).support, Support::Supported); // phase 53: Start with system works on macOS through a user LaunchAgent
     }
 
     void sessionFromEnvironmentTable() {
