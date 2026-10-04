@@ -27,6 +27,7 @@ cask "proxor" do
               "/Library/LaunchDaemons/io.github.Ogstra.Proxor.helper.plist",
               "/Library/PrivilegedHelperTools/io.github.Ogstra.Proxor.helper",
   zap delete: "/var/log/proxor-helper.log",
+        "~/Library/LaunchAgents/io.github.Ogstra.Proxor.autostart.plist",
         "~/Library/Preferences/io.github.Ogstra.Proxor.plist",
         "~/Library/Preferences/proxor",
 LINES
@@ -56,6 +57,10 @@ for path in \
   "/Library/PrivilegedHelperTools/io.github.Ogstra.Proxor.helper"; do
   grep -qF -- "\"$path\"" <<<"$uninstall_block" || { echo "FAIL: uninstall block lacks delete path: $path" >&2; exit 1; }
 done
+# The Start-with-system agent must survive `brew upgrade` (the uninstall block runs on upgrade): zap only.
+if grep -q 'io.github.Ogstra.Proxor.autostart' <<<"$uninstall_block"; then
+  echo 'FAIL: the uninstall block must not touch the autostart agent' >&2; exit 1
+fi
 if ! grep -q 'delete:' <<<"$uninstall_block"; then
   echo 'FAIL: delete: missing from the uninstall block' >&2; exit 1
 fi

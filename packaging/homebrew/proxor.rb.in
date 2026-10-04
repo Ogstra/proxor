@@ -44,8 +44,10 @@ cask "proxor" do
               "/Library/PrivilegedHelperTools/io.github.Ogstra.Proxor.helper",
             ]
 
+  # The Start-with-system agent stays across brew upgrade (uninstall runs on upgrade); only --zap removes it.
   zap delete: "/var/log/proxor-helper.log",
       trash:  [
+        "~/Library/LaunchAgents/io.github.Ogstra.Proxor.autostart.plist",
         "~/Library/Preferences/io.github.Ogstra.Proxor.plist",
         "~/Library/Preferences/proxor",
       ]
