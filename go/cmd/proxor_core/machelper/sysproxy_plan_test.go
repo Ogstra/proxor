@@ -253,10 +253,13 @@ var testAppliedBypass = []string{"127.0.0.1", "localhost", "*.local"}
 func TestRestorePlan(t *testing.T) {
 	got := RestorePlan(testSnapshot(), testAppliedBypass)
 	want := [][]string{
-		// Wi-Fi: web had no server recorded -> only the state; secure had one -> server+port then state
+		// Wi-Fi: web had no server recorded -> clear the server fields, then the state;
+		// secure had one -> server+port then state
+		{"-setwebproxy", "Wi-Fi", "", "0"},
 		{"-setwebproxystate", "Wi-Fi", "off"},
 		{"-setsecurewebproxy", "Wi-Fi", "10.0.0.1", "3128"},
 		{"-setsecurewebproxystate", "Wi-Fi", "on"},
+		{"-setsocksfirewallproxy", "Wi-Fi", "", "0"},
 		{"-setsocksfirewallproxystate", "Wi-Fi", "off"},
 		{"-setproxybypassdomains", "Wi-Fi", "*.local", "169.254/16"},
 		{"-setautoproxyurl", "Wi-Fi", "http://wpad.example/proxy.pac"},
@@ -264,13 +267,38 @@ func TestRestorePlan(t *testing.T) {
 		{"-setproxyautodiscovery", "Wi-Fi", "on"},
 		// USB: everything off, PAC/WPAD were off so Apply never touched them,
 		// bypass list recorded empty -> Empty keyword
+		{"-setwebproxy", "USB 10/100/1000 LAN", "", "0"},
 		{"-setwebproxystate", "USB 10/100/1000 LAN", "off"},
+		{"-setsecurewebproxy", "USB 10/100/1000 LAN", "", "0"},
 		{"-setsecurewebproxystate", "USB 10/100/1000 LAN", "off"},
+		{"-setsocksfirewallproxy", "USB 10/100/1000 LAN", "", "0"},
 		{"-setsocksfirewallproxystate", "USB 10/100/1000 LAN", "off"},
 		{"-setproxybypassdomains", "USB 10/100/1000 LAN", "Empty"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("RestorePlan mismatch\n got: %q\nwant: %q", got, want)
+	}
+}
+
+func TestParseHasIPv4(t *testing.T) {
+	cases := []struct {
+		name, out string
+		want      bool
+		wantErr   bool
+	}{
+		{"dhcp", "DHCP Configuration\nIP address: 192.168.1.20\nSubnet mask: 255.255.255.0\nRouter: 192.168.1.1\n", true, false},
+		{"none", "Manual Configuration\nIP address: none\nIPv6: Automatic\n", false, false},
+		{"empty value", "IP address:\nRouter: \n", false, false},
+		{"missing", "Ethernet Address: aa:bb:cc:dd:ee:ff\n", false, false},
+		{"ipv6 only", "IPv6 IP address: fe80::1\nIP address: none\n", false, false},
+		{"none caps", "IP address: None\n", false, false},
+		{"error", "** Error: Unable to find item in network database.\n", false, true},
+	}
+	for _, c := range cases {
+		got, err := ParseHasIPv4(c.out)
+		if (err != nil) != c.wantErr || got != c.want {
+			t.Errorf("%s: got (%v, %v), want (%v, err=%v)", c.name, got, err, c.want, c.wantErr)
+		}
 	}
 }
 
@@ -321,8 +349,8 @@ func TestRestorePlanSkipsUntouched(t *testing.T) {
 			t.Fatalf("%s must be skipped for an untouched service: %q", c, off)
 		}
 	}
-	if len(off) != 3 {
-		t.Fatalf("all-off service = %d writes, want 3 (the state triple): %q", len(off), off)
+	if len(off) != 6 {
+		t.Fatalf("all-off service = %d writes, want 6 (clear + state per proxy): %q", len(off), off)
 	}
 
 	// recorded servers add up to 3 set writes on top of the states

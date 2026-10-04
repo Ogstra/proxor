@@ -166,6 +166,25 @@ func EligibleServices(order, all []NetworkService) []NetworkService {
 	return out
 }
 
+// ParseHasIPv4 parses `networksetup -getinfo <service>` and reports whether
+// the service currently has an IPv4 address ("IP address: x.x.x.x"). A missing,
+// empty or "none" value means no address. Only the first "IP address:" line
+// counts; "IPv6 IP address:" and "Router:" lines are different keys.
+func ParseHasIPv4(out string) (bool, error) {
+	if err := checkNoError(out); err != nil {
+		return false, err
+	}
+	for _, line := range strings.Split(out, "\n") {
+		k, v, ok := strings.Cut(line, ":")
+		if !ok || strings.TrimSpace(k) != "IP address" {
+			continue
+		}
+		v = strings.TrimSpace(v)
+		return v != "" && !strings.EqualFold(v, "none"), nil
+	}
+	return false, nil
+}
+
 // keyValues splits "Key: value" lines (value may be empty).
 func keyValues(out string) map[string]string {
 	kv := map[string]string{}
@@ -344,6 +363,10 @@ func restoreProxy(service, setCmd, stateCmd string, st ProxyState) [][]string {
 	var plan [][]string
 	if st.Server != "" {
 		plan = append(plan, []string{setCmd, service, st.Server, strconv.Itoa(st.Port)})
+	} else {
+		// Nothing was recorded: clear the 127.0.0.1:<port> Apply left in the
+		// server fields instead of leaving a disabled entry behind.
+		plan = append(plan, []string{setCmd, service, "", "0"})
 	}
 	return append(plan, []string{stateCmd, service, onOff(st.Enabled)})
 }

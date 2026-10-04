@@ -270,6 +270,13 @@ func (m *ProxyManager) capture() (Snapshot, []string, error) {
 	if len(eligible) == 0 {
 		return Snapshot{}, nil, errors.New("no network service with a hardware device")
 	}
+	// Only ACTIVE services (eligible and with an IPv4 address) are snapshotted
+	// and written, which keeps Apply and Restore fast. Restore later restores
+	// exactly the services in the snapshot, even if one went inactive since.
+	eligible = m.activeServices(eligible)
+	if len(eligible) == 0 {
+		return Snapshot{}, nil, errors.New("no active network service")
+	}
 
 	type result struct {
 		ss  ServiceSnapshot
@@ -297,6 +304,33 @@ func (m *ProxyManager) capture() (Snapshot, []string, error) {
 		return Snapshot{}, failed, errors.New("no network service could be read")
 	}
 	return snap, failed, nil
+}
+
+// activeServices keeps the services that currently have an IPv4 address,
+// checked concurrently with the read-only `-getinfo`. Fail-safe: a service
+// whose check errors or cannot be parsed counts as active.
+func (m *ProxyManager) activeServices(in []NetworkService) []NetworkService {
+	active := make([]bool, len(in))
+	forEachService(len(in), maxParallelServices, func(i int) {
+		active[i] = true
+		if !safeServiceName(in[i].Name) {
+			return // reported by the snapshot step
+		}
+		out, err := m.run("-getinfo", in[i].Name)
+		if err != nil {
+			return
+		}
+		if has, perr := ParseHasIPv4(out); perr == nil {
+			active[i] = has
+		}
+	})
+	var out []NetworkService
+	for i, s := range in {
+		if active[i] {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // snapshotService reads the six getters of one service concurrently (they are

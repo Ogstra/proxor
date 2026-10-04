@@ -37,6 +37,7 @@ type simNet struct {
 	order    []string
 	svcs     map[string]*simSvc
 	disabled map[string]bool
+	noIP     map[string]bool // services whose -getinfo reports no IPv4 address
 	calls    [][]string
 	onSet    func(args []string) // runs before the first -set* call takes effect
 	setSeen  bool
@@ -238,6 +239,11 @@ func (n *simNet) exec(args []string) (string, error) {
 		}
 	}
 	switch args[0] {
+	case "-getinfo":
+		if n.noIP[args[1]] {
+			return "Manual Configuration\nIP address: none\nSubnet mask: none\nRouter: none\n", nil
+		}
+		return "DHCP Configuration\nIP address: 192.168.1.20\nSubnet mask: 255.255.255.0\nRouter: 192.168.1.1\n", nil
 	case "-getwebproxy", "-getsecurewebproxy", "-getsocksfirewallproxy":
 		return fmtProxy(*proxy(args[0])), nil
 	case "-getproxybypassdomains":
@@ -865,7 +871,8 @@ func TestRestoreSkipsNoopWrites(t *testing.T) {
 	if err := m.Restore(); err != nil {
 		t.Fatal(err)
 	}
-	if got := len(n.writes["USB 10/100/1000 LAN"]); got > 4 {
+	// 3 proxies x (clear server + state off) + the bypass write; no PAC/WPAD or repeated writes
+	if got := len(n.writes["USB 10/100/1000 LAN"]); got > 7 {
 		t.Fatalf("all-off service restored with %d writes: %q", got, n.writes["USB 10/100/1000 LAN"])
 	}
 	for _, w := range n.writes["USB 10/100/1000 LAN"] {
@@ -1061,4 +1068,88 @@ func TestPartialApplyForgetsAppliedBypass(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertRestored(t, orig, n.clone())
+}
+
+func TestApplySkipsInactiveServices(t *testing.T) {
+	cases := []struct {
+		name        string
+		noIP        []string
+		infoFails   string
+		wantApplied []string
+		wantTouched map[string]bool
+	}{
+		{"all active", nil, "", []string{"Wi-Fi", "USB 10/100/1000 LAN", "Thunderbolt Bridge", "iPhone USB"}, nil},
+		{"two inactive", []string{"Thunderbolt Bridge", "iPhone USB"}, "", []string{"Wi-Fi", "USB 10/100/1000 LAN"},
+			map[string]bool{"Thunderbolt Bridge": false, "iPhone USB": false}},
+		{"info error is fail-safe active", []string{"iPhone USB"}, "iPhone USB", []string{"Wi-Fi", "USB 10/100/1000 LAN", "Thunderbolt Bridge", "iPhone USB"}, nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			n := newSimNet4()
+			n.noIP = map[string]bool{}
+			for _, s := range c.noIP {
+				n.noIP[s] = true
+			}
+			if c.infoFails != "" {
+				n.fail = func(args []string) *simFailure {
+					if args[0] == "-getinfo" && args[1] == c.infoFails {
+						return &simFailure{err: errors.New("boom")}
+					}
+					return nil
+				}
+			}
+			m, store := newManager(t, n)
+			applied, failed, err := m.Apply(2080, nil)
+			if err != nil || len(failed) != 0 {
+				t.Fatalf("applied=%v failed=%v err=%v", applied, failed, err)
+			}
+			if !reflect.DeepEqual(applied, c.wantApplied) {
+				t.Fatalf("applied = %v, want %v", applied, c.wantApplied)
+			}
+			snap, _ := store.Load()
+			if snap == nil || len(snap.Services) != len(c.wantApplied) {
+				t.Fatalf("snapshot must hold only the applied services: %+v", snap)
+			}
+			for svc, want := range c.wantTouched {
+				if got := n.touched(svc) && len(n.writes[svc]) > 0; got != want {
+					t.Errorf("%s written = %v, want %v", svc, got, want)
+				}
+			}
+			n.resetLog()
+			if err := m.Restore(); err != nil {
+				t.Fatal(err)
+			}
+			for svc, want := range c.wantTouched {
+				if got := len(n.writes[svc]) > 0; got != want {
+					t.Errorf("%s restore-written = %v, want %v", svc, got, want)
+				}
+			}
+		})
+	}
+}
+
+func TestRestoreCoversServiceThatBecameInactive(t *testing.T) {
+	n := newSimNet4()
+	m, _ := newManager(t, n)
+	orig := n.clone()
+	if _, _, err := m.Apply(2080, nil); err != nil {
+		t.Fatal(err)
+	}
+	n.noIP = map[string]bool{"iPhone USB": true} // goes inactive after Apply
+	if err := m.Restore(); err != nil {
+		t.Fatal(err)
+	}
+	assertRestored(t, orig, n.clone())
+}
+
+func TestApplyNoActiveService(t *testing.T) {
+	n := newSimNet()
+	n.noIP = map[string]bool{"Wi-Fi": true, "USB 10/100/1000 LAN": true}
+	m, store := newManager(t, n)
+	if _, _, err := m.Apply(2080, nil); err == nil {
+		t.Fatal("want an error when no service is active")
+	}
+	if snap, _ := store.Load(); snap != nil {
+		t.Fatalf("no snapshot expected: %+v", snap)
+	}
 }
