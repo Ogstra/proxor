@@ -59,11 +59,12 @@ PackageMode DetectPackageMode(const QString &packageRoot,
 PackageMode DetectMacPackageMode(const QString &appBundlePath,
                                  const QString &homeDir,
                                  const QStringList &caskroomDirs) {
-    const QFileInfo bundle(appBundlePath);
-    if (bundle.fileName() != QStringLiteral("Proxor.app")) {
+    // Pure string handling: QFileInfo::absolutePath() would prepend a drive letter on Windows runners.
+    const QString bundle = QDir::cleanPath(appBundlePath);
+    if (bundle.mid(bundle.lastIndexOf(QLatin1Char('/')) + 1) != QStringLiteral("Proxor.app")) {
         return PackageMode::MacApp;
     }
-    const QString parent = QDir::cleanPath(bundle.absolutePath());
+    const QString parent = QDir::cleanPath(bundle + QStringLiteral("/.."));
     const bool inApplications =
         parent == QStringLiteral("/Applications") ||
         (!homeDir.isEmpty() && parent == QDir::cleanPath(QDir(homeDir).filePath(QStringLiteral("Applications"))));

@@ -13,4 +13,5 @@ if (APPLE)
     target_link_libraries(mac_screen_capture_smoke_test PRIVATE Qt6::Core Qt6::Gui Qt6::Test
         ${PROXOR_COREGRAPHICS} ${PROXOR_APPKIT} ${PROXOR_FOUNDATION})
     add_test(NAME mac_screen_capture_smoke_test COMMAND mac_screen_capture_smoke_test)
+    set_tests_properties(mac_screen_capture_smoke_test PROPERTIES TIMEOUT 120)
 endif ()

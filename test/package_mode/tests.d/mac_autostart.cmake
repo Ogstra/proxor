@@ -23,4 +23,6 @@ if (APPLE)
     target_link_libraries(mac_login_item_smoke_test PRIVATE Qt6::Core Qt6::Test
         ${PROXOR_SERVICE_MANAGEMENT} ${PROXOR_APPKIT} ${PROXOR_FOUNDATION})
     add_test(NAME mac_login_item_smoke_test COMMAND mac_login_item_smoke_test)
+    # A hung Background Task Management call must fail this test, not stall the whole runner job.
+    set_tests_properties(mac_login_item_smoke_test PROPERTIES TIMEOUT 120)
 endif ()
