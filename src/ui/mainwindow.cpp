@@ -57,6 +57,7 @@
 #include "sys/macos/MacHelperClient.h"
 #include "sys/macos/MacHelperService.h"
 #include "sys/macos/MacHelperInstaller.h"
+#include "sys/macos/MacScreenCapture.h"
 #endif
 
 #include <QClipboard>
@@ -3147,10 +3148,44 @@ void MainWindow::on_menu_scan_qr_clipboard_triggered() {
     importQrFromImage(img, ProxorPlatform::QrSource::ClipboardImage);
 }
 
+#ifdef Q_OS_MACOS
+// Screen Recording is checked before any capture: without it macOS returns only the wallpaper (phase 53, MAC-QR).
+bool MainWindow::macScreenCaptureReadyOrExplain() {
+    using namespace ProxorPlatform;
+    const bool granted = ProxorMac::ScreenCapturePreflight();
+    const auto d = DecideMacScreenScan(granted, mac_screen_capture_requested);
+    if (d.capture) return true;
+    show_log_impl(tr("Scan QR code from screen: the Screen Recording permission is missing (preflight=false)."));
+    if (d.requestAccess) {
+        mac_screen_capture_requested = true;
+        ProxorMac::ScreenCaptureRequest(); // macOS shows its own prompt the first time
+    }
+    QMessageBox box(QMessageBox::Information, software_name, MacScreenRecordingMessage(), QMessageBox::Close, this);
+    auto *settingsBtn = box.addButton(tr("Open System Settings"), QMessageBox::ActionRole);
+    auto *fileBtn = box.addButton(tr("Choose Image File..."), QMessageBox::ActionRole);
+    auto *clipBtn = box.addButton(tr("Use Clipboard Image"), QMessageBox::ActionRole);
+    box.exec();
+    if (box.clickedButton() == settingsBtn) {
+        if (!ProxorMac::OpenScreenRecordingSettings())
+            MessageBoxWarning(software_name, tr("Open System Settings > Privacy & Security > Screen & System Audio Recording and allow Proxor."));
+    } else if (box.clickedButton() == fileBtn) {
+        on_menu_scan_qr_image_triggered();
+    } else if (box.clickedButton() == clipBtn) {
+        on_menu_scan_qr_clipboard_triggered();
+    }
+    return false;
+}
+
+#endif
 void MainWindow::on_menu_scan_qr_triggered() {
 #ifndef NKR_NO_ZXING
     using namespace ProxorPlatform;
+#ifdef Q_OS_MACOS
+    if (!macScreenCaptureReadyOrExplain()) return;
+    const CapabilityStatus cap{}; // permission granted: a miss is a real "not found"
+#else
     const auto cap = CurrentCapability(Capability::ScreenQrCapture);
+#endif
     auto offerAlternatives = [this](const QString &message) {
         QMessageBox box(QMessageBox::Information, software_name, message, QMessageBox::Close, this);
         auto *fileBtn = box.addButton(tr("Choose Image File..."), QMessageBox::ActionRole);
@@ -3217,6 +3252,12 @@ void MainWindow::on_menu_scan_qr_triggered() {
 
     show();
 
+#ifdef Q_OS_MACOS
+    if (!anyImage) { // preflight said granted but the grab is empty: still the permission, not "not found"
+        MessageBoxInfo(software_name, MacScreenRecordingMessage());
+        return;
+    }
+#endif
     const auto msg = QrScanMessage(QrSource::Screen, {anyImage, !text.isEmpty()}, cap);
     if (!msg.isEmpty()) {
         MessageBoxInfo(software_name, msg);

@@ -199,6 +199,8 @@ private:
     QMenu *mac_tray_menu = nullptr;
     QString mac_tun_failure_reason;
     bool mac_spmode_restoring = false;
+    bool mac_screen_capture_requested = false;
+    bool macScreenCaptureReadyOrExplain();
     QTimer *mac_tun_ready_timer = nullptr;
     bool mac_stop_keeps_remembered_profile = false;
     void macInstallHelperThen(const QString &feature, MacHelperEnableAction action, std::function<void()> onReady);
