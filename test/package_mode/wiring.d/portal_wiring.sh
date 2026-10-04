@@ -21,10 +21,14 @@ grep -qF 'ShouldRequestFlatpakAutostart(' "$repo_root/src/sys/AutoRun.cpp" || fa
 base="$(cd "$repo_root" && sh .planning/phases/52-linux-desktop-integration/phase-base.sh 2>/dev/null || true)"
 if [ -n "$base" ] && command -v unifdef >/dev/null; then
   rel=src/ui/mainwindow.cpp
-  added=$(diff <(git -C "$repo_root" show "$base:$rel" | grep -c 'Q_OS_' || true) <(grep -c 'Q_OS_' "$repo_root/$rel" || true) | grep -E '^>' || true)
+  # Phase 53 adds Q_OS_MACOS blocks on purpose (Windows/Linux views are proven by unifdef in 53-08): count the other Q_OS_ lines.
+  added=$(diff <(git -C "$repo_root" show "$base:$rel" | grep 'Q_OS_' | grep -vc 'Q_OS_MACOS' || true) <(grep 'Q_OS_' "$repo_root/$rel" | grep -vc 'Q_OS_MACOS' || true) | grep -E '^>' || true)
   [ -z "$added" ] || fail "mainwindow.cpp gained Q_OS_ lines versus the phase base"
   w=$(diff <(git -C "$repo_root" show "$base:$rel" | unifdef -x2 -DQ_OS_WIN -UQ_OS_MACOS -UQ_OS_LINUX) <(unifdef -x2 -DQ_OS_WIN -UQ_OS_MACOS -UQ_OS_LINUX "$repo_root/$rel") | grep -E '^[<>]' | sort || true)
-  m=$(diff <(git -C "$repo_root" show "$base:$rel" | unifdef -x2 -DQ_OS_MACOS -UQ_OS_WIN -UQ_OS_LINUX) <(unifdef -x2 -DQ_OS_MACOS -UQ_OS_WIN -UQ_OS_LINUX "$repo_root/$rel") | grep -E '^[<>]' | sort || true)
+  # Phase 53 adds macOS-only hunks on purpose: judge the macOS view as of the phase-53 base.
+  mac_head="$(cd "$repo_root" && sh .planning/phases/53-macos-desktop-integration/phase-base.sh 2>/dev/null || true)"
+  [ -n "$mac_head" ] || mac_head="HEAD"
+  m=$(diff <(git -C "$repo_root" show "$base:$rel" | unifdef -x2 -DQ_OS_MACOS -UQ_OS_WIN -UQ_OS_LINUX) <(git -C "$repo_root" show "$mac_head:$rel" | unifdef -x2 -DQ_OS_MACOS -UQ_OS_WIN -UQ_OS_LINUX) | grep -E '^[<>]' | sort || true)
   [ "$w" = "$m" ] || fail "Windows and macOS views of $rel changed differently"
 fi
 echo "portal_wiring: OK"
