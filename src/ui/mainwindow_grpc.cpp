@@ -726,7 +726,12 @@ void MainWindow::CheckUpdate(bool silent) {
     bool ok;
     libcore::UpdateReq request;
     request.set_action(libcore::UpdateAction::Check);
+#ifdef Q_OS_MACOS
+    // Every Proxor release is a prerelease: without this macOS would never see an update.
+    request.set_check_pre_release(UpdateIncludesPrereleases(mode, ProxorGui::dataStore->check_include_pre));
+#else
     request.set_check_pre_release(ProxorGui::dataStore->check_include_pre);
+#endif
     request.set_channel(PackageModeName(mode).toStdString());
     auto response = ProxorGui_rpc::defaultClient->Update(&ok, request);
     if (!ok) return;
@@ -759,6 +764,11 @@ void MainWindow::CheckUpdate(bool silent) {
         QString releaseNote = response.release_note().c_str();
         const auto assetName = QString::fromUtf8(response.assets_name().c_str());
         const auto guidance = UpdateGuidanceText(mode, assetName);
+#ifdef Q_OS_MACOS
+        // brew only refreshes its taps once a day, so a fresh release may not be visible yet.
+        if (mode == PackageMode::Homebrew)
+            releaseNote += QObject::tr("\n\n*If Homebrew says Proxor is already up to date, run `brew update` and then the command again.*");
+#endif
         if (!allowSelfUpdate && guidance.isEmpty()) {
             releaseNote += QObject::tr("\n\n*Automatic installation is disabled in appdata mode.*");
         }

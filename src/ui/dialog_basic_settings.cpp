@@ -340,6 +340,20 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     // Style
     D_LOAD_BOOL(check_update_on_start)
     D_LOAD_BOOL(check_include_pre)
+#ifdef Q_OS_MACOS
+    {
+        // Every Proxor release is a prerelease, so on macOS the update check always includes them.
+        const auto preNote = PrereleaseSettingNote(ProxorGui::CurrentPackageMode());
+        ui->check_include_pre->setChecked(true);
+        ui->check_include_pre->setEnabled(false);
+        ui->check_include_pre->setToolTip(preNote);
+        auto *preLabel = ProxorPlatform::MakeCapabilityNote(ui->check_include_pre->parentWidget());
+        if (auto *box = qobject_cast<QBoxLayout *>(ui->check_include_pre->parentWidget()->layout()))
+            box->insertWidget(box->indexOf(ui->check_include_pre) + 1, preLabel);
+        preLabel->setText(preNote);
+        preLabel->setVisible(true);
+    }
+#endif
     D_LOAD_BOOL(start_minimal)
     {
         const auto tray = ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::SystemTray);

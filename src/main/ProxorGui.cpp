@@ -601,6 +601,12 @@ namespace ProxorGui {
                 nativeChannelMarkerPath = QStringLiteral("/usr/share/proxor/package-channel");
             }
 #endif
+#ifdef Q_OS_MACOS
+            // macOS: the Homebrew cask or any other copy (release zip, local build); neither self-updates.
+            return DetectMacPackageMode(QDir(QCoreApplication::applicationDirPath() + QStringLiteral("/../..")).absolutePath(),
+                                        QDir::homePath(),
+                                        {QStringLiteral("/opt/homebrew/Caskroom/proxor"), QStringLiteral("/usr/local/Caskroom/proxor")});
+#endif
             return DetectPackageMode(PackageRootPath(), qEnvironmentVariable("FLATPAK_ID"),
                                       appImagePath, nativeChannelMarkerPath);
         }();
