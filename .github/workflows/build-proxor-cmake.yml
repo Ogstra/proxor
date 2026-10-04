@@ -442,14 +442,14 @@ jobs:
         run: brew install qtbase zxing-cpp
       - name: Run package policy fixture natively on macOS
         # A hung test must end this step with its log, not cancel the whole job at the job limit.
-        timeout-minutes: 30
+        timeout-minutes: 14
         shell: bash
         env:
           # An unbounded --parallel starts one clang per test target and thrashes the runner.
           CMAKE_BUILD_PARALLEL_LEVEL: "4"
         run: |
           # Show what is running if the step is still busy after 9 minutes (diagnostic only).
-          ( sleep 540; echo "== still running after 9 min"; ps -axo pid,etime,command | grep -E 'clang|c\+\+|ld |cmake|ctest|_test' | grep -v grep | cut -c1-200 | head -40 ) &
+          ( for m in 4 9 12; do sleep $([ $m = 4 ] && echo 240 || echo 300); echo "== still running after $m min"; ps -axo pid,etime,pcpu,command | grep -E 'clang|c\+\+|ld |cmake|ctest|_test' | grep -v grep | cut -c1-260 | head -30; done ) &
           watchdog=$!
           trap 'kill $watchdog 2>/dev/null || true' EXIT
           CMAKE_PREFIX_PATH="$(brew --prefix)" bash test/package_mode/run-tests.sh
