@@ -419,6 +419,17 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
         ui->theme->setCurrentIndex(currentThemeIndex);
     }
     ui->theme_mode->setCurrentIndex(ThemeModeIndexForTheme(storedTheme));
+#ifdef Q_OS_MACOS
+    {
+        // The System (native macOS) theme is hidden on macOS; say what is used instead.
+        auto *themeNote = ProxorPlatform::MakeCapabilityNote(ui->theme_mode->parentWidget());
+        if (auto *box = qobject_cast<QBoxLayout *>(ui->theme_mode->parentWidget()->layout()))
+            box->addWidget(themeNote);
+        themeNote->setText(tr("The native macOS (System) theme is not available yet. Fusion is the default and "
+                              "follows the macOS light/dark appearance when Mode is System."));
+        themeNote->setVisible(true);
+    }
+#endif
     RefreshThemeModeOptions(ui->theme, ui->theme_mode);
     // Re-run once shown so the disabled combo repaints greyed (the construction
     // -time call runs before the widget is visible, so its repaint is a no-op).
