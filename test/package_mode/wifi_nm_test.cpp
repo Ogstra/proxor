@@ -252,6 +252,55 @@ private slots:
         QVERIFY2(got.detail.contains("Error: NetworkManager is not running."), qPrintable(got.detail));
     }
 
+    void unmanagedWifiIsUnavailable() {
+        startFake(true);
+        addWifi(10, "/", QByteArray());
+        NetworkManagerWifiReader r(QDBusConnection::sessionBus(), "/nonexistent/nmcli", false);
+        const auto got = r.read();
+        QCOMPARE(got.state, ReadState::Unavailable);
+        QVERIFY2(got.detail.contains("iwd"), qPrintable(got.detail));
+        QCOMPARE(got.source, QString("NetworkManager"));
+    }
+
+    void unmanagedAndManagedConnected() {
+        startFake(true);
+        addWifi(10, "/", QByteArray());
+        addWifi(100, FakeNetworkManager::apPath(1), "Home");
+        NetworkManagerWifiReader r(QDBusConnection::sessionBus(), "/nonexistent/nmcli", false);
+        const auto got = r.read();
+        QCOMPARE(got.state, ReadState::Connected);
+        QCOMPARE(got.ssid, QString("Home"));
+    }
+
+    void unmanagedAndManagedDisconnected() {
+        startFake(true);
+        addWifi(10, "/", QByteArray());
+        addWifi(30, "/", QByteArray());
+        NetworkManagerWifiReader r(QDBusConnection::sessionBus(), "/nonexistent/nmcli", false);
+        const auto got = r.read();
+        QCOMPARE(got.state, ReadState::NotConnected);
+    }
+
+    void radioOffStaysNotConnected() {
+        startFake(true);
+        addWifi(20, "/", QByteArray());
+        NetworkManagerWifiReader r(QDBusConnection::sessionBus(), "/nonexistent/nmcli", false);
+        const auto got = r.read();
+        QCOMPARE(got.state, ReadState::NotConnected);
+    }
+
+    void nmcliNotRunningAddsHint() {
+        if (IsWindowsHost()) QSKIP("fake nmcli is a shell script");
+        startFake(false);
+        QTemporaryDir dir;
+        const QString nmcli = makeNmcli(dir, "echo 'Error: NetworkManager is not running.' >&2\nexit 8");
+        NetworkManagerWifiReader r(QDBusConnection::sessionBus(), nmcli, false);
+        const auto got = r.read();
+        QCOMPARE(got.state, ReadState::Unavailable);
+        QVERIFY2(got.detail.contains("Error: NetworkManager is not running."), qPrintable(got.detail));
+        QVERIFY2(got.detail.contains("iwd"), qPrintable(got.detail));
+    }
+
     void slowNetworkManagerStaysWithinBudget() {
         startFake(true);
         addWifi(100, FakeNetworkManager::apPath(0), "Slow");
