@@ -1545,8 +1545,13 @@ void MainWindow::refreshWifiMonitoring() {
     if (needed != wifi_monitor->isActive()) {
         wifi_monitor->setActive(needed);
         if (MW_show_log) {
-            MW_show_log(needed ? tr("[Wi-Fi] Watching the Wi-Fi network (On-Demand or \"Skip on SSIDs\" is configured).")
-                               : tr("[Wi-Fi] Stopped watching the Wi-Fi network: nothing uses it."));
+            const QString watchLine = needed ? tr("[Wi-Fi] Watching the Wi-Fi network (On-Demand or \"Skip on SSIDs\" is configured).")
+                                             : tr("[Wi-Fi] Stopped watching the Wi-Fi network: nothing uses it.");
+#ifdef Q_OS_WIN
+            MW_show_log(watchLine);
+#else
+            ProxorGui_log::WriteDiagnostic(watchLine);
+#endif
         }
     }
 
@@ -1569,7 +1574,7 @@ void MainWindow::refreshWifiMonitoring() {
             QTimer::singleShot(0, this, [this] {
                 ProxorWifi::RequestWifiPermission(this, [this](ProxorWifi::PermissionState s) {
                     if (MW_show_log) {
-                        MW_show_log(tr("[Wi-Fi] Permission answer: %1")
+                        ProxorGui_log::WriteDiagnostic(tr("[Wi-Fi] Permission answer: %1")
                                         .arg(s == ProxorWifi::PermissionState::Granted ? tr("allowed") : ProxorWifi::DescribePermission(s)));
                     }
                     wifi_monitor->refreshNow();
@@ -1588,7 +1593,7 @@ void MainWindow::refreshWifiMonitoring() {
                 if (box.clickedButton() == cont) {
                     ProxorWifi::RequestWifiPermission(this, [this](ProxorWifi::PermissionState s) {
                         if (MW_show_log) {
-                            MW_show_log(tr("[Wi-Fi] Permission answer: %1")
+                            ProxorGui_log::WriteDiagnostic(tr("[Wi-Fi] Permission answer: %1")
                                             .arg(s == ProxorWifi::PermissionState::Granted ? tr("allowed") : ProxorWifi::DescribePermission(s)));
                         }
                         wifi_monitor->refreshNow();
@@ -1614,7 +1619,18 @@ void MainWindow::onWifiReadingChanged(const ProxorWifi::WifiReading &reading) {
     const auto text = ProxorWifi::DescribeReading(reading);
     if (text == wifi_last_logged_status) return;
     wifi_last_logged_status = text;
+#ifdef Q_OS_WIN
     if (MW_show_log) MW_show_log("[Wi-Fi] " + text);
+#else
+    // Window log only for what needs the user's attention; the usual SSID changes go to the log file.
+    const bool needsAttention = reading.state == ProxorWifi::ReadState::PermissionNeeded ||
+                                reading.state == ProxorWifi::ReadState::Unavailable;
+    if (needsAttention && wifi_monitor != nullptr && wifi_monitor->isActive()) {
+        if (MW_show_log) MW_show_log("[Wi-Fi] " + text);
+    } else {
+        ProxorGui_log::WriteDiagnostic("[Wi-Fi] " + text);
+    }
+#endif
 }
 
 void MainWindow::onWifiSsidChanged(const QString &ssid) {
@@ -2310,7 +2326,7 @@ void MainWindow::proxor_set_spmode_system_proxy(bool enable, bool save) {
             if (ProxorGui::dataStore->started_id < 0) {
                 // No profile runs: never point the Mac at a dead port. Applied by proxor_start.
                 mac_modes->setSystemProxyParked(true);
-                MW_show_log(tr("System Proxy is on; it takes effect when a profile starts."));
+                ProxorGui_log::WriteDiagnostic(tr("System Proxy is on; it takes effect when a profile starts."));
             } else {
                 // The switch shows on optimistically; macApplySystemProxy reverts it if the helper reports a failure.
                 mac_modes->setSystemProxyParked(false);
@@ -2374,7 +2390,7 @@ void MainWindow::proxor_set_spmode_system_proxy(bool enable, bool save) {
 void MainWindow::macInstallHelperThen(const QString &feature, MacHelperEnableAction action, std::function<void()> onReady) {
     if (MacHelperInstaller::InstallInProgress()) {
         // One installer at a time: the switch stays off, exactly like after a declined install.
-        MW_show_log(tr("The Proxor service installation is already waiting for your answer."));
+        ProxorGui_log::WriteDiagnostic(tr("The Proxor service installation is already waiting for your answer."));
         return;
     }
     MW_show_log(tr("Waiting for the administrator password prompt to install the Proxor service..."));
@@ -2513,7 +2529,7 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
                     proxor_set_spmode_FAILED
                 }
                 if (qEnvironmentVariableIsSet("APPIMAGE")) {
-                    MW_show_log(tr("AppImage Tun uses a separate privileged compatibility core."));
+                    ProxorGui_log::WriteDiagnostic(tr("AppImage Tun uses a separate privileged compatibility core."));
                 }
 #endif
                 if (ProxorGui::dataStore->need_keep_vpn_off) {
@@ -4088,7 +4104,7 @@ bool MainWindow::StartVPNProcess() {
                 mac_tun_ready_timer->start(45000);
             }
         });
-        MW_show_log(tr("Tun requested from the Proxor service; waiting for the interface."));
+        ProxorGui_log::WriteDiagnostic(tr("Tun requested from the Proxor service; waiting for the interface."));
         return true;
     }
 #endif
@@ -4253,7 +4269,7 @@ void MainWindow::macStartupProbed(MacHelperState st, bool rememberedTun, bool re
             mac_install_prompted_this_session = true; // at most one automatic prompt per session
             if (MacHelperInstaller::InstallInProgress()) {
                 // The user already opened an installer (toggle or Tun settings): no second dialog.
-                MW_show_log(tr("The Proxor service installation is already waiting for your answer."));
+                ProxorGui_log::WriteDiagnostic(tr("The Proxor service installation is already waiting for your answer."));
                 return;
             }
             MW_show_log(tr("%1 is on, but the Proxor network service is not installed or needs an update; asking to install it. Connected without it meanwhile.").arg(inst.feature));
@@ -4382,7 +4398,7 @@ void MainWindow::macPauseModes(bool systemProxy, bool tun) {
 void MainWindow::macResumeModes(bool systemProxy, bool tun) {
     // Tun first, for the same reason as in macPauseModes: it is quick, the proxy is not.
     if (tun) {
-        MW_show_log(tr("Proxy profile ready; starting Tun."));
+        ProxorGui_log::WriteDiagnostic(tr("Proxy profile ready; starting Tun."));
         mac_tun_request_saves = false; // a resume must never un-remember Tun
         StartVPNProcess();
     }

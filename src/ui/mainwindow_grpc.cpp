@@ -1,3 +1,4 @@
+#include "sys/LogFile.hpp"
 #include "./ui_mainwindow.h"
 #include "mainwindow.h"
 
@@ -381,7 +382,8 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
     if (ProxorGui::dataStore->prepare_exit) return;
     if ((startup_tun_pending && !startup_tun_authorized) || startup_tun_failed) {
 #ifdef Q_OS_MACOS
-        MW_show_log(startup_tun_failed ? MacTunFailureText(mac_tun_failure_reason) : tr("Waiting for Tun to come up; the profile starts when it is ready."));
+        if (startup_tun_failed) MW_show_log(MacTunFailureText(mac_tun_failure_reason));
+        else ProxorGui_log::WriteDiagnostic(tr("Waiting for Tun to come up; the profile starts when it is ready."));
 #else
         MW_show_log(tr("Profile start is deferred until Tun authorization succeeds."));
 #endif
