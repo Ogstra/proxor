@@ -1060,6 +1060,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     }
     mac_status_item = new ProxorMac::StatusItem;
     mac_status_item->setColored(ProxorGui::dataStore->tray_icon_colored);
+    mac_status_item->setActive(false);
     mac_status_item->setIcon(Icon::GetTrayIcon(Icon::NONE));
     mac_status_item->setMenu(mac_tray_menu);
     mac_status_item->setVisible(true);
@@ -2719,6 +2720,7 @@ void MainWindow::refresh_status(const QString &traffic_update) {
         if (mac_status_item) {
             mac_status_item->setToolTip(make_title(true));
             mac_status_item->setColored(ProxorGui::dataStore->tray_icon_colored);
+            mac_status_item->setActive(icon_status_new != Icon::NONE);
             if (icon_status_new != icon_status) mac_status_item->setIcon(Icon::GetTrayIcon(icon_status_new));
         }
 #endif
