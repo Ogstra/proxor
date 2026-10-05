@@ -1,6 +1,6 @@
 #pragma once
 
-// Tun interface addresses and the Linux IPv6 policy. Qt Core only, no Q_OS_, no app globals.
+// Tun interface addresses and the Linux IPv6 policy. Qt Core only, no platform macros, no app globals.
 
 #include "platform/PlatformCapabilities.hpp"
 
