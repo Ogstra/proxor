@@ -174,5 +174,40 @@ void MainWindow::wakeSubsStep() {
 }
 
 #ifdef Q_OS_MACOS
-void MainWindow::macWakeCheckModes(ProxorPlatform::WakeModes) {}
+void MainWindow::macWakeCheckModes(ProxorPlatform::WakeModes before) {
+    if (!(before.systemProxy || before.tun)) return;
+    MacHelperSvc()->status(this, 3000, [this, before](const MacHelperService::Reply &r) {
+        using namespace ProxorPlatform;
+        if (ProxorGui::dataStore->prepare_exit) return;
+        if (!r.ok) {
+            MW_show_log(WakeModesCheckFailedLine(r.error)); // e.g. the service is gone: never prompt to install here
+            return;
+        }
+        const WakeModes helper{r.body.value(MacHelperWire::kKeyProxyApplied).toBool(), r.body.value(MacHelperWire::kKeyTunRunning).toBool()};
+        const WakeModes fix = DecideWakeModeRepair(before, helper, ProxorGui::dataStore->started_id >= 0,
+                                                   mac_modes && mac_modes->systemProxyParked(), mac_modes && mac_modes->tunPaused());
+        ProxorGui_log::WriteDiagnostic(QStringLiteral("[Wake] service status: System Proxy %1, Tun %2").arg(helper.systemProxy).arg(helper.tun));
+        if (!fix.systemProxy && !fix.tun) return;
+        if (!MacHelperSvc()->isConnected()) {
+            MW_show_log(WakeModesCheckFailedLine(tr("the Proxor service is not connected")));
+            return;
+        }
+        MW_show_log(WakeModesReappliedLine(fix));
+        if (fix.tun) { // Tun first, like macResumeModes: quick, the proxy is not
+            if (ProxorGui::dataStore->spmode_vpn) {
+                mac_tun_request_saves = false;
+                StartVPNProcess();
+            } else {
+                proxor_set_spmode_vpn(true, false); // turned off by macOnTunStopped while asleep; not saved
+            }
+        }
+        if (fix.systemProxy) {
+            if (ProxorGui::dataStore->spmode_system_proxy) {
+                macApplySystemProxy(false);
+            } else {
+                proxor_set_spmode_system_proxy(true, false); // turned off by macOnHelperLost while asleep; not saved
+            }
+        }
+    });
+}
 #endif
