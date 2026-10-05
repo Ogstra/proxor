@@ -260,6 +260,7 @@ private:
     int icon_status = -1;
     std::shared_ptr<ProxorGui::ProxyEntity> running;
     bool start_pending = false;
+    QAction *tray_toggle_action = nullptr; // tray menu: Connect / Disconnect
     std::atomic_bool start_cancel{false}; // Stop pressed while a start is in flight
     bool started_via_ssid_trigger = false;
     bool startup_tun_pending = false;

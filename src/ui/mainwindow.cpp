@@ -1043,7 +1043,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         auto *menu = new QMenu(this);
         bool pendingSeparator = false;
         for (auto *action : ui->menu_program->actions()) {
-            if (hidden.contains(action)) continue;
+            const bool isRestartProxy = action == ui->actionRestart_Proxy; // replaced by Connect / Disconnect
+            if (!isRestartProxy && hidden.contains(action)) continue;
             if (action->isSeparator()) {
                 pendingSeparator = !menu->isEmpty();
                 continue;
@@ -1051,7 +1052,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             if (pendingSeparator) menu->addSeparator();
             pendingSeparator = false;
 #ifdef Q_OS_MACOS
-            if (action == ui->actionRestart_Proxy) {
+            if (isRestartProxy) {
                 // Same switch as Settings > "Show speed in the menu bar"; kept in sync when the menu opens.
                 auto *speedAction = new QAction(tr("Show speed in the menu bar"), menu);
                 speedAction->setCheckable(true);
@@ -1070,6 +1071,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
                 menu->addSeparator();
             }
 #endif
+            if (isRestartProxy) {
+                // One action for both directions, same behavior as the Start/Stop button of the window.
+                tray_toggle_action = new QAction(tr("Connect"), menu);
+                connect(tray_toggle_action, &QAction::triggered, this, [this] { on_toolButton_toggle_proxy_clicked(); });
+                menu->addAction(tray_toggle_action);
+                continue;
+            }
             menu->addAction(action);
         }
         return menu;
@@ -2724,6 +2732,7 @@ void MainWindow::refresh_status(const QString &traffic_update) {
     ui->checkBox_VPN->setChecked(ProxorGui::dataStore->spmode_vpn);
     ui->checkBox_SystemProxy->setChecked(ProxorGui::dataStore->spmode_system_proxy);
     const bool showStopState = running != nullptr || start_pending;
+    if (tray_toggle_action != nullptr) tray_toggle_action->setText(showStopState ? tr("Disconnect") : tr("Connect"));
     ui->toolButton_toggle_proxy->setText(showStopState ? tr("Stop") : tr("Start"));
     ui->toolButton_toggle_proxy->setIcon(showStopState ? makeToggleProxyIcon(QColor(255, 59, 48))
                                                        : makeToggleProxyIcon(QColor(52, 199, 89)));
@@ -3565,7 +3574,9 @@ QList<int> MainWindow::get_toggle_proxy_ids(const std::shared_ptr<ProxorGui::Gro
 }
 
 void MainWindow::on_toolButton_toggle_proxy_clicked() {
-    if (ProxorGui::dataStore->started_id >= 0) {
+    // The button shows "Stop" while a start is pending, so it must cancel that start instead of
+    // asking for another one.
+    if (ProxorGui::dataStore->started_id >= 0 || start_pending) {
         proxor_stop();
         return;
     }
