@@ -1035,6 +1035,25 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     // Setup Tray
     tray = new QSystemTrayIcon(this); // 初始化托盘对象tray
+    // Tray context menu: only what is useful from the tray. The full App menu stays in the toolbar.
+    auto buildTrayMenu = [this]() {
+        const QList<QAction *> hidden{ui->menu_spmode->menuAction(), ui->menu_check_updates, ui->menu_about,
+                                      ui->menu_report_bug, ui->menu_donate, ui->actionRestart_Program};
+        auto *menu = new QMenu(this);
+        bool pendingSeparator = false;
+        for (auto *action : ui->menu_program->actions()) {
+            if (hidden.contains(action)) continue;
+            if (action->isSeparator()) {
+                pendingSeparator = !menu->isEmpty();
+                continue;
+            }
+            if (pendingSeparator) menu->addSeparator();
+            pendingSeparator = false;
+            menu->addAction(action);
+        }
+        return menu;
+    };
+
 #ifdef Q_OS_MACOS
     // Never call tray->setContextMenu/setIcon/show() on macOS: QSystemTrayIcon::setContextMenu
     // is exactly what crashes (see MacPlatform.mm's header comment and tray-crash.log). `tray`
@@ -1042,22 +1061,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     // tray->activated(Trigger) into the same lambda; its own (never shown) status item is inert.
     // Proxor owns a real NSStatusItem instead, with a dedicated tray menu (not shared with the
     // toolbar's ui->menu_program, since one NSMenu cannot have two supermenus).
-    mac_tray_menu = new QMenu(this);
-    for (auto *action : ui->menu_program->actions()) {
-        if (action->isSeparator()) {
-            mac_tray_menu->addSeparator();
-            continue;
-        }
-        if (action == ui->menu_spmode->menuAction()) {
-            auto *spmodeMirror = mac_tray_menu->addMenu(action->text());
-            for (auto *spAction : ui->menu_spmode->actions()) {
-                spmodeMirror->addAction(spAction);
-            }
-            connect(spmodeMirror, &QMenu::aboutToShow, this, [this] { emit ui->menu_spmode->aboutToShow(); });
-            continue;
-        }
-        mac_tray_menu->addAction(action);
-    }
+    mac_tray_menu = buildTrayMenu();
     mac_status_item = new ProxorMac::StatusItem;
     mac_status_item->setColored(ProxorGui::dataStore->tray_icon_colored);
     mac_status_item->setActive(false);
@@ -1075,7 +1079,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     });
 #else
     tray->setIcon(Icon::GetTrayIcon(Icon::NONE));
-    tray->setContextMenu(ui->menu_program); // 创建托盘菜单
+    tray->setContextMenu(buildTrayMenu()); // dedicated tray menu (not the toolbar App menu)
     tray->show();                           // 让托盘图标显示在系统托盘上
 #endif
     connect(tray, &QSystemTrayIcon::activated, this, [=](QSystemTrayIcon::ActivationReason reason) {
