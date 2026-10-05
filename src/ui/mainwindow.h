@@ -33,6 +33,11 @@
 #include "db/Group.hpp"
 #include "main/GuiUtils.hpp"
 #include "ui/model/ProxyListModel.h"
+#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
+#include <QTimer>
+#include "platform/WakeCoordinator.hpp"
+#include "platform/WakeSubscriptionRetry.hpp"
+#endif
 
 #endif
 
@@ -220,6 +225,7 @@ private:
     void macApplySystemProxy(bool interactive, bool saved = false);
     void macPauseModes(bool systemProxy, bool tun);
     void macResumeModes(bool systemProxy, bool tun);
+    void macWakeCheckModes(ProxorPlatform::WakeModes before);
 #endif
     QShortcut *shortcut_ctrl_f = new QShortcut(QKeySequence("Ctrl+F"), this);
     QShortcut *shortcut_ctrl_v = new QShortcut(QKeySequence("Ctrl+V"), this);
@@ -264,6 +270,21 @@ private:
     bool application_was_inactive = false;
     bool subscription_resume_check_pending = false;
     qint64 subscription_timer_last_tick_ms = 0;
+#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
+    // Sleep/wake resilience (phase 56): native events + the timer gap feed one coordinator. Windows keeps the timer heuristic only.
+    ProxorPlatform::WakeCoordinator wake_coord;
+    ProxorPlatform::WakeSubscriptionRetry wake_subs;
+    QTimer *wake_timer = nullptr;
+    QTimer *wake_subs_timer = nullptr;
+    void wakeInstall();
+    void wakeOnSleepEvent(bool sleeping);
+    void wakeDetected(ProxorPlatform::WakeSource source);
+    void wakeRunStep();
+    void wakeSubsStep();
+    bool wakeOwnsSubscriptions() const;
+    bool wakeBlocked() const;
+    ProxorPlatform::WakeSnapshot wakeSnapshotNow() const;
+#endif
     QString auto_start_consumed_ssid;
     QString traffic_update_cache;
     QTime last_test_time;

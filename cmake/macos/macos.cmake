@@ -30,6 +30,7 @@ set(PLATFORM_SOURCES
     src/sys/macos/MacLocalNetwork.mm
     src/sys/SleepWake.hpp
     src/sys/macos/MacSleepWake.mm
+    src/ui/mainwindow_wake.cpp
     assets/macos/proxor.icns
 )
 # App icon (Dock, Finder, Launchpad): copied into Contents/Resources and named in Info.plist.
