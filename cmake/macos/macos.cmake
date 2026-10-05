@@ -28,6 +28,8 @@ set(PLATFORM_SOURCES
     src/sys/wifi/WifiPermissionMac.mm
     src/sys/macos/MacLocalNetwork.h
     src/sys/macos/MacLocalNetwork.mm
+    src/sys/SleepWake.hpp
+    src/sys/macos/MacSleepWake.mm
     assets/macos/proxor.icns
 )
 # App icon (Dock, Finder, Launchpad): copied into Contents/Resources and named in Info.plist.
@@ -41,7 +43,7 @@ find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
 find_library(NETWORK_FRAMEWORK Network REQUIRED)
 find_library(SERVICE_MANAGEMENT_FRAMEWORK ServiceManagement REQUIRED)
 find_library(CORE_GRAPHICS_FRAMEWORK CoreGraphics REQUIRED)
-set_source_files_properties(src/sys/wifi/WifiBackendMac.mm src/sys/wifi/WifiPermissionMac.mm src/sys/macos/MacLoginItem.mm src/sys/macos/MacScreenCapture.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+set_source_files_properties(src/sys/wifi/WifiBackendMac.mm src/sys/wifi/WifiPermissionMac.mm src/sys/macos/MacLoginItem.mm src/sys/macos/MacScreenCapture.mm src/sys/macos/MacSleepWake.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
 set(PLATFORM_LIBRARIES ${CORE_FOUNDATION_FRAMEWORK} ${CORE_SERVICES_FRAMEWORK} ${APPKIT_FRAMEWORK} ${COREWLAN_FRAMEWORK} ${CORELOCATION_FRAMEWORK} ${FOUNDATION_FRAMEWORK} ${SERVICE_MANAGEMENT_FRAMEWORK} ${CORE_GRAPHICS_FRAMEWORK} ${NETWORK_FRAMEWORK})
 # Keep user config out of the signed bundle (Throne: NKR_PACKAGE_MACOS -> NKR_CPP_USE_APPDATA).
 add_compile_definitions(NKR_CPP_USE_APPDATA)
