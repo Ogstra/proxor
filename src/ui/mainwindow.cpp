@@ -1542,9 +1542,19 @@ void MainWindow::refreshWifiMonitoring() {
     }
 
     const auto perm = ProxorWifi::CurrentWifiPermission();
-    switch (ProxorWifi::DecidePermissionPrompt(perm, needed, wifi_permission_asked)) {
+    bool askAtFirstStart = false;
+#ifdef Q_OS_MACOS
+    // macOS asks for Location once at the first start even before On-Demand is configured,
+    // so the permission is not first requested in the middle of setting On-Demand up.
+    askAtFirstStart = !ProxorGui::dataStore->wifi_permission_prompted && perm == ProxorWifi::PermissionState::NotDetermined;
+#endif
+    switch (ProxorWifi::DecidePermissionPrompt(perm, needed || askAtFirstStart, wifi_permission_asked)) {
         case ProxorWifi::PermissionPrompt::ExplainThenRequest: {
             wifi_permission_asked = true;
+#ifdef Q_OS_MACOS
+            ProxorGui::dataStore->wifi_permission_prompted = true;
+            ProxorGui::dataStore->Save();
+#endif
             QTimer::singleShot(0, this, [this, perm] {
                 QMessageBox box(GetMessageBoxParent());
                 box.setIcon(QMessageBox::Information);
