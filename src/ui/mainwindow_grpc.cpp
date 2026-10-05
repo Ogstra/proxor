@@ -8,6 +8,9 @@
 #include "rpc/gRPC.h"
 #include "main/PackagePolicy.hpp"
 #include "platform/PingPolicy.hpp"
+#ifdef Q_OS_LINUX
+#include "platform/ResolvConf.hpp"
+#endif
 #include "ui/widget/MessageBoxTimer.h"
 
 #include <atomic>
@@ -605,9 +608,13 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
             restartMsgboxTimer->deleteLater();
             restartMsgbox->deleteLater();
 #ifdef Q_OS_LINUX
-            // Check systemd-resolved
-            if (ProxorGui::dataStore->spmode_vpn && ProxorGui::dataStore->routing->direct_dns.startsWith("local") && ReadFileText("/etc/resolv.conf").contains("systemd-resolved")) {
-                MW_show_log("[Warning] The default Direct DNS may not works with systemd-resolved, you may consider change your DNS settings.");
+            // systemd-resolved: sing-box's "local" DNS asks resolved over D-Bus only when /etc/resolv.conf is
+            // resolved's own file; a bare 127.0.0.53 stub line is the setup that breaks under Tun.
+            if (ProxorGui::dataStore->spmode_vpn && ProxorGui::dataStore->routing->direct_dns.startsWith("local")) {
+                const auto kind = ProxorPlatform::ClassifyResolvConf(ReadFileText("/etc/resolv.conf"));
+                const auto notice = ProxorPlatform::DirectDnsResolvedNotice(kind);
+                if (ProxorPlatform::DirectDnsNoticeIsWarning(kind)) MW_show_log(notice);
+                else if (!notice.isEmpty()) ProxorGui_log::WriteDiagnostic(notice);
             }
 #endif
         });
