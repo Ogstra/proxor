@@ -39,6 +39,7 @@ struct StatusItem::Impl {
     QIcon icon;
     bool colored = true;
     bool active = true;
+    QString speedText; // two lines; empty = icon only
 
     // Template variant of a colored icon: only the alpha channel matters to AppKit, so the
     // result is black. Saturated pixels (the colored arcs) stay fully opaque; unsaturated ones
@@ -79,10 +80,47 @@ struct StatusItem::Impl {
         NSImage *nsImage = [[NSImage alloc] initWithCGImage:cg size:size];
         CGImageRelease(cg);
 
+        NSImage *finalImage = nsImage;
+        if (!speedText.isEmpty()) {
+            // One composite image: icon, fixed gap and a fixed-width, right-aligned two-line speed text.
+            // Drawing it ourselves keeps the item width constant (it does not move as the numbers
+            // change) and the gap exact; the handler is re-run per appearance, so the text color follows
+            // the light/dark menu bar even when the icon itself is colored.
+            NSMutableParagraphStyle *style = [[NSMutableParagraphStyle alloc] init];
+            style.alignment = NSTextAlignmentRight;
+            style.maximumLineHeight = 10.0;
+            style.minimumLineHeight = 10.0;
+            NSFont *font = [NSFont monospacedDigitSystemFontOfSize:9.0 weight:NSFontWeightRegular];
+            NSDictionary *attributes = @{NSFontAttributeName : font, NSParagraphStyleAttributeName : style,
+                                         NSForegroundColorAttributeName : NSColor.controlTextColor};
+            // Widest text the formatter can produce ("999.9K/s" plus an arrow); fixes the width.
+            const CGFloat textW = ceil([@"999.9K/s↑" sizeWithAttributes:attributes].width);
+            const CGFloat textH = 20.0;
+            const CGFloat gap = 3.0;
+            const CGFloat margin = 2.0;
+            const CGFloat totalW = size.width + gap + textW + margin;
+            const CGFloat totalH = thickness;
+            NSString *speed = speedText.toNSString();
+            NSImage *composite = [NSImage imageWithSize:NSMakeSize(totalW, totalH)
+                                                flipped:NO
+                                         drawingHandler:^BOOL(NSRect) {
+                                             [nsImage drawInRect:NSMakeRect(0, (totalH - size.height) / 2.0, size.width, size.height)];
+                                             [speed drawInRect:NSMakeRect(size.width + gap, (totalH - textH) / 2.0, textW, textH)
+                                                withAttributes:attributes];
+                                             return YES;
+                                         }];
+            [style release];
+            finalImage = composite;
+            item.length = totalW + 2.0;
+        } else {
+            item.length = NSSquareStatusItemLength;
+        }
         // `template` is a C++ keyword, so the AppKit property is set with bracket syntax.
         // Colored: the color is Proxor's running/idle indicator, so it must not be tinted.
-        [nsImage setTemplate:colored ? NO : YES];
-        item.button.image = nsImage;
+        [finalImage setTemplate:colored ? NO : YES];
+        item.button.image = finalImage;
+        item.button.title = @"";
+        item.button.imagePosition = NSImageOnly;
         // Monochrome: the system dims the glyph while disconnected (native look in light, dark and
         // translucent menu bars). The colored icon already shows the state by color.
         item.button.appearsDisabled = (!colored && !active) ? YES : NO;
@@ -128,28 +166,9 @@ void StatusItem::setActive(bool active) {
 }
 
 void StatusItem::setSpeedText(const QString &text) {
-    NSStatusBarButton *button = d->item.button;
-    if (text.isEmpty()) {
-        button.title = @"";
-        button.imagePosition = NSImageOnly;
-        d->item.length = NSSquareStatusItemLength;
-        return;
-    }
-    NSMutableParagraphStyle *style = [[NSMutableParagraphStyle alloc] init];
-    style.alignment = NSTextAlignmentRight;
-    style.maximumLineHeight = 10.0;
-    style.minimumLineHeight = 10.0;
-    NSDictionary *attributes = @{
-        NSFontAttributeName : [NSFont monospacedDigitSystemFontOfSize:9.0 weight:NSFontWeightRegular],
-        NSParagraphStyleAttributeName : style,
-        NSBaselineOffsetAttributeName : @(-5.0), // vertically centers the two 10pt lines in the bar
-    };
-    NSAttributedString *title = [[NSAttributedString alloc] initWithString:text.toNSString() attributes:attributes];
-    button.attributedTitle = title;
-    button.imagePosition = NSImageLeft;
-    d->item.length = NSVariableStatusItemLength;
-    [title release];
-    [style release];
+    if (d->speedText == text) return;
+    d->speedText = text;
+    d->render();
 }
 
 void StatusItem::setToolTip(const QString &text) {
