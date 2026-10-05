@@ -252,6 +252,7 @@ private:
     int icon_status = -1;
     std::shared_ptr<ProxorGui::ProxyEntity> running;
     bool start_pending = false;
+    std::atomic_bool start_cancel{false}; // Stop pressed while a start is in flight
     bool started_via_ssid_trigger = false;
     bool startup_tun_pending = false;
     bool startup_tun_authorized = false;

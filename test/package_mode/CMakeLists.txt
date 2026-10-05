@@ -42,6 +42,13 @@ add_test(NAME dialog_update_available_test COMMAND dialog_update_available_test)
 set_tests_properties(dialog_update_available_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+add_executable(message_box_timer_test message_box_timer_test.cpp)
+target_include_directories(message_box_timer_test PRIVATE ${CMAKE_CURRENT_LIST_DIR}/../../src)
+target_link_libraries(message_box_timer_test PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
+add_test(NAME message_box_timer_test COMMAND message_box_timer_test)
+set_tests_properties(message_box_timer_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # Pure macOS helper lifecycle policy (Qt Core only, no macOS APIs), so it is compiled and run
 # on every CI runner even though production only links it on APPLE.
 add_executable(mac_helper_policy_test

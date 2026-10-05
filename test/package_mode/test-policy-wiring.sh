@@ -101,4 +101,12 @@ for script in "$@"; do
     exit 1
   fi
 done
+# Sub-update freeze: the core control channel never queries the OS system proxy (macOS blocks under a process-wide mutex),
+# the restart prompt is non-modal, and Stop cancels a pending start.
+grep -qF 'nm->setProxy(QNetworkProxy::NoProxy)' "$repo_root/src/rpc/gRPC.cpp"
+if grep -q 'msgbox->exec()' "$repo_root/src/ui/widget/MessageBoxTimer.h"; then
+  echo "test-policy-wiring.sh: MessageBoxTimer is modal again" >&2
+  exit 1
+fi
+grep -qF 'start_cancel = true' "$repo_root/src/ui/mainwindow_grpc.cpp"
 echo WIRING-OK

@@ -497,6 +497,7 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
     }
     mu_stopping.unlock();
     start_pending = true;
+    start_cancel = false;
     refresh_status();
 
     // check core state
@@ -560,6 +561,23 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
         }
 #endif
 
+        // Stop was pressed while this start was still in flight: nothing is running yet, so just give up.
+        if (start_cancel) {
+            MW_show_log("<<<<<<<< " + tr("Start cancelled"));
+            start_pending = false;
+            mu_starting.unlock();
+#ifdef Q_OS_MACOS
+            runOnUiThread([=] { mac_modes->profileStartFailed(); });
+#endif
+            runOnUiThread([=] {
+                refresh_status();
+                restartMsgboxTimer->cancel();
+                restartMsgboxTimer->deleteLater();
+                restartMsgbox->deleteLater();
+            });
+            return;
+        }
+
         // stop current running
         if (ProxorGui::dataStore->started_id >= 0) {
             runOnUiThread([=] { proxor_stop(false, true); });
@@ -575,6 +593,11 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
 #endif
         }
         mu_starting.unlock();
+        if (start_cancel && ProxorGui::dataStore->started_id >= 0) {
+            // Stop was pressed while the core was loading the config: undo the start so nothing stays half-started.
+            MW_show_log("<<<<<<<< " + tr("Start cancelled"));
+            runOnUiThread([=] { proxor_stop(); });
+        }
         // cancel timeout
         runOnUiThread([=] {
             refresh_status();
@@ -594,6 +617,23 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
 void MainWindow::proxor_stop(bool crash, bool sem) {
     auto id = ProxorGui::dataStore->started_id;
     if (id < 0) {
+        if (start_pending) {
+            // Stop during a pending start aborts it (the start thread checks start_cancel between its steps).
+            start_cancel = true;
+            if (mu_starting.tryLock()) {
+                // no start thread is running: the start is only waiting for the core to come up
+                core_process->start_profile_when_core_is_up = -1;
+                start_pending = false;
+                mu_starting.unlock();
+                MW_show_log("<<<<<<<< " + tr("Start cancelled"));
+#ifdef Q_OS_MACOS
+                mac_modes->profileStartFailed();
+#endif
+                refresh_status();
+            } else {
+                MW_show_log(tr("Stopping: cancelling the profile start in progress..."));
+            }
+        }
         if (sem) sem_stopped.release();
         return;
     }
