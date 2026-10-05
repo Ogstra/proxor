@@ -347,7 +347,7 @@ QString MacShellQuote(const QString &value) {
     return QLatin1Char('\'') + escaped + QLatin1Char('\'');
 }
 
-QString MacAdminAppleScript(const QString &program, const QStringList &args) {
+QString MacAdminAppleScript(const QString &program, const QStringList &args, const QString &prompt) {
     QStringList parts;
     parts << MacShellQuote(program);
     for (const QString &arg : args) parts << MacShellQuote(arg);
@@ -355,5 +355,13 @@ QString MacAdminAppleScript(const QString &program, const QStringList &args) {
     // AppleScript string literal: escape backslash first, then the double quote.
     command.replace(QLatin1Char('\\'), QStringLiteral("\\\\"));
     command.replace(QLatin1Char('"'), QStringLiteral("\\\""));
-    return QStringLiteral("do shell script \"") + command + QStringLiteral("\" with administrator privileges");
+    QString withPrompt;
+    if (!prompt.isEmpty()) {
+        QString text = prompt;
+        text.replace(QLatin1Char('\\'), QStringLiteral("\\\\"));
+        text.replace(QLatin1Char('"'), QStringLiteral("\\\""));
+        withPrompt = QStringLiteral(" with prompt \"") + text + QLatin1Char('"');
+    }
+    return QStringLiteral("do shell script \"") + command + QLatin1Char('"') + withPrompt +
+           QStringLiteral(" with administrator privileges");
 }

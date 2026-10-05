@@ -57,6 +57,7 @@
 #include "sys/macos/MacHelperClient.h"
 #include "sys/macos/MacHelperService.h"
 #include "sys/macos/MacHelperInstaller.h"
+#include "sys/macos/MacLocalNetwork.h"
 #include "sys/macos/MacScreenCapture.h"
 #endif
 
@@ -1255,6 +1256,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     connect(wifi_monitor, &WifiMonitor::ssidChanged, this, &MainWindow::onWifiSsidChanged);
     connect(wifi_monitor, &WifiMonitor::readingChanged, this, &MainWindow::onWifiReadingChanged);
     refreshWifiMonitoring();
+#ifdef Q_OS_MACOS
+    if (!ProxorGui::dataStore->local_network_prompted) {
+        ProxorGui::dataStore->local_network_prompted = true;
+        ProxorGui::dataStore->Save();
+        // After the Location prompt, so the two native prompts do not start together.
+        QTimer::singleShot(2500, this, [] { MacLocalNetwork::TriggerPrompt(); });
+    }
+#endif
 
     connect(qApp, &QGuiApplication::commitDataRequest, this, &MainWindow::on_commitDataRequest);
 
@@ -1554,6 +1563,19 @@ void MainWindow::refreshWifiMonitoring() {
 #ifdef Q_OS_MACOS
             ProxorGui::dataStore->wifi_permission_prompted = true;
             ProxorGui::dataStore->Save();
+#endif
+#ifdef Q_OS_MACOS
+            // Straight to the native macOS Location prompt; its text comes from Info.plist.
+            QTimer::singleShot(0, this, [this] {
+                ProxorWifi::RequestWifiPermission(this, [this](ProxorWifi::PermissionState s) {
+                    if (MW_show_log) {
+                        MW_show_log(tr("[Wi-Fi] Permission answer: %1")
+                                        .arg(s == ProxorWifi::PermissionState::Granted ? tr("allowed") : ProxorWifi::DescribePermission(s)));
+                    }
+                    wifi_monitor->refreshNow();
+                });
+            });
+            break;
 #endif
             QTimer::singleShot(0, this, [this, perm] {
                 QMessageBox box(GetMessageBoxParent());

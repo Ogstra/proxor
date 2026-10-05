@@ -147,6 +147,7 @@ namespace ProxorGui {
 
         // On-demand WiFi SSID
         bool ssid_on_demand_enabled = false;
+        bool local_network_prompted = false; // macOS: the native Local Network prompt was triggered at first start
         bool wifi_permission_prompted = false; // macOS: the one-time Location explanation shown at first start
         QStringList ssid_trigger_list = {};
         int ssid_on_demand_profile_id = -1919;

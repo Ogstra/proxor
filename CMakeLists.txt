@@ -385,11 +385,14 @@ if (APPLE)
     # Location usage strings: macOS hides the Wi-Fi network name unless the app is authorized for
     # Location Services (phase 51, On-Demand). Idempotent, re-applied after every link.
     set(PROXOR_LOCATION_USAGE "Proxor reads the name of the Wi-Fi network you are connected to so On-Demand and per-network host rules can work. The name never leaves this Mac.")
+    set(PROXOR_LOCAL_NETWORK_USAGE "Proxor connects to servers and local proxy tools on your network, and can reach devices on your local network when your rules need it.")
     # The template-generated Info.plist can be read-only (copied from a read-only source), so make it writable first.
     add_custom_command(TARGET ${PROXOR_GUI_TARGET} POST_BUILD
             COMMAND /bin/chmod u+w "$<TARGET_BUNDLE_CONTENT_DIR:${PROXOR_GUI_TARGET}>/Info.plist"
             COMMAND /usr/bin/plutil -replace NSLocationWhenInUseUsageDescription -string "${PROXOR_LOCATION_USAGE}" "$<TARGET_BUNDLE_CONTENT_DIR:${PROXOR_GUI_TARGET}>/Info.plist"
             COMMAND /usr/bin/plutil -replace NSLocationUsageDescription -string "${PROXOR_LOCATION_USAGE}" "$<TARGET_BUNDLE_CONTENT_DIR:${PROXOR_GUI_TARGET}>/Info.plist"
+            COMMAND /usr/bin/plutil -replace NSLocalNetworkUsageDescription -string "${PROXOR_LOCAL_NETWORK_USAGE}" "$<TARGET_BUNDLE_CONTENT_DIR:${PROXOR_GUI_TARGET}>/Info.plist"
+            COMMAND /usr/bin/plutil -replace NSBonjourServices -json "[\"_proxor-probe._tcp\"]" "$<TARGET_BUNDLE_CONTENT_DIR:${PROXOR_GUI_TARGET}>/Info.plist"
             VERBATIM)
 endif ()
 

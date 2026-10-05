@@ -67,7 +67,7 @@ QString sha256Hex(const QString &path) {
 
 // Runs `/bin/sh <script> <args...>` as root through ONE osascript admin prompt, asynchronously.
 // `done` gets the classified result once osascript exits.
-void runAdminScript(const QString &script, const QStringList &args, DoneFn done) {
+void runAdminScript(const QString &script, const QStringList &args, DoneFn done, const QString &prompt = QString()) {
     auto *proc = new QProcess(qApp);
     QObject::connect(proc, &QProcess::finished, qApp,
                      [proc, done](int exitCode, QProcess::ExitStatus status) {
@@ -85,7 +85,7 @@ void runAdminScript(const QString &script, const QStringList &args, DoneFn done)
         done({MacAdminScriptOutcome::Failed, tr("could not start the administrator prompt")});
     });
     proc->start(QStringLiteral("/usr/bin/osascript"),
-                {QStringLiteral("-e"), MacAdminAppleScript(QStringLiteral("/bin/sh"), QStringList{script} + args)});
+                {QStringLiteral("-e"), MacAdminAppleScript(QStringLiteral("/bin/sh"), QStringList{script} + args, prompt)});
 }
 
 // After a successful install: wait (bounded, one short async probe per tick) until the helper answers.
@@ -141,7 +141,7 @@ void startInstall(DoneFn done) {
             return;
         }
         waitUntilReady(done);
-    });
+    }, tr("Proxor needs administrator rights to install its network service, which turns Tun and System Proxy on and off."));
 }
 
 } // namespace
@@ -164,6 +164,11 @@ void MacHelperInstaller::ConfirmAndInstall(QWidget *parent, const QString &featu
         g_installInProgress = false;
         done(std::move(result));
     };
+    if (action == MacHelperEnableAction::AskInstall) {
+        // First install: go straight to the native macOS password prompt (its text explains why).
+        startInstall(finish);
+        return;
+    }
     auto *box = new QMessageBox(QMessageBox::Question, tr("Proxor network service"), explanation(feature, action),
                                 QMessageBox::Yes | QMessageBox::No, parent);
     box->setDefaultButton(QMessageBox::Yes);

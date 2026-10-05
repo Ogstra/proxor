@@ -461,6 +461,14 @@ private slots:
         QCOMPARE(got, expected);
     }
 
+    void adminAppleScriptPromptIsEscapedAndPlacedBeforePrivileges() {
+        const QString got = MacAdminAppleScript(QStringLiteral("/bin/sh"), {QStringLiteral("501")},
+                                                QStringLiteral("Needs \"admin\" \\ rights"));
+        const QString expected = QStringLiteral(
+            "do shell script \"'/bin/sh' '501'\" with prompt \"Needs \\\"admin\\\" \\\\ rights\" with administrator privileges");
+        QCOMPARE(got, expected);
+    }
+
     void shellQuoteHandlesApostrophes() {
         QCOMPARE(MacShellQuote(QStringLiteral("plain")), QStringLiteral("'plain'"));
         QCOMPARE(MacShellQuote(QStringLiteral("it's")), QStringLiteral("'it'\"'\"'s'"));

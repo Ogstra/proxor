@@ -211,6 +211,7 @@ codesign --verify --deep --strict --verbose=2 "$APP"
 test -x "$APP/Contents/MacOS/Proxor"
 /usr/bin/plutil -extract NSLocationWhenInUseUsageDescription raw "$APP/Contents/Info.plist" >/dev/null
 /usr/bin/plutil -extract NSLocationUsageDescription raw "$APP/Contents/Info.plist" >/dev/null
+/usr/bin/plutil -extract NSLocalNetworkUsageDescription raw "$APP/Contents/Info.plist" >/dev/null
 test -x "$APP/Contents/MacOS/proxor_core"
 test -f "$APP/Contents/MacOS/geosite.db"
 test -L "$APP/Contents/MacOS/geosite.db"

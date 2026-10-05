@@ -125,4 +125,4 @@ private:
 
 QString MacShellQuote(const QString &value);
 // "do shell script <quoted command> <admin privileges clause>" for `osascript -e`.
-QString MacAdminAppleScript(const QString &program, const QStringList &args);
+QString MacAdminAppleScript(const QString &program, const QStringList &args, const QString &prompt = QString());
