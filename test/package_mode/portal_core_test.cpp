@@ -213,10 +213,15 @@ private slots:
         });
         XdgPortalClient c(QDBusConnection::sessionBus());
         QObject ctx;
-        const Got g = run(c, 400, &ctx);
+        // The client's QTimer is a default Qt::CoarseTimer, which Qt allows to fire up to 5% early, and
+        // QElapsedTimer truncates to whole ms: 400 ms may read as 379. The bound still proves the request
+        // waited for its own timeout (not an immediate failure, not the 3 s guard in run()).
+        constexpr int kTimeoutMs = 400;
+        constexpr qint64 kEarliestMs = kTimeoutMs * 95 / 100 - 10; // 370
+        const Got g = run(c, kTimeoutMs, &ctx);
         QCOMPARE(g.count, 1);
         QVERIFY(g.reply.timedOut);
-        QVERIFY2(g.elapsedMs >= 380 && g.elapsedMs <= 1400, qPrintable(QString::number(g.elapsedMs)));
+        QVERIFY2(g.elapsedMs >= kEarliestMs && g.elapsedMs <= 1400, qPrintable(QString::number(g.elapsedMs)));
         QCOMPARE(ResultFromReply(g.reply).outcome, PortalOutcome::TimedOut);
     }
 
