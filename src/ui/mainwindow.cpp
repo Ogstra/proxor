@@ -1050,6 +1050,26 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             }
             if (pendingSeparator) menu->addSeparator();
             pendingSeparator = false;
+#ifdef Q_OS_MACOS
+            if (action == ui->actionRestart_Proxy) {
+                // Same switch as Settings > "Show speed in the menu bar"; kept in sync when the menu opens.
+                auto *speedAction = new QAction(tr("Show speed in the menu bar"), menu);
+                speedAction->setCheckable(true);
+                speedAction->setChecked(ProxorGui::dataStore->tray_speed_view);
+                connect(speedAction, &QAction::toggled, this, [this](bool checked) {
+                    if (ProxorGui::dataStore->tray_speed_view == checked) return;
+                    ProxorGui::dataStore->tray_speed_view = checked;
+                    ProxorGui::dataStore->Save();
+                    if (!checked) update_tray_speed(0, 0, true);
+                });
+                connect(menu, &QMenu::aboutToShow, speedAction, [speedAction] {
+                    QSignalBlocker blocker(speedAction);
+                    speedAction->setChecked(ProxorGui::dataStore->tray_speed_view);
+                });
+                menu->addAction(speedAction);
+                menu->addSeparator();
+            }
+#endif
             menu->addAction(action);
         }
         return menu;
