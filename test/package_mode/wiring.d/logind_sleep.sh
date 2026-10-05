@@ -13,7 +13,7 @@ for f in "$repo_root/cmake/windows/windows.cmake" "$repo_root/cmake/macos/macos.
   if grep -qF 'LogindSleep' "$f"; then fail "$f must not mention LogindSleep"; fi
 done
 for pat in PrepareForSleep org.freedesktop.login1.Manager 'systemBus()'; do
-  cat "$cpp" "$hpp" | grep -qF "$pat" || fail "LogindSleep.* must contain $pat"
+  grep -qF -- "$pat" "$cpp" "$hpp" || fail "LogindSleep.* must contain $pat"
 done
 
 # One Install definition per OS file (MacSleepWake.mm may not exist yet).
