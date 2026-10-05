@@ -30,6 +30,19 @@ The AUR and winget jobs run in protected environments (`aur-publication`,
 `winget-publication`), so the review gates above stay in front of the credentials. `both` means
 AUR plus winget; `all` adds the Homebrew tap.
 
+### Windows-only stable release
+
+The `windows_only` dispatch input (default `n`) publishes a stable release that carries only the
+source tarball, `proxor-<version>-windows64.zip`, `proxor-<version>-winget-x64.zip` and a
+`SHA256SUMS` listing exactly those files, while the other platforms stay on prereleases. It is
+refused unless `publish=y` and a tag are set. All build jobs still run and gate the release;
+`bump-homebrew-tap` is skipped, and the AUR and Homebrew channels of `publish-packages.yml`
+must not be used for such a release (use `channels=winget`).
+
+```bash
+gh workflow run build-proxor-cmake.yml --ref main -f tag=vX.Y.Z -f publish=y -f prerelease=n -f windows_only=y
+```
+
 ### Homebrew tap
 
 `bump-homebrew-tap` in `.github/workflows/build-proxor-cmake.yml` runs right after

@@ -54,3 +54,29 @@ mv "$tmp/macos-aside" "$tmp/in/proxor-1.2.3-macos-arm64.zip.d"
 # Two release assets with the same name would silently overwrite each other.
 mkdir -p "$tmp/in/duplicate"; printf y > "$tmp/in/duplicate/proxor-1.2.3.deb"
 ! "$script" prepare-final-assets --input "$tmp/in" --version 1.2.3 --output "$tmp/final-duplicate" --public-source-url "$url"
+
+# Windows-only stable release: only the Windows downloads and a checksum list that matches them.
+rm -rf "$tmp/in/duplicate"
+"$script" prepare-final-assets --input "$tmp/in" --version 1.2.3 --output "$tmp/final-full" --public-source-url "$url"
+full_sums="$(cat "$tmp/final-full/SHA256SUMS")"
+"$script" prepare-final-assets --input "$tmp/in" --version 1.2.3 --output "$tmp/final-win" --public-source-url "$url" --windows-only
+actual="$(cd "$tmp/final-win" && find . -maxdepth 1 -type f ! -name proxor-1.2.3.tar.gz | sed 's|^\./||' | sort | tr '\n' ' ')"
+test "$actual" = 'SHA256SUMS proxor-1.2.3-windows64.zip proxor-1.2.3-winget-x64.zip ' || { echo "unexpected windows-only files: $actual" >&2; exit 1; }
+# The source tarball is already attached to the release, as in the full path, so it is listed too.
+sums_names="$(awk '{print $2}' "$tmp/final-win/SHA256SUMS" | sed 's|^\./||' | sort | tr '\n' ' ')"
+test "$sums_names" = 'proxor-1.2.3-windows64.zip proxor-1.2.3-winget-x64.zip proxor-1.2.3.tar.gz ' || { echo "unexpected windows-only SHA256SUMS: $sums_names" >&2; exit 1; }
+(cd "$tmp/final-win" && shasum -a 256 -c SHA256SUMS >/dev/null)
+test -f "$tmp/final-win/proxor-1.2.3.tar.gz"
+test -f "$tmp/final-win/recipes/winget-manifests/Ogstra.Proxor.yaml"
+test ! -e "$tmp/final-win/recipes/aur"
+# The full path is unaffected by the flag existing: same checksum list as before.
+grep -q 'proxor-1.2.3-macos-arm64.zip' <<<"$full_sums"
+grep -q 'proxor-1.2.3.flatpak' <<<"$full_sums"
+# The flag is a final-assets option only, and the Windows zips remain mandatory.
+! "$script" prepare-source-release --input "$tmp/in" --version 1.2.3 --output "$tmp/src-win" --windows-only
+mv "$tmp/in/proxor-1.2.3-windows64.zip.d" "$tmp/win-aside"
+if err="$("$script" prepare-final-assets --input "$tmp/in" --version 1.2.3 --output "$tmp/final-win-missing" --public-source-url "$url" --windows-only 2>&1)"; then
+  echo 'a Windows-only release without the Windows zip must be refused' >&2; exit 1
+fi
+grep -qF 'missing *-windows64.zip' <<<"$err"
+mv "$tmp/win-aside" "$tmp/in/proxor-1.2.3-windows64.zip.d"
