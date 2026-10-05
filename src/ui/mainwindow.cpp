@@ -827,7 +827,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         ProxorGui_log::Write(ProxorGui_log::InferLevel(log), log);
         runOnUiThread([=] { show_log_impl(log); });
     };
-    MW_show_log("Platform: " + ProxorPlatform::DescribePlatformEnvironment(ProxorPlatform::CurrentPlatformEnvironment()));
+    // Diagnostic only: goes to the log file, not the window log.
+    ProxorGui_log::Write(ProxorGui_log::Level::Info, "Platform: " + ProxorPlatform::DescribePlatformEnvironment(ProxorPlatform::CurrentPlatformEnvironment()));
     for (const auto &problem : hotkeyProblems) MW_show_log(tr("Hotkeys: %1").arg(problem));
 
     // table UI

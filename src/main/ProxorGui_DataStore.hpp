@@ -174,7 +174,12 @@ namespace ProxorGui {
         bool vpn_internal_tun = true;
         int vpn_implementation = 0;
         int vpn_mtu = 9000;
+#ifdef Q_OS_MACOS
+        // Capture IPv6 too: with only an IPv4 TUN address, IPv6 traffic bypasses the tunnel on macOS.
+        bool vpn_ipv6 = true;
+#else
         bool vpn_ipv6 = false;
+#endif
         bool vpn_hide_console = true;
         bool vpn_strict_route = false;
         bool vpn_rule_white = false;
