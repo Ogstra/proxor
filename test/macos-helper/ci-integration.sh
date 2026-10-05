@@ -292,7 +292,9 @@ fi
 # ---- STEP 7: uninstall command -----------------------------------------------------------------
 as_runner "${CLIENT[@]}" uninstall || fail "uninstall command failed"
 wait_until 15 helper_gone || fail "files remain after the uninstall command: $(ls -d "$PLIST" "$BIN" "$SUP" "$SOCK" 2>/dev/null | tr '\n' ' ')"
-if launchctl print "system/$LABEL" >/dev/null 2>&1; then fail "launchd still knows the service after uninstall"; fi
+# launchd unloads the job asynchronously after the files are gone; give it a bounded moment.
+launchd_forgot() { ! launchctl print "system/$LABEL" >/dev/null 2>&1; }
+wait_until 15 launchd_forgot || fail "launchd still knows the service 15 s after uninstall"
 step 7 "uninstall command"
 
 # ---- STEP 8: reinstall, then the uninstall script (twice: idempotent) --------------------------
