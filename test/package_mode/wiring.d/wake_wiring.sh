@@ -22,7 +22,7 @@ st == 1 && /wakeInstall\(\);/ { ok = 1 }
 END { exit !ok }' "$mw" || fail "mainwindow.cpp: wakeInstall() must sit under the macOS/Linux guard"
 n=$(grep -c 'wakeOwnsSubscriptions()' "$mw" || true)
 [ "$n" -ge 2 ] || fail "mainwindow.cpp: wakeOwnsSubscriptions() must be used by the tick and queue_resume_subscription_check"
-awk '/MainWindow::applicationStateChanged/ { f = 1 } f && /queue_resume_subscription_check\(\)/ { ok = 1 } END { exit !ok }' "$mw" \
+awk '/QGuiApplication::applicationStateChanged/ { f = 1 } f && /queue_resume_subscription_check\(\)/ { ok = 1 } END { exit !ok }' "$mw" \
   || fail "applicationStateChanged must still call queue_resume_subscription_check()"
 
 for s in 'ProxorSleepWake::Install' 'wake_coord.noteSleep' 'wake_coord.noteWake' 'proxor_start(' \
@@ -37,7 +37,7 @@ done
 users=$(grep -rl 'UI_has_due_subscription_updates' "$repo_root/src" | sed "s#^$repo_root/##" | sort | tr '\n' ' ')
 for f in $users; do
   case "$f" in
-    src/sub/GroupUpdater.*|src/ui/mainwindow_wake.cpp) ;;
+    src/sub/GroupUpdater.*|src/ui/mainwindow_wake.cpp|src/platform/WakeSubscriptionRetry.hpp) ;; # the header only names it in a comment
     *) fail "UI_has_due_subscription_updates must only be used by GroupUpdater and mainwindow_wake.cpp (found $f)" ;;
   esac
 done
