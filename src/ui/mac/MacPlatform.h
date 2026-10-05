@@ -21,8 +21,9 @@ public:
     // drawn as a faint ghost, so "running" = both arcs solid, "stopped" = one solid, one faint.
     // Re-renders the last icon immediately.
     void setColored(bool colored);
-    // Monochrome only: false draws the whole glyph dimmer (about 45% of its alpha), true draws it at
-    // full strength, like other VPN apps (dim = disconnected, bright = connected). Default true.
+    // Monochrome only: false makes the system draw the glyph dimmed (NSStatusBarButton.appearsDisabled),
+    // true draws it at full strength, like other VPN apps (dim = disconnected, bright = connected).
+    // Default true.
     void setActive(bool active);
     void setToolTip(const QString &text); // statusItem.button.toolTip
     void setVisible(bool visible);        // statusItem.visible
