@@ -45,7 +45,7 @@ struct StatusItem::Impl {
     // result is black. Saturated pixels (the colored arcs) stay fully opaque; unsaturated ones
     // (the white arc of the idle icon) keep 38% of their alpha as a "ghost", which is what
     // separates the idle glyph from the running one (both arcs solid).
-    static QImage monochrome(const QImage &src) {
+    static QImage monochrome(const QImage &src, bool active) {
         QImage img = src.convertToFormat(QImage::Format_ARGB32);
         for (int y = 0; y < img.height(); ++y) {
             auto *line = reinterpret_cast<QRgb *>(img.scanLine(y));
@@ -55,7 +55,9 @@ struct StatusItem::Impl {
                 if (a == 0) continue;
                 const int mx = qMax(qRed(px), qMax(qGreen(px), qBlue(px)));
                 const int mn = qMin(qRed(px), qMin(qGreen(px), qBlue(px)));
-                const int outA = (mx - mn) > 60 ? a : (a * 38) / 100;
+                int outA = (mx - mn) > 60 ? a : (a * 38) / 100;
+                // Disconnected: the whole glyph at 65% (the system "disabled" look was too dark to read).
+                if (!active) outA = (outA * 65) / 100;
                 line[x] = qRgba(0, 0, 0, outA);
             }
         }
@@ -71,7 +73,7 @@ struct StatusItem::Impl {
         if (pm.isNull()) return;
 
         QImage image = pm.toImage();
-        if (!colored) image = monochrome(image);
+        if (!colored) image = monochrome(image, active);
         CGImageRef cg = image.toCGImage();
         if (!cg) return;
 
@@ -121,9 +123,8 @@ struct StatusItem::Impl {
         item.button.image = finalImage;
         item.button.title = @"";
         item.button.imagePosition = NSImageOnly;
-        // Monochrome: the system dims the glyph while disconnected (native look in light, dark and
-        // translucent menu bars). The colored icon already shows the state by color.
-        item.button.appearsDisabled = (!colored && !active) ? YES : NO;
+        // The disconnected look is drawn into the image (alpha), not through appearsDisabled.
+        item.button.appearsDisabled = NO;
         item.button.imageScaling = NSImageScaleProportionallyDown;
         [nsImage release];
     }

@@ -21,9 +21,8 @@ public:
     // drawn as a faint ghost, so "running" = both arcs solid, "stopped" = one solid, one faint.
     // Re-renders the last icon immediately.
     void setColored(bool colored);
-    // Monochrome only: false makes the system draw the glyph dimmed (NSStatusBarButton.appearsDisabled),
-    // true draws it at full strength, like other VPN apps (dim = disconnected, bright = connected).
-    // Default true.
+    // Monochrome only: false draws the glyph at 65% of its alpha, true at full strength, like other
+    // VPN apps (dim = disconnected, bright = connected). Default true.
     void setActive(bool active);
     // Two-line text (e.g. "12.0K/s↑\n16.0K/s↓") drawn to the right of the icon, like other VPN apps;
     // an empty string removes it and the item goes back to a square icon-only item.
