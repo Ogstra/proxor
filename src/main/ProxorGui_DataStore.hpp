@@ -144,7 +144,12 @@ namespace ProxorGui {
         // Remember
         QStringList remember_spmode = {"vpn"};
         int remember_id = -1919;
+#ifdef Q_OS_MACOS
+        // Reopening Proxor after quitting from the menu bar brings the connection back, like other VPN apps.
+        bool remember_enable = true;
+#else
         bool remember_enable = false;
+#endif
 
         // On-demand WiFi SSID
         bool ssid_on_demand_enabled = false;

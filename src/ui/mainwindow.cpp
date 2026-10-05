@@ -2131,6 +2131,13 @@ void MainWindow::on_commitDataRequest() {
     if (ProxorGui::dataStore->remember_enable && last_id >= 0) {
         ProxorGui::dataStore->remember_id = last_id;
     }
+#ifdef Q_OS_MACOS
+    // Restore the session as it was when Proxor quit: stopped by hand before quitting means no
+    // automatic start next time (the remembered id would otherwise revive an older profile).
+    if (ProxorGui::dataStore->remember_enable && last_id < 0 && ProxorGui::dataStore->remember_id >= 0) {
+        ProxorGui::dataStore->remember_id = -1919;
+    }
+#endif
     //
     ProxorGui::dataStore->Save();
     ProxorGui::profileManager->SaveManager();
