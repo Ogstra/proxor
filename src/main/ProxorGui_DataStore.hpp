@@ -121,6 +121,7 @@ namespace ProxorGui {
         // Menu-bar icon: true = the status-colored icon, false = monochrome template glyph that
         // macOS tints for light/dark menu bars. Monochrome by default, like other menu-bar apps.
         bool tray_icon_colored = false;
+        bool tray_speed_view = false; // macOS: live upload/download speed next to the menu bar icon
 #endif
 
         // Subscription

@@ -127,6 +127,31 @@ void StatusItem::setActive(bool active) {
     d->render();
 }
 
+void StatusItem::setSpeedText(const QString &text) {
+    NSStatusBarButton *button = d->item.button;
+    if (text.isEmpty()) {
+        button.title = @"";
+        button.imagePosition = NSImageOnly;
+        d->item.length = NSSquareStatusItemLength;
+        return;
+    }
+    NSMutableParagraphStyle *style = [[NSMutableParagraphStyle alloc] init];
+    style.alignment = NSTextAlignmentRight;
+    style.maximumLineHeight = 10.0;
+    style.minimumLineHeight = 10.0;
+    NSDictionary *attributes = @{
+        NSFontAttributeName : [NSFont monospacedDigitSystemFontOfSize:9.0 weight:NSFontWeightRegular],
+        NSParagraphStyleAttributeName : style,
+        NSBaselineOffsetAttributeName : @(-5.0), // vertically centers the two 10pt lines in the bar
+    };
+    NSAttributedString *title = [[NSAttributedString alloc] initWithString:text.toNSString() attributes:attributes];
+    button.attributedTitle = title;
+    button.imagePosition = NSImageLeft;
+    d->item.length = NSVariableStatusItemLength;
+    [title release];
+    [style release];
+}
+
 void StatusItem::setToolTip(const QString &text) {
     d->item.button.toolTip = text.toNSString();
 }

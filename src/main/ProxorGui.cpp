@@ -258,6 +258,7 @@ namespace ProxorGui {
         _add(new configItem("ua_include_hwid", &ua_include_hwid, itemType::boolean));
 #ifdef Q_OS_MACOS
         _add(new configItem("tray_icon_colored", &tray_icon_colored, itemType::boolean));
+        _add(new configItem("tray_speed_view", &tray_speed_view, itemType::boolean));
 #endif
         _add(new configItem("last_run_version", &last_run_version, itemType::string));
         _add(new configItem("test_url", &test_latency_url, itemType::string));

@@ -76,6 +76,8 @@ public:
     void refresh_groups();
 
     void refresh_status(const QString &traffic_update = "");
+    // Live proxy speed next to the macOS menu bar icon (no-op elsewhere); clear=true removes it.
+    void update_tray_speed(qint64 uploadBytesPerSecond, qint64 downloadBytesPerSecond, bool clear = false);
 
     void proxor_start(int _id = -1, bool startedByWifiTrigger = false);
 

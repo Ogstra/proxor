@@ -96,6 +96,7 @@ namespace ProxorGui_traffic {
                     runOnUiThread([=] {
                         auto m = GetMainWindow();
                         m->refresh_status("STOP");
+                    m->update_tray_speed(0, 0, true);
                     });
                 }
                 continue;
@@ -130,6 +131,7 @@ namespace ProxorGui_traffic {
                 if (m == nullptr) return;
                 if (proxy != nullptr && ProxorGui::dataStore->traffic_loop_interval != 0) {
                     m->refresh_status(QObject::tr("Proxy: %1\nDirect: %2").arg(proxy->DisplaySpeed(), bypass->DisplaySpeed()));
+                    m->update_tray_speed(proxy->uplink_rate, proxy->downlink_rate);
                 }
                 if (ProxorGui::dataStore->traffic_loop_interval != 0) {
                     QList<int> updatedIds;

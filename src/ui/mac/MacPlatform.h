@@ -25,6 +25,9 @@ public:
     // true draws it at full strength, like other VPN apps (dim = disconnected, bright = connected).
     // Default true.
     void setActive(bool active);
+    // Two-line text (e.g. "12.0K/s↑\n16.0K/s↓") drawn to the right of the icon, like other VPN apps;
+    // an empty string removes it and the item goes back to a square icon-only item.
+    void setSpeedText(const QString &text);
     void setToolTip(const QString &text); // statusItem.button.toolTip
     void setVisible(bool visible);        // statusItem.visible
     [[nodiscard]] bool isVisible() const;

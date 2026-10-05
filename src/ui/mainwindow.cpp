@@ -58,6 +58,7 @@
 #include "sys/macos/MacHelperService.h"
 #include "sys/macos/MacHelperInstaller.h"
 #include "sys/macos/MacLocalNetwork.h"
+#include "platform/TraySpeed.hpp"
 #include "sys/macos/MacScreenCapture.h"
 #endif
 
@@ -2625,6 +2626,21 @@ void MainWindow::syncWindowsHostsMapping(bool enable) {
 #endif
 }
 
+void MainWindow::update_tray_speed(qint64 uploadBytesPerSecond, qint64 downloadBytesPerSecond, bool clear) {
+#ifdef Q_OS_MACOS
+    if (mac_status_item == nullptr) return;
+    if (clear || !ProxorGui::dataStore->tray_speed_view) {
+        mac_status_item->setSpeedText(QString());
+        return;
+    }
+    mac_status_item->setSpeedText(ProxorPlatform::FormatTraySpeed(uploadBytesPerSecond, downloadBytesPerSecond));
+#else
+    Q_UNUSED(uploadBytesPerSecond)
+    Q_UNUSED(downloadBytesPerSecond)
+    Q_UNUSED(clear)
+#endif
+}
+
 void MainWindow::refresh_status(const QString &traffic_update) {
     auto refresh_speed_label = [=] {
         if (traffic_update_cache == "") {
@@ -2725,6 +2741,7 @@ void MainWindow::refresh_status(const QString &traffic_update) {
             mac_status_item->setToolTip(make_title(true));
             mac_status_item->setColored(ProxorGui::dataStore->tray_icon_colored);
             mac_status_item->setActive(icon_status_new != Icon::NONE);
+            if (!ProxorGui::dataStore->tray_speed_view) mac_status_item->setSpeedText(QString());
             if (icon_status_new != icon_status) mac_status_item->setIcon(Icon::GetTrayIcon(icon_status_new));
         }
 #endif

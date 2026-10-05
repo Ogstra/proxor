@@ -490,6 +490,11 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
         trayColored->setToolTip(tr("Off: a monochrome icon that follows the light/dark menu bar."));
         trayColored->setChecked(ProxorGui::dataStore->tray_icon_colored);
         ui->horizontalLayout_tray_icon->insertWidget(1, trayColored);
+        auto *traySpeed = new QCheckBox(tr("Show speed in the menu bar"), ui->tray_icon_box);
+        traySpeed->setObjectName(QStringLiteral("tray_speed_view"));
+        traySpeed->setToolTip(tr("Shows the live upload and download speed next to the icon while a profile is running."));
+        traySpeed->setChecked(ProxorGui::dataStore->tray_speed_view);
+        ui->horizontalLayout_tray_icon->insertWidget(2, traySpeed);
     }
 #endif
     D_LOAD_BOOL(sub_use_proxy)
@@ -625,6 +630,9 @@ void DialogBasicSettings::accept() {
 #ifdef Q_OS_MACOS
     if (auto *trayColored = findChild<QCheckBox *>(QStringLiteral("tray_icon_colored"))) {
         ProxorGui::dataStore->tray_icon_colored = trayColored->isChecked();
+    }
+    if (auto *traySpeed = findChild<QCheckBox *>(QStringLiteral("tray_speed_view"))) {
+        ProxorGui::dataStore->tray_speed_view = traySpeed->isChecked();
     }
 #endif
     D_SAVE_BOOL(sub_use_proxy)
