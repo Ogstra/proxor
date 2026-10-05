@@ -20,7 +20,13 @@ const char kService[] = "org.freedesktop.NetworkManager";
 const char kRootPath[] = "/org/freedesktop/NetworkManager";
 const char kSource[] = "NetworkManager";
 
+constexpr quint32 kNmDeviceStateUnmanaged = 10;
+
 QString Tr(const char *text) { return QCoreApplication::translate("NetworkManagerWifiReader", text); }
+
+QString NoNetworkManagerHint() {
+    return Tr("Proxor reads the Wi-Fi network from NetworkManager; Wi-Fi run by iwd, wpa_supplicant or ConnMan without NetworkManager is not supported.");
+}
 
 struct CallResult {
     bool ok = false;
@@ -149,7 +155,9 @@ WifiReading NetworkManagerWifiReader::read() {
                     break;
                 }
             }
-            return Unavailable(Tr("nmcli failed: %1").arg(line), nmcliSrc);
+            QString detail = Tr("nmcli failed: %1").arg(line);
+            if (line.contains(QLatin1String("NetworkManager is not running"))) detail += QLatin1Char(' ') + NoNetworkManagerHint();
+            return Unavailable(detail, nmcliSrc);
         }
         return ParseNmcliWifiList(proc.readAllStandardOutput());
     };
@@ -168,15 +176,20 @@ WifiReading NetworkManagerWifiReader::read() {
     const QString ifWireless = QStringLiteral("org.freedesktop.NetworkManager.Device.Wireless");
     const QString ifAp = QStringLiteral("org.freedesktop.NetworkManager.AccessPoint");
 
-    bool sawWifi = false;
+    int wifiDevices = 0;
+    int unmanagedWifi = 0;
     for (const QString &dev : DevicePaths(devs.value)) {
         CallResult type = c.get(dev, ifDevice, QStringLiteral("DeviceType"));
         if (type.timedOut || c.expired()) return Unavailable(timeoutText, src);
         if (!type.ok || type.value.toUInt() != 2) continue;
-        sawWifi = true;
+        ++wifiDevices;
 
         CallResult state = c.get(dev, ifDevice, QStringLiteral("State"));
         if (state.timedOut) return Unavailable(timeoutText, src);
+        if (state.ok && state.value.toUInt() == kNmDeviceStateUnmanaged) {
+            ++unmanagedWifi;
+            continue;
+        }
         if (!state.ok || state.value.toUInt() != 100) continue;
 
         CallResult ap = c.get(dev, ifWireless, QStringLiteral("ActiveAccessPoint"));
@@ -192,6 +205,8 @@ WifiReading NetworkManagerWifiReader::read() {
             return NotConnected(Tr("Connected to a hidden Wi-Fi network whose name NetworkManager does not report."), src);
         return Connected(decoded, src);
     }
-    if (!sawWifi) return NotConnected(Tr("No Wi-Fi adapter found."), src);
+    if (wifiDevices == 0) return NotConnected(Tr("No Wi-Fi adapter found."), src);
+    if (unmanagedWifi == wifiDevices)
+        return Unavailable(Tr("NetworkManager does not manage this computer's Wi-Fi adapter (another program such as iwd or wpa_supplicant runs it), so Proxor cannot see the Wi-Fi network.") + QLatin1Char(' ') + NoNetworkManagerHint(), src);
     return NotConnected(QString(), src);
 }

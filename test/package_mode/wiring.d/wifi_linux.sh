@@ -16,7 +16,7 @@ done
 grep -qF '/.flatpak-info' "$repo_root/src/sys/wifi/WifiBackendLinux.cpp" || fail "Linux backend lost the Flatpak detection"
 grep -qF 'systemBus()' "$repo_root/src/sys/wifi/WifiBackendLinux.cpp" || fail "Linux backend must use the system bus"
 nm="$repo_root/src/sys/wifi/WifiBackendNetworkManager.cpp"
-for needle in 'LC_ALL' '--rescan' 'org.freedesktop.NetworkManager.Device.Wireless'; do
+for needle in 'LC_ALL' '--rescan' 'org.freedesktop.NetworkManager.Device.Wireless' 'kNmDeviceStateUnmanaged' 'NoNetworkManagerHint'; do
   grep -qF -- "$needle" "$nm" || fail "WifiBackendNetworkManager.cpp lost $needle"
 done
 grep -qxF '  - --system-talk-name=org.freedesktop.NetworkManager' "$repo_root/packaging/flatpak/io.github.Ogstra.Proxor.yml" \
