@@ -29,8 +29,8 @@ struct WakeObservation {
     WakeReachability reachability = WakeReachability::Unknown;
     bool blocked = false;       // startup Tun pending/failed, or exiting: the run ends without acting
     bool startPending = false;  // a profile start is in flight: never act during it
-    bool coreRunning = false;   // dataStore->core_running
-    int runningProfileId = -1;  // dataStore->started_id
+    bool coreRunning = false;   // the core process is up and its gRPC server listens
+    int runningProfileId = -1;  // id of the profile that runs now, -1 if none
 };
 enum class WakeAction { Wait, RestartProfile, CheckModes, UpdateSubscriptions, Finished };
 enum class WakeNote { None, Blocked, NetworkTimedOut, RunTimedOut, CoreRestarting };
