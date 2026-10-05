@@ -1313,12 +1313,22 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         const bool resumed = subscription_timer_last_tick_ms > 0 && now - subscription_timer_last_tick_ms > 70 * 1000;
         subscription_timer_last_tick_ms = now;
         if (resumed) {
+#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
+            wakeDetected(ProxorPlatform::WakeSource::TimerGap);
+#else
             queue_resume_subscription_check();
+#endif
             return;
         }
+#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
+        if (wakeOwnsSubscriptions()) return; // the wake run updates subscriptions until it finishes
+#endif
         if (!startup_tun_pending && !startup_tun_failed) UI_update_due_groups_on_timer();
     });
     TM_auto_update_subsctiption_Reset_Minute(ProxorGui::dataStore->sub_auto_update);
+#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
+    wakeInstall();
+#endif
     #if QT_VERSION >= QT_VERSION_CHECK(6, 4, 0)
     const bool niLoaded = QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability);
     #elif QT_VERSION >= QT_VERSION_CHECK(6, 3, 0)
@@ -1810,6 +1820,9 @@ void MainWindow::update_connection_statistics_polling_state() {
 }
 
 void MainWindow::queue_resume_subscription_check() {
+#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
+    if (wakeOwnsSubscriptions()) return;
+#endif
     if (subscription_resume_check_pending || !UI_has_scheduled_subscription_updates()) return;
     subscription_resume_check_pending = true;
     setTimeout([this] {
