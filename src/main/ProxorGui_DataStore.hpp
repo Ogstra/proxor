@@ -179,6 +179,10 @@ namespace ProxorGui {
 #ifdef Q_OS_MACOS
         // Capture IPv6 too: with only an IPv4 TUN address, IPv6 traffic bypasses the tunnel on macOS.
         bool vpn_ipv6 = true;
+#elif defined(Q_OS_LINUX)
+        // Same leak on Linux (auto_route adds no IPv6 routes without an IPv6 TUN address). ConfigBuilder
+        // drops the IPv6 address when the kernel has IPv6 disabled (ProxorPlatform::EffectiveTunIpv6).
+        bool vpn_ipv6 = true;
 #else
         bool vpn_ipv6 = false;
 #endif

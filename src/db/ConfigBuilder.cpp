@@ -3,6 +3,8 @@
 #include "fmt/includes.h"
 #include "fmt/Preset.hpp"
 #include "platform/AutoBypass.hpp"
+#include "platform/TunAddress.hpp"
+#include "sys/LogFile.hpp"
 #include "sys/WifiMonitor.hpp"
 
 #include <QApplication>
@@ -78,9 +80,20 @@ namespace ProxorGui {
     }
 
     QJsonArray BuildTunAddressArray(bool includeIPv6) {
-        QJsonArray addresses{"172.19.0.1/28"};
-        if (includeIPv6) addresses += "fdfe:dcba:9876::1/126";
+        QJsonArray addresses;
+        for (const auto &address : ProxorPlatform::TunAddresses(includeIPv6)) addresses += address;
         return addresses;
+    }
+
+    // The user's IPv6 setting, minus the case where the Linux kernel cannot give the Tun interface an IPv6
+    // address (sing-tun aborts Tun start on that error). Other OSes: the setting unchanged.
+    bool TunIncludesIpv6() {
+        const auto os = ProxorPlatform::CompiledHostOs();
+        const auto state = os == ProxorPlatform::HostOs::Linux ? ProxorPlatform::ReadIpv6KernelState(QStringLiteral("/"))
+                                                               : ProxorPlatform::Ipv6KernelState::Unknown;
+        const bool effective = ProxorPlatform::EffectiveTunIpv6(os, dataStore->vpn_ipv6, state);
+        if (dataStore->vpn_ipv6 && !effective) ProxorGui_log::WriteDiagnostic(ProxorPlatform::TunIpv6DroppedNotice());
+        return effective;
     }
 
     QJsonArray BuildSshRouteExclusions() {
@@ -532,6 +545,12 @@ namespace ProxorGui {
     // SingBox
 
     void BuildConfigSingBox(const std::shared_ptr<BuildConfigStatus> &status) {
+        // One decision (and at most one diagnostic line) per config build, shared by tun-in and the reject rule.
+        int tunIpv6Cache = -1;
+        const auto tunIpv6 = [&tunIpv6Cache]() {
+            if (tunIpv6Cache < 0) tunIpv6Cache = TunIncludesIpv6() ? 1 : 0;
+            return tunIpv6Cache == 1;
+        };
         // Log
         status->result->coreConfig["log"] = QJsonObject{{"level", dataStore->log_level}};
 
@@ -566,7 +585,7 @@ namespace ProxorGui {
             inboundObj["mtu"] = dataStore->vpn_mtu;
             inboundObj["stack"] = Preset::SingBox::VpnImplementation.value(dataStore->vpn_implementation);
             inboundObj["strict_route"] = dataStore->vpn_strict_route;
-            inboundObj["address"] = BuildTunAddressArray(dataStore->vpn_ipv6);
+            inboundObj["address"] = BuildTunAddressArray(tunIpv6());
             auto routeExclusions = BuildTunRouteExclusions();
 #ifdef Q_OS_WIN
             // Exclude Windows NCSI/NLA probe destinations from the TUN default route so they
@@ -877,7 +896,7 @@ namespace ProxorGui {
         // addresses must not reach the proxy outbound (would crash it); covers all configured
         // TUN addresses including IPv6, regardless of process or port
         status->routingRules += QJsonObject{
-            {"ip_cidr", BuildTunAddressArray(dataStore->vpn_ipv6)},
+            {"ip_cidr", BuildTunAddressArray(tunIpv6())},
             {"action", "reject"},
         };
 
@@ -1009,7 +1028,7 @@ namespace ProxorGui {
             socks_user_pass = socks_user_pass.arg(dataStore->inbound_auth->username, dataStore->inbound_auth->password);
         }
 
-        const auto tunAddresses = QJsonArray2QStringCompact(BuildTunAddressArray(dataStore->vpn_ipv6));
+        const auto tunAddresses = QJsonArray2QStringCompact(BuildTunAddressArray(TunIncludesIpv6()));
         const auto dnsRemote = QJsonObject2QString(BuildTypedDnsServer("dns-remote", dataStore->routing->remote_dns, "proxor-socks", dataStore->routing->remote_dns_strategy), true);
         const auto dnsDirect = QJsonObject2QString(BuildTypedDnsServer("dns-direct", "local", {}, dataStore->routing->direct_dns_strategy), true);
         const auto dnsLocal = QJsonObject2QString(BuildTypedDnsServer("dns-local", BOX_UNDERLYING_DNS), true);
