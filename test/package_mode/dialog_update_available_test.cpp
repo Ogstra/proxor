@@ -31,6 +31,14 @@ private slots:
     void guidanceRowSitsAboveButtonBox();
     void homebrewGuidanceShowsBrewCommandWithCopyButton();
     void macAppGuidanceShowsSentenceOnly();
+    void updateFailureTextNamesStageAndError();
+    void keepsWorkingTextNamesTheVersion();
+    void manualDownloadUrlPrefersTheReleasePage();
+    void failedDialogShowsErrorKeepsWorkingAndUrl();
+    void downloadManuallyOpensTheUrlAndCloses();
+    void downloadManuallyStaysOpenWhenTheBrowserFails();
+    void closeButtonRejects();
+    void showUpdateFailedDialogIsNonModalAndDeletesOnClose();
 };
 
 void DialogUpdateAvailableTest::emptyGuidanceHasNoRowAndRespectsAllowUpdater() {
@@ -138,6 +146,95 @@ void DialogUpdateAvailableTest::macAppGuidanceShowsSentenceOnly() {
     QVERIFY(dialog.findChild<QLineEdit *>("lineEditGuidance") == nullptr);
     QVERIFY(dialog.findChild<QPushButton *>("buttonCopyGuidance") == nullptr);
     QVERIFY(findButtonByText(dialog, QObject::tr("Download and Restart")) == nullptr);
+}
+
+void DialogUpdateAvailableTest::updateFailureTextNamesStageAndError() {
+    const auto check = UpdateFailureText(UpdateFailureStage::Check, "boom");
+    QVERIFY(check.contains("Proxor could not check for updates: boom"));
+    const auto dl = UpdateFailureText(UpdateFailureStage::Download, "boom");
+    QVERIFY(dl.contains("The update could not be downloaded: boom"));
+    const auto inst = UpdateFailureText(UpdateFailureStage::Install, "boom");
+    QVERIFY(inst.contains("The update was downloaded but could not be installed: boom"));
+    QVERIFY(UpdateFailureText(UpdateFailureStage::Download, "").contains("unknown error"));
+    QVERIFY(UpdateFailureText(UpdateFailureStage::Check, "   ").contains("unknown error"));
+}
+
+void DialogUpdateAvailableTest::keepsWorkingTextNamesTheVersion() {
+    const auto text = UpdateKeepsWorkingText("1.6.14");
+    QVERIFY(text.contains("1.6.14"));
+    QVERIFY(text.contains("keeps working"));
+}
+
+void DialogUpdateAvailableTest::manualDownloadUrlPrefersTheReleasePage() {
+    const QString tag = "https://github.com/Ogstra/proxor/releases/tag/v1.6.14";
+    QCOMPARE(UpdateManualDownloadUrl(tag), QUrl(tag));
+    const QUrl fallback(QString::fromLatin1(kProxorReleasesPage));
+    const QStringList bad = {"", "http://github.com/Ogstra/proxor/releases/tag/v1",
+                             "https://evil.example/Ogstra/proxor/releases",
+                             "https://github.com/Other/proxor/releases", "not a url"};
+    for (const auto &b : bad) QCOMPARE(UpdateManualDownloadUrl(b), fallback);
+}
+
+void DialogUpdateAvailableTest::failedDialogShowsErrorKeepsWorkingAndUrl() {
+    DialogUpdateFailed dialog(UpdateFailureStage::Download, "disk full", "1.6.14", "", nullptr,
+                              [](const QUrl &) { return true; });
+    QCOMPARE(dialog.windowTitle(), QStringLiteral("Update failed"));
+    auto *err = dialog.findChild<QLabel *>("labelUpdateFailedError");
+    QVERIFY(err != nullptr);
+    QVERIFY(err->text().contains("The update could not be downloaded: disk full"));
+    auto *keeps = dialog.findChild<QLabel *>("labelUpdateFailedKeepsWorking");
+    QVERIFY(keeps != nullptr);
+    QVERIFY(keeps->text().contains("1.6.14"));
+    auto *edit = dialog.findChild<QLineEdit *>("lineEditManualUrl");
+    QVERIFY(edit != nullptr);
+    QVERIFY(edit->isReadOnly());
+    QCOMPARE(edit->text(), dialog.manualDownloadUrl().toString());
+    QVERIFY(findButtonByText(dialog, QStringLiteral("Download and Restart")) == nullptr);
+}
+
+void DialogUpdateAvailableTest::downloadManuallyOpensTheUrlAndCloses() {
+    QUrl opened;
+    DialogUpdateFailed dialog(UpdateFailureStage::Install, "x", "1.6.14", "", nullptr,
+                              [&opened](const QUrl &u) { opened = u; return true; });
+    auto *button = dialog.findChild<QPushButton *>("buttonDownloadManually");
+    QVERIFY(button != nullptr);
+    button->click();
+    QCOMPARE(opened, QUrl(QString::fromLatin1(kProxorReleasesPage)));
+    QCOMPARE(dialog.result(), static_cast<int>(QDialog::Accepted));
+}
+
+void DialogUpdateAvailableTest::downloadManuallyStaysOpenWhenTheBrowserFails() {
+    DialogUpdateFailed dialog(UpdateFailureStage::Install, "x", "1.6.14", "", nullptr,
+                              [](const QUrl &) { return false; });
+    auto *button = dialog.findChild<QPushButton *>("buttonDownloadManually");
+    QVERIFY(button != nullptr);
+    button->click();
+    QVERIFY(dialog.result() != static_cast<int>(QDialog::Accepted));
+}
+
+void DialogUpdateAvailableTest::closeButtonRejects() {
+    DialogUpdateFailed dialog(UpdateFailureStage::Check, "x", "1.6.14", "", nullptr,
+                              [](const QUrl &) { return true; });
+    auto *button = dialog.findChild<QPushButton *>("buttonUpdateFailedClose");
+    QVERIFY(button != nullptr);
+    button->click();
+    QCOMPARE(dialog.result(), static_cast<int>(QDialog::Rejected));
+}
+
+void DialogUpdateAvailableTest::showUpdateFailedDialogIsNonModalAndDeletesOnClose() {
+    ShowUpdateFailedDialog(nullptr, UpdateFailureStage::Download, "x", "1.6.14", "");
+    QList<DialogUpdateFailed *> found;
+    for (auto *w : QApplication::topLevelWidgets()) {
+        if (auto *d = qobject_cast<DialogUpdateFailed *>(w); d && d->isVisible()) found << d;
+    }
+    QCOMPARE(found.size(), 1);
+    QPointer<DialogUpdateFailed> dialog = found.first();
+    QVERIFY(!dialog->isModal());
+    QVERIFY(dialog->testAttribute(Qt::WA_DeleteOnClose));
+    dialog->close();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QTest::qWait(0);
+    QVERIFY(dialog.isNull());
 }
 
 QTEST_MAIN(DialogUpdateAvailableTest)

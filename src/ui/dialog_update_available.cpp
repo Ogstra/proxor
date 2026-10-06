@@ -291,3 +291,23 @@ DialogUpdateAvailable::DialogUpdateAvailable(
 DialogUpdateAvailable::~DialogUpdateAvailable() {
     delete ui;
 }
+
+// ---- Update failure dialog (phase 57) ----
+
+QString UpdateFailureText(UpdateFailureStage stage, const QString &error) {
+    return {};
+}
+
+QString UpdateKeepsWorkingText(const QString &currentVersion) {
+    return {};
+}
+
+QUrl UpdateManualDownloadUrl(const QString &releaseUrl) {
+    return QUrl();
+}
+
+DialogUpdateFailed::DialogUpdateFailed(UpdateFailureStage, const QString &, const QString &, const QString &,
+                                       QWidget *parent, UrlOpener)
+    : QDialog(parent) {}
+
+void ShowUpdateFailedDialog(QWidget *, UpdateFailureStage, const QString &, const QString &, const QString &) {}
