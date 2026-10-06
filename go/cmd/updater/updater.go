@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/codeclysm/extract"
@@ -17,6 +18,41 @@ import (
 const (
 	updateExtractDir = "./update-package"
 )
+
+const releasesPageURL = "https://github.com/Ogstra/proxor/releases" // lists prereleases too (/latest would hide them)
+const updateErrorFile = "./update-error.txt"
+const headlessEnv = "PROXOR_UPDATER_HEADLESS"
+
+const (
+	replaceAttemptsWindows = 20
+	replaceRetryDelay      = 250 * time.Millisecond // 20 x 250 ms = 5 s per file
+)
+
+// Test seams: single-line declarations, assigned only from _test.go files.
+var hostGOOS = runtime.GOOS
+var replaceRemoveAll = os.RemoveAll
+var replaceRename = os.Rename
+var replaceSleep = time.Sleep
+
+func replaceAttempts(goos string) int { return 1 }
+
+type failurePlan struct {
+	message        string // logged; shown and written to update-error.txt on Windows
+	dialog         bool   // Windows and not headless: ask to open releasesPageURL
+	relaunch       bool   // Windows and !moved: start the (unchanged) ./proxor.exe again
+	writeErrorFile bool   // Windows
+	exitCode       int    // 0 when relaunching, else 1
+}
+
+func planAfterFailure(goos string, moved bool, err error, headless bool, installDir string) failurePlan {
+	return failurePlan{}
+}
+
+func applyUpdate() (bool, error) { return false, errors.New("not implemented") }
+
+func validatePayload(root, goos string) error { return nil }
+
+func runUpdate() bool { return false }
 
 func ShouldUpdate(currentVersion, latestVersion string, allowPreReleases bool) (bool, error) {
 	current, err := parseSemVer(currentVersion)
