@@ -3,6 +3,7 @@
 #include "fmt/includes.h"
 #include "fmt/Preset.hpp"
 #include "platform/AutoBypass.hpp"
+#include "platform/LocalNetworksApp.hpp"
 #include "platform/TunAddress.hpp"
 #include "sys/LogFile.hpp"
 #include "sys/WifiMonitor.hpp"
@@ -110,14 +111,17 @@ namespace ProxorGui {
 
     QJsonArray BuildTunRouteExclusions() {
         QJsonArray exclusions{
-            "10.0.0.0/8",      // RFC 1918
-            "172.16.0.0/12",   // RFC 1918
-            "192.168.0.0/16",  // RFC 1918
             "100.64.0.0/10",   // carrier-grade NAT, commonly used by Tailscale/WireGuard
             "169.254.0.0/16",  // IPv4 link-local
             "fc00::/7",        // IPv6 unique local
             "fe80::/10",       // IPv6 link-local
         };
+        // Only the private networks this machine is attached to stay local. Other private ranges, for
+        // example 10.10.10.0/24 behind the proxy server, go through the tunnel.
+        const auto attached = ProxorPlatform::CurrentPrivateNetworks();
+        for (const auto &cidr : attached) exclusions += cidr;
+        ProxorGui_log::WriteDiagnostic(QStringLiteral("Tun: local networks kept out of the tunnel: %1")
+                                           .arg(attached.isEmpty() ? QStringLiteral("(none)") : attached.join(QStringLiteral(", "))));
         for (const auto &route : BuildSshRouteExclusions()) exclusions += route;
         return exclusions;
     }

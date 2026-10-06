@@ -59,6 +59,7 @@
 #include "sys/macos/MacHelperInstaller.h"
 #include "sys/macos/MacLocalNetwork.h"
 #include "platform/TraySpeed.hpp"
+#include "platform/LocalNetworksApp.hpp"
 #include "sys/macos/MacScreenCapture.h"
 #endif
 
@@ -4414,7 +4415,8 @@ void MainWindow::macOnHelperLost() {
 }
 
 void MainWindow::macApplySystemProxy(bool interactive, bool saved) {
-    MacHelperSvc()->sysproxyApply(this, ProxorGui::dataStore->inbound_socks_port, MacDefaultProxyBypass(), 20000,
+    MacHelperSvc()->sysproxyApply(this, ProxorGui::dataStore->inbound_socks_port,
+                                   ProxorPlatform::ReplaceBlanketPrivateRanges(MacDefaultProxyBypass(), ProxorPlatform::CurrentPrivateNetworks()), 20000,
                                   [this, interactive, saved](const MacHelperService::Reply &r) {
         if (!r.ok) {
             if (interactive) {
