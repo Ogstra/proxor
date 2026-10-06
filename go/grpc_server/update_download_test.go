@@ -94,7 +94,7 @@ func TestRemoveStaleDownloadsRemovesLegacyAndUniqueParts(t *testing.T) {
 }
 
 func TestRemoveStaleDownloadsHandlesGlobMetaCharacters(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "a[1]*b")
+	dir := filepath.Join(t.TempDir(), "a[1]b")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

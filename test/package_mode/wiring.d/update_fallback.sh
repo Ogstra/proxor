@@ -37,6 +37,6 @@ in_win 'QString update_release_url;' "$mwh" || fail "update_release_url must be 
 expected="$repo_root/src/ui/dialog_update_available.cpp
 $repo_root/src/ui/mainwindow.cpp
 $repo_root/src/ui/mainwindow_grpc.cpp"
-found=$(grep -rl 'ShowUpdateFailedDialog(' "$repo_root/src" | grep -v 'dialog_update_available\.h$' | sort || true)
+found=$(grep -rl 'ShowUpdateFailedDialog(' "$repo_root/src" | grep -v 'dialog_update_available\.h$' | LC_ALL=C sort || true)
 [ "$found" = "$expected" ] || fail "unexpected ShowUpdateFailedDialog( users: $found"
 echo "update_fallback: OK"
