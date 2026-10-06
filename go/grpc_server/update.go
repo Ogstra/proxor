@@ -29,6 +29,18 @@ const (
 	updateUserAgentPrefix = "Proxor-Updater/"
 )
 
+// Test seams: single-line declarations, assigned only from _test.go files (guarded by a test and by phase-proof.sh).
+var updateAPIBaseURL = "https://api.github.com"
+var updateGOOS = runtime.GOOS
+var updateGOARCH = runtime.GOARCH
+var retrySleep = time.Sleep
+
+const (
+	renameAttempts   = 12
+	renameFirstDelay = 100 * time.Millisecond
+	renameMaxDelay   = 2 * time.Second
+)
+
 type githubReleaseAsset struct {
 	Name               string `json:"name"`
 	BrowserDownloadURL string `json:"browser_download_url"`
@@ -687,4 +699,12 @@ func renameWithRetry(from, to string) error {
 		time.Sleep(200 * time.Millisecond)
 	}
 	return err
+}
+
+func renameRetryDelay(n int) time.Duration { return 0 }
+
+func removeStaleDownloads(destination string) {}
+
+func moveVerifiedDownload(tempPath, destination, wantDigestHex string) error {
+	return renameWithRetry(tempPath, destination)
 }

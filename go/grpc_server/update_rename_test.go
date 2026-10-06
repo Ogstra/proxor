@@ -26,12 +26,19 @@ func TestRenameWithRetryRecoversFromTransientLock(t *testing.T) {
 }
 
 func TestRenameWithRetryGivesUpWithTheLastError(t *testing.T) {
+	stubRetrySleep(t)
 	want := errors.New("still locked")
 	old := renameFile
 	renameFile = func(from, to string) error { return want }
+	calls := 0
+	inner := renameFile
+	renameFile = func(from, to string) error { calls++; return inner(from, to) }
 	defer func() { renameFile = old }()
 
 	if err := renameWithRetry("a.part", "a.zip"); !errors.Is(err, want) {
 		t.Fatalf("expected the last error, got %v", err)
+	}
+	if calls != renameAttempts {
+		t.Fatalf("expected %d attempts, got %d", renameAttempts, calls)
 	}
 }
