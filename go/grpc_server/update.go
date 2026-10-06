@@ -388,7 +388,7 @@ func downloadDestination(downloadDir, assetName string) (string, error) {
 		return "", fmt.Errorf("download directory %q is not usable: %w", downloadDir, err)
 	}
 	if !info.IsDir() {
-		return "", fmt.Errorf("download directory %q is not a directory", downloadDir)
+		return "", fmt.Errorf("download directory \"%s\" is not a directory", downloadDir)
 	}
 
 	probe, err := os.CreateTemp(downloadDir, ".proxor-update-write-check-*")
