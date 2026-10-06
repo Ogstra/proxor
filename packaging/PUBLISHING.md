@@ -5,6 +5,18 @@ This runbook covers the AUR, winget and Homebrew tap channels. It starts only af
 approved. Review the release report and every entry in
 `SHA256SUMS`; corrections require a new reviewed version, never asset replacement.
 
+## Before publishing: in-app update gate
+
+- [ ] The `Windows update E2E` job (`update-e2e-windows`) is green for the release commit on a non-publishing
+      dispatch (`gh workflow run build-proxor-cmake.yml --ref <branch>`, no inputs). It runs the candidate's own
+      update path (check, download, SHA256SUMS verification, rename while a scanner holds the file, apply with the
+      candidate `updater.exe`) against a local fake release server; `package-windows`, and through it
+      `publish-release`, need it, so a red job blocks the release.
+
+Windows installs of Proxor 1.6.11 or older cannot finish an in-app update (rename of `update-package.zip.part`
+fails with "being used by another process"): their users close Proxor, download `proxor-<version>-windows64.zip`
+from the release page and extract its `proxor` folder over the install folder (`config` keeps their settings).
+
 ## Review gates
 
 1. Confirm the public release assets, provenance report, and checksums.
