@@ -1151,7 +1151,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         [this] { return ProxorGui::dataStore->started_id >= 0; },
         [this](bool sp, bool tun) { macPauseModes(sp, tun); },
         [this](bool sp, bool tun) { macResumeModes(sp, tun); },
-    }, kMacPauseGraceMs, this);
+    }, kMacUserStopGraceMs, this);
 #endif
     connect(ui->checkBox_SystemProxy, &QCheckBox::clicked, this, [=](bool checked) { proxor_set_spmode_system_proxy(checked); });
     connect(ui->menu_spmode, &QMenu::aboutToShow, this, [=]() {

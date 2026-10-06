@@ -6,7 +6,8 @@
 // A user stop (sem=false, not exit) schedules a pause after kMacPauseGraceMs; a start inside the
 // grace period cancels it, so stop -> start in quick succession causes zero helper calls. If the
 // stop stage outlives the grace period the coordinator waits for profileStopped() and re-arms the
-// full grace period from there.
+// full grace period from there. With graceMs <= 0 (the user-stop setting) the pause happens at once,
+// before the core stops; a failed stop (profile still running) resumes what was paused.
 
 #include <QObject>
 #include <QTimer>
@@ -44,6 +45,7 @@ public:
 
 private:
     void onGraceTimeout();
+    void pauseNow(); // evaluate the modes and pause what is on, without waiting
     void schedule();
 
     Hooks hooks_;

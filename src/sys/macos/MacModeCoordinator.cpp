@@ -17,11 +17,22 @@ void MacModeCoordinator::profileStopping(bool sem, bool prepareExit) {
     // Restart/switch (sem) and exit never pause: they stop and start the profile themselves.
     if (sem || prepareExit) return;
     stopInFlight_ = true;
+    if (graceMs_ <= 0) {
+        // No grace period: the modes are paused right now, before the core stops listening, so there
+        // is no window in which the Tun swallows traffic that has nowhere to go.
+        pauseNow();
+        return;
+    }
     schedule();
 }
 
 void MacModeCoordinator::profileStopped() {
     stopInFlight_ = false;
+    // A stop that failed leaves the profile running: undo an immediate pause.
+    if (graceMs_ <= 0 && hooks_.profileRunning && hooks_.profileRunning()) {
+        profileStarted();
+        return;
+    }
     // The grace timer fired while the stop stage was still running: re-arm the full grace from
     // here (never pause directly) so a start right after a slow stop still cancels the pause.
     if (waitingForStop_) schedule();
@@ -71,6 +82,15 @@ void MacModeCoordinator::reset() {
     waitingForStop_ = false;
     systemProxyParked_ = false;
     tunPaused_ = false;
+}
+
+void MacModeCoordinator::pauseNow() {
+    const bool sp = hooks_.systemProxyOn && hooks_.systemProxyOn() && !systemProxyParked_;
+    const bool tun = hooks_.tunOn && hooks_.tunOn() && hooks_.tunActive && hooks_.tunActive();
+    if (!sp && !tun) return;
+    if (sp) systemProxyParked_ = true;
+    if (tun) tunPaused_ = true;
+    if (hooks_.pause) hooks_.pause(sp, tun);
 }
 
 void MacModeCoordinator::onGraceTimeout() {

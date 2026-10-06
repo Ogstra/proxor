@@ -69,6 +69,9 @@ QStringList MacDefaultProxyBypass();
 // A user stop pauses System Proxy / Tun only after this grace period; a start inside it cancels
 // the pause, so a quick stop -> start never touches the helper.
 constexpr int kMacPauseGraceMs = 750;
+// A manual Stop pauses Tun and System Proxy immediately: waiting leaves a window where the Tun still
+// captures traffic that the stopped profile can no longer carry (no DNS for a moment).
+constexpr int kMacUserStopGraceMs = 0;
 
 enum class MacStartupInstallAction { None, Prompt, LogOnly };
 

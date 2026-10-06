@@ -58,6 +58,9 @@ private slots:
     void runningAfterStoppedNoPause();
     void startDuringFlightCancels();
     void slowStopWaitsEvenWhenAlreadyNotRunning();
+    void immediatePauseWhenGraceIsZero();
+    void immediatePauseFailedStopResumes();
+    void immediatePauseThenStartResumes();
 };
 
 void MacModeCoordinatorTest::userStopPausesAfterGrace() {
@@ -360,4 +363,48 @@ void MacModeCoordinatorTest::slowStopWaitsEvenWhenAlreadyNotRunning() {
 }
 
 QTEST_GUILESS_MAIN(MacModeCoordinatorTest)
+void MacModeCoordinatorTest::immediatePauseWhenGraceIsZero() {
+    Fake f;
+    f.running = true;
+    MacModeCoordinator c(f.hooks(), 0);
+    c.profileStopping(false, false);
+    // Paused synchronously, while the profile is still running: no window after the core stops.
+    QCOMPARE(f.pauses.size(), 1);
+    QCOMPARE(f.pauses.first(), Call(true, true));
+    QVERIFY(c.systemProxyParked());
+    QVERIFY(c.tunPaused());
+    f.running = false;
+    c.profileStopped();
+    QTest::qWait(50);
+    QCOMPARE(f.pauses.size(), 1);
+    QVERIFY(f.resumes.isEmpty());
+}
+
+void MacModeCoordinatorTest::immediatePauseFailedStopResumes() {
+    Fake f;
+    f.running = true;
+    MacModeCoordinator c(f.hooks(), 0);
+    c.profileStopping(false, false);
+    QCOMPARE(f.pauses.size(), 1);
+    c.profileStopped(); // the profile is still running: the stop failed
+    QCOMPARE(f.resumes.size(), 1);
+    QCOMPARE(f.resumes.first(), Call(true, true));
+    QVERIFY(!c.tunPaused());
+    QVERIFY(!c.systemProxyParked());
+}
+
+void MacModeCoordinatorTest::immediatePauseThenStartResumes() {
+    Fake f;
+    f.running = true;
+    MacModeCoordinator c(f.hooks(), 0);
+    c.profileStopping(false, false);
+    f.running = false;
+    c.profileStopped();
+    c.profileStarting();
+    f.running = true;
+    c.profileStarted();
+    QCOMPARE(f.resumes.size(), 1);
+    QCOMPARE(f.resumes.first(), Call(true, true));
+}
+
 #include "mac_mode_coordinator_test.moc"
