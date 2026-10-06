@@ -46,6 +46,9 @@ void AllowQuit();
 // Calls onReopen on the UI thread each time the user reopens Proxor (Dock icon click, `open -a` on the
 // running app): an NSAppleEventManager handler for kAEReopenApplication, installed once the event loop runs.
 // Never fires at launch. onReopen decides whether anything must be shown.
+// Dock icon on or off for a menu-bar app: false = accessory (no Dock icon, no app menu bar), true = regular.
+// Showing the window brings the Dock icon back and activates the app. Main thread only.
+void SetDockIconVisible(bool visible);
 void InstallReopenHandler(QObject *owner, std::function<void()> onReopen);
 
 // Pops `menu` up as a native NSMenu just below `anchor` (a widget of a visible window) and returns

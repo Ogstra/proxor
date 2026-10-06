@@ -285,4 +285,14 @@ void PopupMenu(QMenu *menu, QWidget *anchor) {
     PopupMenuAt(menu, anchor, QPoint(0, anchor->height() + 2));
 }
 
+
+void SetDockIconVisible(bool visible) {
+    const NSApplicationActivationPolicy wanted =
+        visible ? NSApplicationActivationPolicyRegular : NSApplicationActivationPolicyAccessory;
+    if (NSApp.activationPolicy == wanted) return;
+    [NSApp setActivationPolicy:wanted];
+    // A regular app that just appeared in the Dock must also come to the front.
+    if (visible) [NSApp activateIgnoringOtherApps:YES];
+}
+
 }

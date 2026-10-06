@@ -1101,6 +1101,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     mac_status_item->setIcon(Icon::GetTrayIcon(Icon::NONE));
     mac_status_item->setMenu(mac_tray_menu);
     mac_status_item->setVisible(true);
+    // Started hidden in the menu bar (-tray): no Dock icon until the window is shown.
+    QTimer::singleShot(0, this, [this] {
+        if (!isVisible() && !isMinimized()) ProxorMac::SetDockIconVisible(false);
+    });
     ProxorMac::InstallQuitInterceptor(this, [this] {
         if (!ProxorGui::dataStore->prepare_exit) on_menu_exit_triggered();
     });
@@ -1485,6 +1489,9 @@ void MainWindow::changeEvent(QEvent *event) {
 void MainWindow::showEvent(QShowEvent *event) {
     QMainWindow::showEvent(event);
     update_connection_statistics_polling_state();
+#ifdef Q_OS_MACOS
+    ProxorMac::SetDockIconVisible(true);
+#endif
 #ifdef Q_OS_WIN
     themeManager->ReapplyTitleBar();
 #endif
@@ -1493,6 +1500,10 @@ void MainWindow::showEvent(QShowEvent *event) {
 void MainWindow::hideEvent(QHideEvent *event) {
     QMainWindow::hideEvent(event);
     update_connection_statistics_polling_state();
+#ifdef Q_OS_MACOS
+    // Closed to the menu bar: no Dock icon. A minimized window keeps it, since it lives in the Dock.
+    if (!isMinimized() && mac_status_item != nullptr && mac_status_item->isVisible()) ProxorMac::SetDockIconVisible(false);
+#endif
 }
 
 MainWindow::~MainWindow() {
