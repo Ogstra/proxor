@@ -128,6 +128,8 @@ jobs:
         shell: bash
         run: |
           go test ./go/grpc_server/...
+          # Update path end to end (host-built updater, fake release server): PASS lines for the log.
+          go test ./go/grpc_server/ -run 'TestUpdateE2E' -count=1 -v
           go test ./go/proxorlib/...
           # Linux ICMP: show which path the runner took (ping_group_range / root) in the log.
           go test ./go/proxorlib/speedtest/ -count=1 -v -run 'Icmp'
@@ -165,6 +167,47 @@ jobs:
       - name: Run ICMP tests
         shell: bash
         run: go test ./go/proxorlib/speedtest/... -count=1 -v
+
+  update-e2e-windows:
+    name: Windows update E2E
+    # Gates every Windows release (package-windows needs it): the candidate's own update path, check ->
+    # download -> SHA256SUMS -> rename while a scanner holds the file -> apply with the candidate updater.exe,
+    # against a local fake release server. No `if:` on purpose: it runs on every push, pull request and
+    # dispatch, so a non-publishing dispatch shows it before anyone publishes.
+    needs: [build-go]
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checking out sources
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          submodules: "recursive"
+      - name: Install Golang
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - name: Download the candidate Windows Go build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: Proxor-${{ github.sha }}-Common-windows-amd64
+          path: e2e-artifact
+      - name: Run the update end-to-end tests with the candidate updater
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar xzf e2e-artifact/artifacts.tgz -C e2e-artifact
+          updater="$PWD/e2e-artifact/deployment/windows64/updater.exe"
+          test -s "$updater"
+          export PROXOR_UPDATE_E2E_UPDATER="$(cygpath -w "$updater")"
+          export PROXOR_UPDATE_E2E_REQUIRE=1
+          # The whole package, not only the E2E: the 57-01 rename/copy/cleanup tests matter most where
+          # Windows enforces file locks.
+          go test ./go/grpc_server/... -count=1 -v -timeout 20m
+          go test ./go/cmd/updater/... -count=1 -v
 
   build-cpp:
     strategy:
@@ -402,6 +445,10 @@ jobs:
       - name: Verify artifact uploads declare hidden files
         shell: bash
         run: bash .github/tests/test-artifact-hidden-files.sh
+      - name: Verify the Windows update E2E gate
+        # No OS guard: the release gate must hold for whatever reads the workflow.
+        shell: bash
+        run: bash .github/tests/test-update-e2e-gate.sh
       - name: Install Qt Core and Test
         uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
         with:
@@ -476,7 +523,7 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: read
-    needs: [stage-package-source, build-cpp, build-go, test-go, appimage, package-policy-tests]
+    needs: [stage-package-source, build-cpp, build-go, test-go, appimage, package-policy-tests, update-e2e-windows]
     steps:
       - name: Checking out sources
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
