@@ -266,6 +266,20 @@ func releaseAssetVersion(release githubRelease, asset githubReleaseAsset) (relea
 	return parseReleaseVersion(release.TagName)
 }
 
+// releasesWithAsset keeps the releases that publish at least one asset ending in suffix.
+func releasesWithAsset(releases []githubRelease, suffix string) []githubRelease {
+	var kept []githubRelease
+	for _, release := range releases {
+		for _, asset := range release.Assets {
+			if strings.HasSuffix(asset.Name, suffix) {
+				kept = append(kept, release)
+				break
+			}
+		}
+	}
+	return kept
+}
+
 func matchingReleaseAsset(releases []githubRelease, currentVersion string, suffixes []string, includePrerelease bool) (*githubRelease, *githubReleaseAsset, updateSelection) {
 	currentParsed, hasCurrentVersion := parseSemVerVersion(currentVersion)
 	var bestRelease *githubRelease
@@ -482,6 +496,11 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 			return ret, nil
 		}
 
+		if in.Channel == "arch" {
+			// The source tarball is attached to every release, including a Windows-only one that
+			// carries no AUR recipe update, so Arch only counts releases that also ship the Linux build.
+			releases = releasesWithAsset(releases, "linux64.AppImage")
+		}
 		release, asset, selection := matchingReleaseAsset(releases, proxor_common.Version_proxor, suffixes, in.CheckPreRelease)
 		if selection == updateSelectionCurrent {
 			updateDownloadURL = ""
