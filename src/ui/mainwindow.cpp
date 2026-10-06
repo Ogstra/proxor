@@ -23,6 +23,9 @@
 #include "ui/dialog_vpn_settings.h"
 #include "ui/dialog_ssid_settings.h"
 #include "ui/dialog_hotkey.h"
+#ifdef Q_OS_WIN
+#include "ui/dialog_update_available.h"
+#endif
 #include "platform/PlatformCapabilitiesApp.hpp"
 #include "platform/HotkeyReport.hpp"
 #include "platform/QrScanPolicy.hpp"
@@ -2215,7 +2218,11 @@ void MainWindow::onUpdateStaged() {
     // fact and not an invariant: check before promising a restart into it.
     const auto launch = DecideUpdaterLaunch(ProxorGui::ProbeUpdaterLaunch());
     if (!launch.canLaunch) {
+#ifdef Q_OS_WIN
+        ShowUpdateFailedDialog(this, UpdateFailureStage::Install, launch.reason, QStringLiteral(NKR_VERSION), update_release_url);
+#else
         MessageBoxWarning(software_name, tr("%1 The app will stay open.").arg(launch.reason));
+#endif
         MW_show_log(tr("Update downloaded, but it cannot be installed: %1").arg(launch.reason));
         return;
     }

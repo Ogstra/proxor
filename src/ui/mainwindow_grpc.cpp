@@ -789,7 +789,11 @@ void MainWindow::CheckUpdate(bool silent) {
     if (!err.empty()) {
         if (silent) return;
         runOnUiThread([=] {
+#ifdef Q_OS_WIN
+            ShowUpdateFailedDialog(this, UpdateFailureStage::Check, QString::fromStdString(err), QStringLiteral(NKR_VERSION), {});
+#else
             MessageBoxWarning(QObject::tr("Update"), err.c_str());
+#endif
         });
         return;
     }
@@ -836,6 +840,9 @@ void MainWindow::CheckUpdate(bool silent) {
                 // Remembered here, not re-derived in onUpdateStaged(), so the AppImage
                 // completion handler can name the exact staged path without a second RPC.
                 staged_asset_name = QFileInfo(assetName).fileName();
+#ifdef Q_OS_WIN
+                update_release_url = releasePageUrl.toString();
+#endif
                 updateProgressDialog = new UpdateProgressDialog(response.assets_name().c_str(), this);
                 connect(updateProgressDialog, &UpdateProgressDialog::downloadComplete, this, &MainWindow::onUpdateStaged);
                 updateProgressDialog->show();
@@ -855,11 +862,27 @@ void MainWindow::CheckUpdate(bool silent) {
                         request2.set_download_dir(appImageInfo.absolutePath().toStdString());
                     }
                     auto response2 = ProxorGui_rpc::defaultClient->Update(&ok2, request2);
+#ifdef Q_OS_WIN
+                    if (!ok2) {
+                        runOnUiThread([=] {
+                            if (updateProgressDialog) updateProgressDialog->close();
+                            ShowUpdateFailedDialog(this, UpdateFailureStage::Download,
+                                                   QObject::tr("the Proxor core stopped responding during the download."),
+                                                   QStringLiteral(NKR_VERSION), releasePageUrl.toString());
+                        });
+                        return;
+                    }
+#endif
                     if (!ok2) return;
 
                     if (!response2.error().empty()) {
                         runOnUiThread([=] {
+#ifdef Q_OS_WIN
+                            ShowUpdateFailedDialog(this, UpdateFailureStage::Download, QString::fromStdString(response2.error()),
+                                                   QStringLiteral(NKR_VERSION), releasePageUrl.toString());
+#else
                             MessageBoxWarning(QObject::tr("Update"), response2.error().c_str());
+#endif
                         });
                     }
                 });

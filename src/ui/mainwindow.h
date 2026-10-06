@@ -249,6 +249,9 @@ private:
                                 // onUpdateStaged() can derive the AppImage staged path
                                 // without a second RPC
     QPointer<UpdateProgressDialog> updateProgressDialog;
+#ifdef Q_OS_WIN
+    QString update_release_url; // release page of the update being downloaded, for the failure dialog (phase 57)
+#endif
     ProxyListModel *proxyListModel = nullptr;
     QLabel *m_quotaLabel = nullptr;
     //
