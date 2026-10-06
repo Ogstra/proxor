@@ -17,6 +17,8 @@ struct AutoBypassProcesses {
 QStringList KnownVpnClientProcessNames(HostOs os);
 
 // externalPrograms: the external cores' programs, already made absolute by the caller when they contain a separator.
-AutoBypassProcesses BuildAutoBypassProcesses(const QStringList &externalPrograms, HostOs os);
+// includeVpnClients=false leaves WireGuard, OpenVPN and Tailscale inside the tunnel (for example to carry
+// WireGuard over a VLESS Reality proxy); external cores are always bypassed to avoid a routing loop.
+AutoBypassProcesses BuildAutoBypassProcesses(const QStringList &externalPrograms, HostOs os, bool includeVpnClients = true);
 
 } // namespace ProxorPlatform

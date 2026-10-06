@@ -195,6 +195,7 @@ namespace ProxorGui {
         bool vpn_hide_console = true;
         bool vpn_strict_route = false;
         bool vpn_rule_white = false;
+        bool vpn_bypass_vpn_clients = true; // Tun: WireGuard, OpenVPN and Tailscale processes go direct; off sends them through the proxy
         QString vpn_rule_process = "";
         QString vpn_rule_cidr = "";
 

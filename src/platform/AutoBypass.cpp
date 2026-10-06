@@ -27,7 +27,7 @@ namespace {
     }
 } // namespace
 
-AutoBypassProcesses BuildAutoBypassProcesses(const QStringList &externalPrograms, HostOs os) {
+AutoBypassProcesses BuildAutoBypassProcesses(const QStringList &externalPrograms, HostOs os, bool includeVpnClients) {
     const bool win = os == HostOs::Windows;
     const auto cs = win ? Qt::CaseInsensitive : Qt::CaseSensitive;
     static const QRegularExpression winAbs(R"(^([A-Za-z]:\\|\\\\))");
@@ -45,7 +45,9 @@ AutoBypassProcesses BuildAutoBypassProcesses(const QStringList &externalPrograms
         }
         if (!name.isEmpty()) AppendUnique(names, name, cs);
     }
-    for (const auto &v: KnownVpnClientProcessNames(os)) AppendUnique(names, v, cs);
+    if (includeVpnClients) {
+        for (const auto &v: KnownVpnClientProcessNames(os)) AppendUnique(names, v, cs);
+    }
     out.processNames = names;
     return out;
 }

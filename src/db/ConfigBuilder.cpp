@@ -924,7 +924,7 @@ namespace ProxorGui {
                 status->routingRules += rule;
             }
 
-            const auto autoBypass = ProxorPlatform::BuildAutoBypassProcesses(externalCorePrograms(status->result), ProxorPlatform::CompiledHostOs());
+            const auto autoBypass = ProxorPlatform::BuildAutoBypassProcesses(externalCorePrograms(status->result), ProxorPlatform::CompiledHostOs(), dataStore->vpn_bypass_vpn_clients);
             if (!autoBypass.processPaths.isEmpty()) {
                 status->routingRules += QJsonObject{{"outbound", "bypass"}, {"process_path", QList2QJsonArray(autoBypass.processPaths)}};
             }

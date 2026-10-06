@@ -50,6 +50,13 @@ DialogVPNSettings::DialogVPNSettings(QWidget *parent) : QDialog(parent), ui(new 
     ui->hide_console->setVisible(false);
 #endif
     ui->strict_route->setChecked(ProxorGui::dataStore->vpn_strict_route);
+    {
+        auto *bypassClients = new QCheckBox(tr("Keep WireGuard, OpenVPN and Tailscale outside the tunnel"), ui->gb_process_name);
+        bypassClients->setObjectName(QStringLiteral("vpn_bypass_vpn_clients"));
+        bypassClients->setToolTip(tr("On: these VPN clients connect directly. Off: their traffic goes through the proxy, for example to carry WireGuard over a VLESS Reality proxy."));
+        bypassClients->setChecked(ProxorGui::dataStore->vpn_bypass_vpn_clients);
+        ui->verticalLayout_4->insertWidget(0, bypassClients);
+    }
     ui->single_core->setChecked(ProxorGui::dataStore->vpn_internal_tun);
 #ifdef Q_OS_MACOS
     // The single-core Tun option does not apply on macOS (Tun runs in the Proxor service).
@@ -309,6 +316,9 @@ bool DialogVPNSettings::save(QStringList &flags) {
     ProxorGui::dataStore->vpn_ipv6 = ui->vpn_ipv6->isChecked();
     ProxorGui::dataStore->vpn_hide_console = ui->hide_console->isChecked();
     ProxorGui::dataStore->vpn_strict_route = ui->strict_route->isChecked();
+    if (auto *bypassClients = findChild<QCheckBox *>(QStringLiteral("vpn_bypass_vpn_clients"))) {
+        ProxorGui::dataStore->vpn_bypass_vpn_clients = bypassClients->isChecked();
+    }
     ProxorGui::dataStore->vpn_rule_white = ui->whitelist_mode->isChecked();
     bool isInternalChanged = ProxorGui::dataStore->vpn_internal_tun != ui->single_core->isChecked();
     ProxorGui::dataStore->vpn_internal_tun = ui->single_core->isChecked();

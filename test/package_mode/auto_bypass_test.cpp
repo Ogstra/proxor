@@ -32,6 +32,15 @@ private slots:
         QCOMPARE(r.processPaths.size(), 2);
         QCOMPARE(r.processNames.mid(0, 2), (QStringList{"Core", "core"}));
     }
+    void vpnClientsCanStayInsideTheTunnel() {
+        // WireGuard carried over a proxy: only the external cores stay bypassed.
+        auto r = BuildAutoBypassProcesses({"/opt/cores/hysteria2"}, HostOs::Linux, false);
+        QCOMPARE(r.processNames, (QStringList{"hysteria2"}));
+        r = BuildAutoBypassProcesses({}, HostOs::Windows, false);
+        QVERIFY(r.processNames.isEmpty());
+        // The default still bypasses them.
+        QVERIFY(BuildAutoBypassProcesses({}, HostOs::Windows).processNames.contains("wireguard.exe", Qt::CaseInsensitive));
+    }
     void macosHost() {
         auto r = BuildAutoBypassProcesses({"/Applications/Proxor.app/Contents/MacOS/hysteria2"}, HostOs::MacOS);
         QCOMPARE(r.processPaths, (QStringList{"/Applications/Proxor.app/Contents/MacOS/hysteria2"}));

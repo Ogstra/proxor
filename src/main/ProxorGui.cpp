@@ -300,6 +300,7 @@ namespace ProxorGui {
         _add(new configItem("vpn_hide_console", &vpn_hide_console, itemType::boolean));
         _add(new configItem("vpn_strict_route", &vpn_strict_route, itemType::boolean));
         _add(new configItem("vpn_bypass_process", &vpn_rule_process, itemType::string));
+        _add(new configItem("vpn_bypass_vpn_clients", &vpn_bypass_vpn_clients, itemType::boolean));
         _add(new configItem("vpn_bypass_cidr", &vpn_rule_cidr, itemType::string));
         _add(new configItem("vpn_rule_white", &vpn_rule_white, itemType::boolean));
         _add(new configItem("check_include_pre", &check_include_pre, itemType::boolean));
