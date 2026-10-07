@@ -14,8 +14,6 @@ namespace {
 const char kService[] = "net.connman.iwd";
 const char kSource[] = "iwd";
 
-QString Tr(const char *text) { return QCoreApplication::translate("IwdWifiReader", text); }
-
 void RegisterIwdMetaTypes() {
     static const bool done = [] {
         qDBusRegisterMetaType<IwdInterfaces>();
@@ -115,5 +113,5 @@ WifiReading IwdWifiReader::readWithin(int budgetMs) {
         if (!name.isEmpty()) return Connected(name, src);
     }
     if (stations > 0 || devices > 0) return NotConnected(QString(), src);
-    return NotConnected(Tr("No Wi-Fi adapter found."), src);
+    return NotConnected(QCoreApplication::translate("IwdWifiReader", "No Wi-Fi adapter found."), src);
 }
