@@ -6,7 +6,8 @@
 
 namespace ProxorPlatform {
 
-// "999B/s", "12.0K/s", "1.2M/s", "3.4G/s"; decimal units like ReadableSize. Negative counts as 0.
+// "0.5K/s", "12.0K/s", "1.2M/s", "3.4G/s": never bytes, the smallest unit is K. Decimal units like ReadableSize.
+// Negative counts as 0.
 QString FormatTrayRate(qint64 bytesPerSecond);
 
 // Two lines: "<up>↑\n<down>↓".
