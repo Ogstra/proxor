@@ -7,7 +7,7 @@ Publisher: Ogstra
 PublisherUrl: https://github.com/Ogstra
 PackageName: Proxor
 PackageUrl: https://github.com/Ogstra/proxor
-License: GPL-3.0-or-later
+License: GPL-3.0-only
 LicenseUrl: https://github.com/Ogstra/proxor/blob/main/LICENSE
 ShortDescription: A cross-platform proxy client.
 ReleaseNotesUrl: https://github.com/Ogstra/proxor/releases/tag/v@VERSION@
