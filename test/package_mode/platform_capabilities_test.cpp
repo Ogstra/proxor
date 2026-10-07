@@ -365,6 +365,54 @@ private slots:
         QVERIFY(AllCapabilities().contains(Capability::SystemTray));
         QCOMPARE(CapabilityName(Capability::SystemTray), QString("system-tray"));
     }
+    void describeNamesTheCompositorOnLinux() {
+        auto env = Env(HostOs::Linux, PackageMode::Deb, DisplaySession::Wayland);
+        env.desktop = LinuxDesktopFamily::Other;
+        env.compositor = LinuxCompositor::Hyprland;
+        QCOMPARE(DescribePlatformEnvironment(env),
+                 QString("os=linux package=deb session=wayland tray=yes desktop=other compositor=hyprland portals=background:0,screenshot:0,shortcuts:0"));
+        env.desktop = LinuxDesktopFamily::Unknown;
+        env.compositor = LinuxCompositor::Sway;
+        QVERIFY(DescribePlatformEnvironment(env).contains("desktop=unknown compositor=sway portals="));
+    }
+
+    void describeOmitsTheCompositorWhenNoneOrNotLinux() {
+        auto env = Env(HostOs::Linux, PackageMode::Deb, DisplaySession::Wayland);
+        env.compositor = LinuxCompositor::None;
+        QVERIFY(!DescribePlatformEnvironment(env).contains("compositor="));
+        for (auto os : {HostOs::Windows, HostOs::MacOS, HostOs::Other}) {
+            auto e = Env(os, PackageMode::NativeOrPortable, DisplaySession::NotApplicable);
+            const auto without = DescribePlatformEnvironment(e);
+            e.compositor = LinuxCompositor::Hyprland;
+            QVERIFY(!DescribePlatformEnvironment(e).contains("compositor="));
+            QCOMPARE(DescribePlatformEnvironment(e), without);
+        }
+    }
+
+    void compositorNeverChangesACapabilityAnswer() {
+        const LinuxCompositor all[] = {LinuxCompositor::Hyprland, LinuxCompositor::Sway, LinuxCompositor::Niri,
+                                       LinuxCompositor::River, LinuxCompositor::Wayfire, LinuxCompositor::Labwc};
+        for (auto os : {HostOs::Windows, HostOs::Linux, HostOs::MacOS, HostOs::Other})
+            for (auto mode : kAllModes)
+                for (auto session : kAllSessions)
+                    for (bool tray : {true, false})
+                        for (uint portal : {0u, 1u})
+                            for (auto comp : all) {
+                                auto base = Env(os, mode, session);
+                                base.trayAvailable = tray;
+                                base.backgroundPortal = base.screenshotPortal = base.globalShortcutsPortal = portal;
+                                auto with = base;
+                                with.compositor = comp;
+                                for (auto c : AllCapabilities()) {
+                                    const auto a = QueryCapability(c, base);
+                                    const auto b = QueryCapability(c, with);
+                                    QCOMPARE(b.support, a.support);
+                                    QCOMPARE(b.reason, a.reason);
+                                }
+                                QCOMPARE(SelectHotkeyBackend(with), SelectHotkeyBackend(base));
+                                QCOMPARE(SelectScreenCaptureBackend(with), SelectScreenCaptureBackend(base));
+                            }
+    }
 };
 
 QTEST_APPLESS_MAIN(PlatformCapabilitiesTest)

@@ -26,6 +26,7 @@ struct PlatformEnvironment {
     uint backgroundPortal = 0;      // ProxorDesktop::Portals().background (0 = absent)
     uint screenshotPortal = 0;
     uint globalShortcutsPortal = 0;
+    LinuxCompositor compositor = LinuxCompositor::None; // Linux only; diagnostics only, no capability answer reads it
 };
 
 enum class HotkeyBackend { None, Native, Portal };
