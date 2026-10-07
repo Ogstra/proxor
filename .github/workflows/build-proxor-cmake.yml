@@ -429,10 +429,9 @@ jobs:
       - name: Verify package provenance
         shell: bash
         run: bash packaging/source/tests/test-stage-recursive-source.sh
-      - name: Verify dependency pins against the flatpak manifest
-        # No Linux-only guard, unlike its neighbors below: the pins and the
-        # flatpak manifest's copies are two records of the same fact, and this
-        # is the only thing that notices when one moves without the other.
+      - name: Verify dependency pins
+        # No Linux-only guard, unlike its neighbors below: it proves fetch_verified
+        # rejects a wrong hash and that build_deps_all.sh keeps its pinned archives.
         # Running it on windows-latest also proves shasum -a 256 exists in Git
         # Bash before build_deps_all.sh depends on it on that same runner.
         shell: bash
@@ -806,64 +805,6 @@ jobs:
           include-hidden-files: true
           if-no-files-found: error
 
-  package-flatpak:
-    name: Build and smoke restricted Flatpak package
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
-    needs: [stage-package-source, build-go]
-    runs-on: ubuntu-latest
-    permissions: {contents: read}
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          ref: ${{ github.sha }}
-          submodules: recursive
-      - name: Install release Go toolchain
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: release-assets-source
-          path: source-input
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: Proxor-${{ github.sha }}-Common-public_res-public_res
-          path: public-res-input
-      - name: Install Flatpak build tools and runtime
-        shell: bash
-        run: |
-          sudo apt-get update
-          # flatpak-builder splits debug info with eu-strip from elfutils.
-          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder xvfb elfutils
-          flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-          flatpak install --user --noninteractive flathub org.kde.Sdk//6.8 org.kde.Platform//6.8
-      - name: Prepare immutable Flatpak build inputs
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="$(tr -d '\n' < VERSION.txt)"
-          test "${{ github.event.inputs.tag }}" = "v$version"
-          tar -xzf public-res-input/artifacts.tgz
-          bash packaging/flatpak/prepare-build-inputs.sh \
-            --source-archive "source-input/proxor-$version.tar.gz" \
-            --source-manifest "source-input/proxor-$version.source-manifest" \
-            --geodata deployment/public_res \
-            --output packaging/flatpak/.flatpak-input
-      - name: Validate restricted source contract
-        shell: bash
-        run: |
-          bash packaging/flatpak/generate-go-sources.sh --check
-          bash packaging/flatpak/tests/test-source-closure.sh
-          PROXOR_FLATPAK_FULL_TEST=1 \
-          PROXOR_FLATPAK_BUNDLE_OUTPUT="$RUNNER_TEMP/proxor-$(tr -d '\n' < VERSION.txt).flatpak" \
-            bash packaging/flatpak/tests/test-flatpak-package.sh
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: release-assets-flatpak
-          path: ${{ runner.temp }}/proxor-*.flatpak
-          if-no-files-found: error
-
   package-macos:
     name: Build macOS arm64 app
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
@@ -1072,7 +1013,7 @@ jobs:
   publish-release:
     name: Publish verified release assets
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'y' && github.event.inputs.tag != ''
-    needs: [stage-package-source, appimage, package-windows, package-deb, package-rpm, package-arch, package-flatpak, package-macos]
+    needs: [stage-package-source, appimage, package-windows, package-deb, package-rpm, package-arch, package-macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -1127,7 +1068,7 @@ jobs:
           else
             packaging/release/prepare-release-assets.sh prepare-final-assets --input release-input --version "$version" --output release-stage --public-source-url "$source_url"
             (cd release-stage && shasum -a 256 -c SHA256SUMS)
-            gh release upload "$TAG" release-stage/*.zip release-stage/*.AppImage release-stage/*.deb release-stage/*.rpm release-stage/*.flatpak release-stage/SHA256SUMS --clobber
+            gh release upload "$TAG" release-stage/*.zip release-stage/*.AppImage release-stage/*.deb release-stage/*.rpm release-stage/SHA256SUMS --clobber
           fi
       - name: Keep the AUR and winget recipes for their package repositories
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

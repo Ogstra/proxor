@@ -12,9 +12,11 @@ mkdir -p "$tmp/in/release-assets-arch"
 printf 'source=("proxor-1.2.3.tar.gz::%s")\nsha256sums=(%s)\n' "$url" "$sha" > "$tmp/in/release-assets-arch/PKGBUILD"
 printf '\tsource = proxor-1.2.3.tar.gz::%s\n\tsha256sums = %s\n' "$url" "$sha" > "$tmp/in/release-assets-arch/.SRCINFO"
 for asset in proxor-1.2.3-windows64.zip proxor-1.2.3-winget-x64.zip proxor-1.2.3-macos-arm64.zip proxor-1.2.3-symbols.zip proxor-1.2.3.AppImage \
-  proxor-1.2.3.deb proxor-1.2.3.rpm proxor-1.2.3.flatpak; do
+  proxor-1.2.3.deb proxor-1.2.3.rpm; do
   mkdir -p "$tmp/in/$asset.d"; printf '%s' "$asset" > "$tmp/in/$asset.d/$asset"
 done
+# Flatpak is deprecated (it cannot run Tun mode): it is neither required nor shipped, even if a stray bundle is present.
+mkdir -p "$tmp/in/stray-flatpak"; printf x > "$tmp/in/stray-flatpak/proxor-1.2.3.flatpak"
 # Per-job build artifacts share names across jobs and never become release assets.
 for job in linux windows; do
   mkdir -p "$tmp/in/$job"; printf x > "$tmp/in/$job/artifacts.tgz"
@@ -25,7 +27,6 @@ for debug in proxor-debuginfo-1.2.3-1.fc44.x86_64.rpm proxor-debugsource-1.2.3-1
   printf x > "$tmp/in/rpms/$debug"
 done
 "$script" prepare-final-assets --input "$tmp/in" --version 1.2.3 --output "$tmp/final" --public-source-url "$url"
-test -f "$tmp/final/proxor-1.2.3.flatpak"
 for excluded in proxor-debuginfo-1.2.3-1.fc44.x86_64.rpm proxor-debugsource-1.2.3-1.fc44.x86_64.rpm \
   proxor-1.2.3-symbols.zip proxor-1.2.3.source-manifest; do
   test ! -e "$tmp/final/$excluded"
@@ -38,7 +39,8 @@ test -f "$tmp/final/recipes/aur/.SRCINFO"
 test -f "$tmp/final/recipes/winget-manifests/Ogstra.Proxor.yaml"
 test ! -e "$tmp/final/aur"
 test ! -e "$tmp/final/winget-manifests"
-grep -q 'proxor-1.2.3.flatpak' "$tmp/final/SHA256SUMS"
+test ! -e "$tmp/final/proxor-1.2.3.flatpak"
+! grep -q 'flatpak' "$tmp/final/SHA256SUMS"
 test -f "$tmp/final/proxor-1.2.3-macos-arm64.zip"
 grep -q 'proxor-1.2.3-macos-arm64.zip' "$tmp/final/SHA256SUMS"
 ! grep -q recipes "$tmp/final/SHA256SUMS"
@@ -71,7 +73,7 @@ test -f "$tmp/final-win/recipes/winget-manifests/Ogstra.Proxor.yaml"
 test ! -e "$tmp/final-win/recipes/aur"
 # The full path is unaffected by the flag existing: same checksum list as before.
 grep -q 'proxor-1.2.3-macos-arm64.zip' <<<"$full_sums"
-grep -q 'proxor-1.2.3.flatpak' <<<"$full_sums"
+! grep -q 'flatpak' <<<"$full_sums"
 # The flag is a final-assets option only, and the Windows zips remain mandatory.
 ! "$script" prepare-source-release --input "$tmp/in" --version 1.2.3 --output "$tmp/src-win" --windows-only
 mv "$tmp/in/proxor-1.2.3-windows64.zip.d" "$tmp/win-aside"
@@ -80,3 +82,8 @@ if err="$("$script" prepare-final-assets --input "$tmp/in" --version 1.2.3 --out
 fi
 grep -qF 'missing *-windows64.zip' <<<"$err"
 mv "$tmp/win-aside" "$tmp/in/proxor-1.2.3-windows64.zip.d"
+
+# Without any Flatpak bundle the full release is still complete.
+rm -rf "$tmp/in/stray-flatpak"
+"$script" prepare-final-assets --input "$tmp/in" --version 1.2.3 --output "$tmp/final-no-flatpak" --public-source-url "$url"
+test ! -e "$tmp/final-no-flatpak/proxor-1.2.3.flatpak"

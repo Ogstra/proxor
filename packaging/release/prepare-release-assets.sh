@@ -14,13 +14,13 @@ if [ "$phase" = prepare-source-release ]; then [ "$windows_only" = n ] || usage;
 case "$public_url" in "https://github.com/Ogstra/proxor/releases/download/"*/"proxor-$version.tar.gz") ;; *) echo 'public source URL must be the attached release asset' >&2; exit 1;; esac
 # --windows-only ships a stable release with the Windows downloads alone while the other
 # platforms stay prereleases. The full path below is unchanged when the flag is absent.
-required_assets=('*-windows64.zip' '*-winget-x64.zip' '*-macos-arm64.zip' '*.AppImage' '*.deb' '*.rpm' '*.flatpak')
+required_assets=('*-windows64.zip' '*-winget-x64.zip' '*-macos-arm64.zip' '*.AppImage' '*.deb' '*.rpm')
 if [ "$windows_only" = y ]; then required_assets=('*-windows64.zip' '*-winget-x64.zip'); fi
 for required in "${required_assets[@]}"; do find "$input" -type f -name "$required" -print -quit | grep -q . || { echo "missing $required" >&2; exit 1; }; done
 ! find "$input" -type f \( -iname '*.msi' -o -iname '*.dmg' \) -print -quit | grep -q .
 # Only what a user downloads and runs: debug symbols, debug packages and source RPMs
 # stay build artifacts, because a release list full of them hides the actual downloads.
-assets() { find "$input" -type f \( -name '*.zip' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' -o -name '*.flatpak' \) ! -name '*-symbols.zip' ! -name '*-debuginfo-*' ! -name '*-debugsource-*' ! -name '*.src.rpm'; }
+assets() { find "$input" -type f \( -name '*.zip' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \) ! -name '*-symbols.zip' ! -name '*-debuginfo-*' ! -name '*-debugsource-*' ! -name '*.src.rpm'; }
 if [ "$windows_only" = y ]; then assets() { find "$input" -type f \( -name '*-windows64.zip' -o -name '*-winget-x64.zip' \); }; fi
 asset_names() { assets | while read -r asset; do basename "$asset"; done; }
 # Only the files that become release assets have to be unique: the build artifacts
@@ -45,5 +45,5 @@ fi
 # with the recipes rather than with the downloads.
 mv "$output/proxor-$version.source-manifest" "$recipes/"
 assets | while read -r asset; do cp "$asset" "$output/"; done
-test "$(find "$output" -type f \( -name '*.zip' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' -o -name '*.flatpak' \) | wc -l)" -eq "$(asset_names | wc -l)"
+test "$(find "$output" -type f \( -name '*.zip' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \) | wc -l)" -eq "$(asset_names | wc -l)"
 (cd "$output" && find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 shasum -a 256 > SHA256SUMS && shasum -a 256 -c SHA256SUMS)
