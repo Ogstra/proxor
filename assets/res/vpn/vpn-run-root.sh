@@ -17,8 +17,13 @@ cd "$BASEDIR"
 
 pre_start_linux() {
   # for Tun2Socket
-  iptables -I INPUT -s 172.19.0.2 -d 172.19.0.1 -p tcp -j ACCEPT
-  ip6tables -I INPUT -s fdfe:dcba:9876::2 -d fdfe:dcba:9876::1 -p tcp -j ACCEPT
+  # A host without iptables or without IPv6 must not abort the Tun start under `set -e`.
+  if command -v iptables >/dev/null 2>&1; then
+    iptables -I INPUT -s 172.19.0.2 -d 172.19.0.1 -p tcp -j ACCEPT || echo "[Warning] iptables rule not added"
+  fi
+  if command -v ip6tables >/dev/null 2>&1; then
+    ip6tables -I INPUT -s fdfe:dcba:9876::2 -d fdfe:dcba:9876::1 -p tcp -j ACCEPT || echo "[Warning] ip6tables rule not added"
+  fi
 }
 
 wait_for_socks() {
@@ -73,8 +78,9 @@ start() {
 }
 
 stop() {
-  iptables -D INPUT -s 172.19.0.2 -d 172.19.0.1 -p tcp -j ACCEPT
-  ip6tables -D INPUT -s fdfe:dcba:9876::2 -d fdfe:dcba:9876::1 -p tcp -j ACCEPT
+  command -v iptables >/dev/null 2>&1 && { iptables -D INPUT -s 172.19.0.2 -d 172.19.0.1 -p tcp -j ACCEPT || true; }
+  command -v ip6tables >/dev/null 2>&1 && { ip6tables -D INPUT -s fdfe:dcba:9876::2 -d fdfe:dcba:9876::1 -p tcp -j ACCEPT || true; }
+  return 0
 }
 
 if start; then
