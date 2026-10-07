@@ -484,6 +484,10 @@ jobs:
         run: command -v dbus-run-session || { sudo apt-get update && sudo apt-get install -y --no-install-recommends dbus; }
       - name: Run package policy fixture
         shell: bash
+        env:
+          # One compiler per test target at the same time ran the Linux runner out of memory and the
+          # runner was shut down mid-build; a fixed job count keeps the build within its memory.
+          PACKAGE_MODE_JOBS: "3"
         run: test/package_mode/run-tests.sh
 
   unit-tests-macos:
