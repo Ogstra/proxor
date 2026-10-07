@@ -40,6 +40,17 @@ TokenMatch MatchToken(const QString &rawToken) {
     return m;
 }
 
+LinuxCompositor CompositorFromToken(const QString &rawToken) {
+    const auto token = rawToken.trimmed().toLower();
+    if (token == "hyprland") return LinuxCompositor::Hyprland;
+    if (token == "sway") return LinuxCompositor::Sway;
+    if (token == "niri") return LinuxCompositor::Niri;
+    if (token == "river") return LinuxCompositor::River;
+    if (token == "wayfire") return LinuxCompositor::Wayfire;
+    if (token == "labwc") return LinuxCompositor::Labwc;
+    return LinuxCompositor::None;
+}
+
 } // namespace
 
 QString LinuxDesktopFamilyName(LinuxDesktopFamily family) {
@@ -57,12 +68,12 @@ QString LinuxDesktopFamilyName(LinuxDesktopFamily family) {
 
 QString LinuxCompositorName(LinuxCompositor compositor) {
     switch (compositor) {
-    case LinuxCompositor::Hyprland:
-    case LinuxCompositor::Sway:
-    case LinuxCompositor::Niri:
-    case LinuxCompositor::River:
-    case LinuxCompositor::Wayfire:
-    case LinuxCompositor::Labwc:
+    case LinuxCompositor::Hyprland: return QStringLiteral("hyprland");
+    case LinuxCompositor::Sway: return QStringLiteral("sway");
+    case LinuxCompositor::Niri: return QStringLiteral("niri");
+    case LinuxCompositor::River: return QStringLiteral("river");
+    case LinuxCompositor::Wayfire: return QStringLiteral("wayfire");
+    case LinuxCompositor::Labwc: return QStringLiteral("labwc");
     case LinuxCompositor::None: break;
     }
     return QString();
@@ -106,6 +117,24 @@ LinuxDesktopInfo DetectLinuxDesktop(const LinuxDesktopEnv &env) {
     } else {
         info.label = LinuxDesktopFamilyName(info.family);
     }
+
+    // Standalone Wayland compositor (diagnostics only). A full desktop wins.
+    const bool fullDesktop = info.family == LinuxDesktopFamily::Gnome || info.family == LinuxDesktopFamily::Kde
+        || info.family == LinuxDesktopFamily::Cinnamon || info.family == LinuxDesktopFamily::Mate
+        || info.family == LinuxDesktopFamily::Xfce;
+    if (!fullDesktop) {
+        QStringList names = env.currentDesktop.split(':', Qt::SkipEmptyParts);
+        names << env.sessionDesktop;
+        for (const auto &t: names) {
+            info.compositor = CompositorFromToken(t);
+            if (info.compositor != LinuxCompositor::None) break;
+        }
+        if (info.compositor == LinuxCompositor::None) {
+            if (!env.hyprlandInstance.trimmed().isEmpty()) info.compositor = LinuxCompositor::Hyprland;
+            else if (!env.niriSocket.trimmed().isEmpty()) info.compositor = LinuxCompositor::Niri;
+            else if (!env.swaySock.trimmed().isEmpty()) info.compositor = LinuxCompositor::Sway;
+        }
+    }
     return info;
 }
 
@@ -115,6 +144,9 @@ LinuxDesktopEnv LinuxDesktopEnvFromProcess() {
     env.sessionDesktop = qEnvironmentVariable("XDG_SESSION_DESKTOP");
     env.desktopSession = qEnvironmentVariable("DESKTOP_SESSION");
     env.kdeSessionVersion = qEnvironmentVariable("KDE_SESSION_VERSION");
+    env.hyprlandInstance = qEnvironmentVariable("HYPRLAND_INSTANCE_SIGNATURE");
+    env.niriSocket = qEnvironmentVariable("NIRI_SOCKET");
+    env.swaySock = qEnvironmentVariable("SWAYSOCK");
     return env;
 }
 
