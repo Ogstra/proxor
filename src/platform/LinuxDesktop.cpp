@@ -55,6 +55,19 @@ QString LinuxDesktopFamilyName(LinuxDesktopFamily family) {
     return QStringLiteral("unknown desktop");
 }
 
+QString LinuxCompositorName(LinuxCompositor compositor) {
+    switch (compositor) {
+    case LinuxCompositor::Hyprland:
+    case LinuxCompositor::Sway:
+    case LinuxCompositor::Niri:
+    case LinuxCompositor::River:
+    case LinuxCompositor::Wayfire:
+    case LinuxCompositor::Labwc:
+    case LinuxCompositor::None: break;
+    }
+    return QString();
+}
+
 LinuxDesktopInfo DetectLinuxDesktop(const LinuxDesktopEnv &env) {
     LinuxDesktopInfo info;
 
