@@ -53,8 +53,9 @@ Apple Silicon Macs running macOS 15 or later install Proxor with Homebrew: `brew
 ### Linux
 
 Linux releases provide the retained x86_64 AppImage plus native Debian/Ubuntu `.deb`, Fedora
-RPM, source AUR `proxor`, and a restricted GitHub Flatpak bundle. Use the package manager that
-installed Proxor for upgrades; Flatpak cannot provide TUN or host system-proxy changes. See the
+RPM, and source AUR `proxor`. Use the package manager that installed Proxor for upgrades. The
+Flatpak bundle is deprecated and no longer published, because the Flatpak sandbox cannot run
+Tun mode. See the
 [Linux runtime guide](docs/Run_Linux.md) and [publication handoff](packaging/PUBLISHING.md).
 
 ## Dependencies

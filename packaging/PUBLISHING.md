@@ -23,8 +23,9 @@ from the release page and extract its `proxor` folder over the install folder (`
 2. Run the protected actual-asset install/upgrade validation
    (`.github/workflows/validate-winget-release.yml`) and check the identifier collision.
 3. Review the rendered AUR `PKGBUILD` and `.SRCINFO` from the `release-recipes` artifact.
-4. Verify the GitHub Flatpak bundle. A Flathub submission is optional and needs separate manual
-   review; it is not CI automation.
+
+The Flatpak bundle is deprecated and no longer built or published: the Flatpak sandbox cannot run
+Tun mode, so it was a proxy-only format.
 
 ## Publishing
 
@@ -76,7 +77,7 @@ currently prereleases); the tap allows this through
 `proxor@beta`-style split later, not a change to this one. Changes to the cask are commits to
 `packaging/homebrew/proxor.rb.in`, never edits in the tap.
 
-There is still no automatic publish path to COPR/Fedora, Flathub, or any other store. The
+There is still no automatic publish path to COPR/Fedora or any other store. The
 release workflow holds exactly one publishing credential, `HOMEBREW_TAP_TOKEN`, confined to the
 `bump-homebrew-tap` job and the `homebrew-publication` environment.
 
