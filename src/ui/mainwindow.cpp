@@ -1710,6 +1710,15 @@ void MainWindow::onWifiSsidChanged(const QString &ssid) {
     proxor_start(startedId, viaTrigger);
 }
 
+// The Wi-Fi name is usually read before the startup Tun hold is released, and applyOnDemandForSsid refuses
+// while the hold is on. Evaluate the current network again once the hold is gone, so a trigger network
+// the app starts on is not missed until the next network change.
+void MainWindow::applyOnDemandAfterStartup() {
+    QTimer::singleShot(0, this, [this] {
+        if (!wifi_hosts_ssid.isEmpty()) applyOnDemandForSsid(wifi_hosts_ssid);
+    });
+}
+
 bool MainWindow::applyOnDemandForSsid(const QString &ssid) {
     if (startup_tun_pending || startup_tun_failed) return false;
     if (!ProxorGui::dataStore->ssid_on_demand_enabled) return false;
@@ -2581,6 +2590,7 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
                         if (startup_tun_pending) { // should be impossible (startup gated), but never deadlock
                             startup_tun_pending = false;
                             startup_tun_authorized = false;
+                            applyOnDemandAfterStartup();
                             MW_show_log(DecideMacTunStartup(true, st).logLine);
                             if (!ProxorGui::dataStore->prepare_exit) resumeDeferredStartupProfile();
                             if (startup_network_work) {
@@ -2624,6 +2634,7 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
                     if (startup_tun_pending) {
                         startup_tun_pending = false;
                         startup_tun_authorized = true;
+                        applyOnDemandAfterStartup();
                         if (startup_network_work) {
                             auto startupWork = std::move(startup_network_work);
                             startupWork();
@@ -4359,6 +4370,7 @@ void MainWindow::macStartupProbed(MacHelperState st, bool rememberedTun, bool re
             // Release the hold without deadlock: the same steps as the "should be impossible" branch of proxor_set_spmode_vpn.
             startup_tun_pending = false;
             startup_tun_authorized = false;
+            applyOnDemandAfterStartup();
             if (!ProxorGui::dataStore->prepare_exit) resumeDeferredStartupProfile();
             if (startup_network_work) {
                 auto w = std::move(startup_network_work);
@@ -4518,6 +4530,7 @@ void MainWindow::completeStartupTunAuthorization() {
     if (!startup_tun_pending) return;
     startup_tun_pending = false;
     startup_tun_authorized = true;
+    applyOnDemandAfterStartup();
     MW_show_log(tr("Tun interface ready; resuming deferred startup work."));
 
     resumeDeferredStartupProfile();

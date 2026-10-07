@@ -242,6 +242,7 @@ private:
     QString wifi_last_logged_status;
     void refreshWifiMonitoring();
     bool applyOnDemandForSsid(const QString &ssid);
+    void applyOnDemandAfterStartup();
     qint64 vpn_pid = 0;
     //
     bool update_staged = false;
