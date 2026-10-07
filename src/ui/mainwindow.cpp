@@ -2750,6 +2750,7 @@ void MainWindow::refresh_status(const QString &traffic_update) {
     //
     ui->checkBox_VPN->setChecked(ProxorGui::dataStore->spmode_vpn);
     ui->checkBox_SystemProxy->setChecked(ProxorGui::dataStore->spmode_system_proxy);
+    if (ProxorGui::dataStore->started_id >= 0) last_started_profile_id = ProxorGui::dataStore->started_id;
     const bool showStopState = running != nullptr || start_pending;
     if (tray_toggle_action != nullptr) tray_toggle_action->setText(showStopState ? tr("Disconnect") : tr("Connect"));
     ui->toolButton_toggle_proxy->setText(showStopState ? tr("Stop") : tr("Start"));
@@ -3605,6 +3606,12 @@ void MainWindow::on_toolButton_toggle_proxy_clicked() {
 
     auto toggleProxyIds = get_toggle_proxy_ids(group);
     if (toggleProxyIds.isEmpty()) {
+        // Nothing marked in the Toggle column: reconnect the profile that ran last, when there is one.
+        const int fallbackId = last_started_profile_id >= 0 ? last_started_profile_id : ProxorGui::dataStore->remember_id;
+        if (fallbackId >= 0 && ProxorGui::profileManager->GetProfile(fallbackId) != nullptr) {
+            proxor_start(fallbackId);
+            return;
+        }
         MessageBoxWarning(software_name, tr("Select at least one proxy in the Toggle column first."));
         return;
     }
