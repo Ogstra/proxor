@@ -24,8 +24,9 @@ void ApplyCapability(QWidget *control, const CapabilityStatus &status, QLabel *n
         if (status.support == Support::Unsupported) control->setEnabled(false);
     }
     if (note != nullptr) {
-        note->setText(supported ? QString() : status.reason);
-        note->setVisible(!supported);
+        // The reason is shown only as the control's tooltip (on hover), never as visible text on the page.
+        note->setText(QString());
+        note->setVisible(false);
     }
 }
 

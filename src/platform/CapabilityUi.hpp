@@ -15,9 +15,10 @@ namespace ProxorPlatform {
 // Hidden, word-wrapped label (objectName "capability_note") that ApplyCapability fills with the reason.
 QLabel *MakeCapabilityNote(QWidget *parent);
 
-// Unsupported: disables the control, sets tooltip and note to the reason.
-// Degraded / NeedsPermission: keeps the control as is, sets tooltip and note to the reason.
-// Supported: changes nothing on the control (never re-enables it) and hides the note.
+// Unsupported: disables the control and sets its tooltip to the reason (shown on hover only).
+// Degraded / NeedsPermission: keeps the control as is and sets its tooltip to the reason.
+// Supported: changes nothing on the control (never re-enables it). The note label stays hidden and empty
+// in every case: the explanation is never visible text on the page.
 void ApplyCapability(QWidget *control, const CapabilityStatus &status, QLabel *note = nullptr);
 void ApplyCapability(const QList<QWidget *> &controls, const CapabilityStatus &status, QLabel *note = nullptr);
 

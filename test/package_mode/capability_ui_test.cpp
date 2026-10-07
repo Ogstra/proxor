@@ -21,8 +21,8 @@ private slots:
         ApplyCapability(&box, S(Support::Unsupported, "nope"), note);
         QVERIFY(!box.isEnabled());
         QCOMPARE(box.toolTip(), QString("nope"));
-        QVERIFY(!note->isHidden());
-        QCOMPARE(note->text(), QString("nope"));
+        QVERIFY(note->isHidden());
+        QVERIFY(note->text().isEmpty());
     }
 
     void degradedAndNeedsPermissionKeepEnabled() {
@@ -33,8 +33,8 @@ private slots:
             ApplyCapability(&box, S(support, "careful"), note);
             QVERIFY(box.isEnabled());
             QCOMPARE(box.toolTip(), QString("careful"));
-            QVERIFY(!note->isHidden());
-            QCOMPARE(note->text(), QString("careful"));
+            QVERIFY(note->isHidden());
+            QVERIFY(note->text().isEmpty());
         }
     }
 
@@ -72,8 +72,8 @@ private slots:
         QVERIFY(!b.isEnabled());
         QCOMPARE(a.toolTip(), QString("why"));
         QCOMPARE(b.toolTip(), QString("why"));
-        QCOMPARE(note->text(), QString("why"));
-        QVERIFY(!note->isHidden());
+        QVERIFY(note->text().isEmpty());
+        QVERIFY(note->isHidden());
     }
 
     void nullControlAndNoteAreIgnored() {
