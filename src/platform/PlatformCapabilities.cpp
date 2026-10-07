@@ -280,9 +280,12 @@ QString DescribePlatformEnvironment(const PlatformEnvironment &env) {
         case DisplaySession::Wayland: session = QStringLiteral("wayland"); break;
         case DisplaySession::Unknown: session = QStringLiteral("unknown"); break;
     }
+    QString desktop = DesktopName(env.desktop);
+    if (env.os == HostOs::Linux && env.compositor != LinuxCompositor::None)
+        desktop += QStringLiteral(" compositor=") + LinuxCompositorName(env.compositor);
     return QStringLiteral("os=%1 package=%2 session=%3 tray=%4 desktop=%5 portals=background:%6,screenshot:%7,shortcuts:%8")
         .arg(os, PackageModeName(env.packageMode), session, env.trayAvailable ? QStringLiteral("yes") : QStringLiteral("no"),
-             DesktopName(env.desktop))
+             desktop)
         .arg(env.backgroundPortal)
         .arg(env.screenshotPortal)
         .arg(env.globalShortcutsPortal);

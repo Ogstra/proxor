@@ -13,3 +13,7 @@ if grep -nE 'QtWidgets|QtGui|QWidget|QGuiApplication|dataStore' \
   echo "capabilities.sh: the truth table must stay pure (no Widgets/Gui/dataStore)" >&2
   exit 1
 fi
+grep -q 'env\.compositor = ' "$repo_root/src/platform/PlatformCapabilitiesApp.cpp" \
+  || { echo "capabilities.sh: app glue must pass the detected compositor to the platform line" >&2; exit 1; }
+grep -q 'compositor=' "$repo_root/src/platform/PlatformCapabilities.cpp" \
+  || { echo "capabilities.sh: the platform line must name the compositor" >&2; exit 1; }

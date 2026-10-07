@@ -18,7 +18,11 @@ PlatformEnvironment CurrentPlatformEnvironment() {
                                          !qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY"));
     // Fresh on every call: a tray host can appear later (right after login).
     env.trayAvailable = QSystemTrayIcon::isSystemTrayAvailable();
-    if (env.os == HostOs::Linux) env.desktop = DetectLinuxDesktop(LinuxDesktopEnvFromProcess()).family;
+    if (env.os == HostOs::Linux) {
+        const auto info = DetectLinuxDesktop(LinuxDesktopEnvFromProcess());
+        env.desktop = info.family;
+        env.compositor = info.compositor;
+    }
     // Probed on a worker thread since startup (StartPortalProbe in main); zeros on Windows/macOS.
     const auto &portals = ProxorDesktop::Portals();
     env.backgroundPortal = portals.background;
