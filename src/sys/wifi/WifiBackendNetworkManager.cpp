@@ -125,6 +125,8 @@ QByteArray BytesOf(const QVariant &v) {
 NetworkManagerWifiReader::NetworkManagerWifiReader(QDBusConnection bus, QString nmcliProgram, bool sandboxed, int budgetMs)
     : bus_(std::move(bus)), nmcliProgram_(std::move(nmcliProgram)), sandboxed_(sandboxed), budgetMs_(budgetMs) {}
 
+NmWifiPresence NetworkManagerWifiReader::presence() const { return presence_; }
+
 WifiReading NetworkManagerWifiReader::read() {
     const QString src = QString::fromLatin1(kSource);
     auto fallback = [&]() -> WifiReading {

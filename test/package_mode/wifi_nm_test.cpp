@@ -319,6 +319,88 @@ private slots:
             fake_->delayMs = 0;
         }
     }
+
+    void presenceManagesWifiWhenConnected() {
+        startFake(true);
+        addWifi(100, FakeNetworkManager::apPath(0), "Home");
+        NetworkManagerWifiReader r(QDBusConnection::sessionBus(), "/nonexistent/nmcli", false);
+        r.read();
+        QVERIFY(r.presence() == NmWifiPresence::ManagesWifi);
+    }
+
+    void presenceManagesWifiWhenDisconnected() {
+        startFake(true);
+        addWifi(30, "/", QByteArray());
+        NetworkManagerWifiReader r(QDBusConnection::sessionBus(), "/nonexistent/nmcli", false);
+        r.read();
+        QVERIFY(r.presence() == NmWifiPresence::ManagesWifi);
+    }
+
+    void presenceNoWifiDevice() {
+        startFake(true);
+        NetworkManagerWifiReader r(QDBusConnection::sessionBus(), "/nonexistent/nmcli", false);
+        r.read();
+        QVERIFY(r.presence() == NmWifiPresence::NoWifiDevice);
+    }
+
+    void presenceNotManagingWifi() {
+        startFake(true);
+        addWifi(10, "/", QByteArray());
+        NetworkManagerWifiReader r(QDBusConnection::sessionBus(), "/nonexistent/nmcli", false);
+        r.read();
+        QVERIFY(r.presence() == NmWifiPresence::NotManagingWifi);
+    }
+
+    void presenceUnreachableWithoutNmAndNmcli() {
+        startFake(false);
+        NetworkManagerWifiReader r(QDBusConnection::sessionBus(), "/nonexistent/nmcli", false);
+        r.read();
+        QVERIFY(r.presence() == NmWifiPresence::Unreachable);
+    }
+
+    void presenceUnreachableWhenNmcliSaysNotRunning() {
+        if (IsWindowsHost()) QSKIP("fake nmcli is a shell script");
+        startFake(false);
+        QTemporaryDir dir;
+        const QString nmcli = makeNmcli(dir, "echo 'Error: NetworkManager is not running.' >&2\nexit 8");
+        NetworkManagerWifiReader r(QDBusConnection::sessionBus(), nmcli, false);
+        r.read();
+        QVERIFY(r.presence() == NmWifiPresence::Unreachable);
+    }
+
+    void presenceTimedOut() {
+        startFake(true);
+        addWifi(100, FakeNetworkManager::apPath(0), "Slow");
+        {
+            QMutexLocker l(&fake_->mutex);
+            fake_->delayMs = 3000;
+        }
+        NetworkManagerWifiReader r(QDBusConnection::sessionBus(), "/nonexistent/nmcli", false, 600);
+        r.read();
+        QVERIFY(r.presence() == NmWifiPresence::TimedOut);
+        {
+            QMutexLocker l(&fake_->mutex);
+            fake_->delayMs = 0;
+        }
+    }
+
+    void presenceUnreachableInSandbox() {
+        startFake(false);
+        NetworkManagerWifiReader r(QDBusConnection::sessionBus(), "/nonexistent/nmcli", true);
+        r.read();
+        QVERIFY(r.presence() == NmWifiPresence::Unreachable);
+    }
+
+    void hintNamesIwdAsSupported() {
+        if (IsWindowsHost()) QSKIP("fake nmcli is a shell script");
+        startFake(false);
+        QTemporaryDir dir;
+        const QString nmcli = makeNmcli(dir, "echo 'Error: NetworkManager is not running.' >&2\nexit 8");
+        NetworkManagerWifiReader r(QDBusConnection::sessionBus(), nmcli, false);
+        const auto got = r.read();
+        QVERIFY2(got.detail.contains("NetworkManager or iwd"), qPrintable(got.detail));
+        QVERIFY2(!got.detail.contains("iwd, wpa_supplicant"), qPrintable(got.detail));
+    }
 };
 
 QTEST_MAIN(WifiNmTest)
