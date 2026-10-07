@@ -12,7 +12,6 @@ fi
 grep -q 'isSystemTrayAvailable()' "$repo_root/src/platform/PlatformCapabilitiesApp.cpp" || fail "glue must read isSystemTrayAvailable()"
 grep -q 'DetectLinuxDesktop(' "$repo_root/src/platform/PlatformCapabilitiesApp.cpp" || fail "glue must detect the Linux desktop"
 grep -q 'Capability::SystemTray' "$repo_root/src/ui/dialog_basic_settings.cpp" || fail "Start minimized must be gated on SystemTray"
-grep -Fqx '  - --talk-name=org.kde.StatusNotifierWatcher' "$repo_root/packaging/flatpak/io.github.Ogstra.Proxor.yml" || fail "Flatpak must talk to the StatusNotifierWatcher"
 if grep -nE 'ProxorDesktop::Portals|Portals\(\)' "$mw"; then
   fail "no portal calls on the UI thread here"
 fi

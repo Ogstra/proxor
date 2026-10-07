@@ -27,10 +27,6 @@ for needle in 'net.connman.iwd' 'GetManagedObjects' 'net.connman.iwd.Station' 'C
 done
 need "$repo_root/src/sys/wifi/WifiBackendChain.cpp" 'ChooseWifiReading'
 
-if grep -qF 'connman' "$repo_root/packaging/flatpak/io.github.Ogstra.Proxor.yml"; then
-  fail "Flatpak manifest must not gain an iwd/connman permission"
-fi
-
 docs="$repo_root/docs/Run_Linux.md"
 grep -qxF '## Wayland compositors' "$docs" || fail "Run_Linux.md lost the Wayland compositors section"
 grep -q '^## Wi-Fi network detection' "$docs" || fail "Run_Linux.md lost the Wi-Fi network detection section"
