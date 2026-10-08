@@ -51,6 +51,7 @@ namespace ProxorMac {
 }
 #include "sys/macos/MacHelperPolicy.h"
 #include "sys/macos/MacModeCoordinator.h"
+#include "platform/MacAppUpdatePolicy.hpp"
 #endif
 
 QT_BEGIN_NAMESPACE
@@ -226,6 +227,14 @@ private:
     void macPauseModes(bool systemProxy, bool tun);
     void macResumeModes(bool systemProxy, bool tun);
     void macWakeCheckModes(ProxorPlatform::WakeModes before);
+    ProxorPlatform::MacAppUpdateRoute macAppUpdateRoute(PackageMode mode) const;
+    void macAppUpdateFailed(bool duringDownload, const QString &error, const QString &releaseUrl);
+    void macAppUpdateStaged();
+    void macAppUpdateShowResult();
+    ProxorPlatform::MacAppUpdateRoute mac_app_update_route = ProxorPlatform::MacAppUpdateRoute::Guidance;
+    QString mac_app_update_zip_dir;
+    QString mac_app_update_release_url;
+    QStringList mac_app_update_args;
 #endif
     QShortcut *shortcut_ctrl_f = new QShortcut(QKeySequence("Ctrl+F"), this);
     QShortcut *shortcut_ctrl_v = new QShortcut(QKeySequence("Ctrl+V"), this);
