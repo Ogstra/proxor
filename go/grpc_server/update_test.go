@@ -28,7 +28,7 @@ func TestUpdateArchiveSuffixes(t *testing.T) {
 		{goos: "windows", goarch: "arm64", expected: []string{"windows-arm64.zip"}},
 		{goos: "linux", goarch: "amd64", expected: []string{"linux64.AppImage"}},
 		{goos: "linux", goarch: "arm64", wantErr: true},
-		{goos: "darwin", goarch: "amd64", wantErr: true},
+		{goos: "darwin", goarch: "amd64", expected: []string{"-macos-x86_64.zip"}},
 		{goos: "darwin", goarch: "arm64", expected: []string{"-macos-arm64.zip"}},
 	}
 
@@ -493,9 +493,74 @@ func TestDarwinChannelsResolveMacZip(t *testing.T) {
 			t.Fatalf("channel %q: expected [-macos-arm64.zip], got %v", channel, got)
 		}
 	}
-	_, err := updateArchiveSuffixes("darwin", "amd64")
-	if err == nil || !strings.Contains(err.Error(), "Apple silicon") {
-		t.Fatalf("darwin/amd64: expected an Apple silicon only error, got %v", err)
+	for _, channel := range []string{"homebrew", "macos-app", "", "portable"} {
+		got, err := suffixesForChannel(channel, "darwin", "amd64")
+		if err != nil || len(got) != 1 || got[0] != "-macos-x86_64.zip" {
+			t.Fatalf("darwin/amd64 channel %q: expected [-macos-x86_64.zip], got %v (err %v)", channel, got, err)
+		}
+	}
+}
+
+func TestDarwinIntelResolvesX8664Zip(t *testing.T) {
+	got, err := updateArchiveSuffixes("darwin", "amd64")
+	if err != nil || len(got) != 1 || got[0] != "-macos-x86_64.zip" {
+		t.Fatalf("darwin/amd64: expected [-macos-x86_64.zip], got %v (err %v)", got, err)
+	}
+	got, err = updateArchiveSuffixes("darwin", "arm64")
+	if err != nil || len(got) != 1 || got[0] != "-macos-arm64.zip" {
+		t.Fatalf("darwin/arm64: expected [-macos-arm64.zip], got %v (err %v)", got, err)
+	}
+	for _, arch := range []string{"386", "ppc64", "riscv64"} {
+		_, err := updateArchiveSuffixes("darwin", arch)
+		if err == nil {
+			t.Fatalf("darwin/%s: expected an error", arch)
+		}
+		if strings.Contains(err.Error(), "Apple silicon") || !strings.Contains(err.Error(), "darwin/"+arch) {
+			t.Fatalf("darwin/%s: unexpected error text %q", arch, err.Error())
+		}
+	}
+	for _, channel := range []string{"homebrew", "macos-app", "portable", ""} {
+		got, err := suffixesForChannel(channel, "darwin", "amd64")
+		if err != nil || len(got) != 1 || got[0] != "-macos-x86_64.zip" {
+			t.Fatalf("channel %q: expected [-macos-x86_64.zip], got %v (err %v)", channel, got, err)
+		}
+	}
+	if msg := selfUpdateRefusal("darwin"); !strings.Contains(msg, "brew upgrade --cask proxor") {
+		t.Fatalf("darwin refusal must still name the brew command, got %q", msg)
+	}
+}
+
+func TestIntelSelectionSkipsArmOnlyReleases(t *testing.T) {
+	mk := func(v string, intel bool) githubRelease {
+		assets := []githubReleaseAsset{
+			{Name: "proxor-" + v + "-macos-arm64.zip", BrowserDownloadURL: "https://example.com/" + v + "-arm.zip"},
+			{Name: "SHA256SUMS"},
+		}
+		if intel {
+			assets = append(assets, githubReleaseAsset{Name: "proxor-" + v + "-macos-x86_64.zip", BrowserDownloadURL: "https://example.com/" + v + "-intel.zip"})
+		}
+		return githubRelease{TagName: "proxor-" + v, Prerelease: true, Assets: assets}
+	}
+	suffixes := []string{"-macos-x86_64.zip"}
+
+	releases := []githubRelease{mk("1.6.11", true), mk("1.6.12", true), mk("1.6.10", true)}
+	_, asset, selection := matchingReleaseAsset(releases, "1.6.10", suffixes, true)
+	if asset == nil || selection != updateSelectionAvailable || asset.Name != "proxor-1.6.12-macos-x86_64.zip" {
+		t.Fatalf("expected the newest x86_64 zip, got asset=%v selection=%v", asset, selection)
+	}
+
+	// The newest release has only the arm64 zip: it must be skipped.
+	releases = []githubRelease{mk("1.6.11", true), mk("1.6.12", false)}
+	_, asset, selection = matchingReleaseAsset(releases, "1.6.10", suffixes, true)
+	if asset == nil || selection != updateSelectionAvailable || asset.Name != "proxor-1.6.11-macos-x86_64.zip" {
+		t.Fatalf("expected fallback to 1.6.11 x86_64 zip, got asset=%v selection=%v", asset, selection)
+	}
+
+	// No release carries the Intel zip.
+	releases = []githubRelease{mk("1.6.11", false), mk("1.6.12", false)}
+	_, asset, selection = matchingReleaseAsset(releases, "1.6.10", suffixes, true)
+	if asset != nil || selection != updateSelectionNoCompatible {
+		t.Fatalf("expected no compatible package, got asset=%v selection=%v", asset, selection)
 	}
 }
 
