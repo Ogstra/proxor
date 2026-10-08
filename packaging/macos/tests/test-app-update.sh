@@ -152,12 +152,12 @@ expect() { # expect "description" cmd args...  (cmd run in the current shell, su
   shift
   if "$@" >/dev/null 2>&1; then pass; else fail "$what"; fi
 }
-reap_case() { reap; sleep 0.3; }
+reap_case() { sleep 1; reap; sleep 0.3; }
 rcis() { [ "$RC" = "$1" ]; }
 
 # ---------------------------------------------------------------- shim assertion
 shim_check() {
-  local f n body bad=""
+  local f n ne body bad=""
   body="$(grep -v '^[[:space:]]*#' "$REL")"
   for n in lipo otool vtool xcrun clang python3; do
     if printf '%s\n' "$body" | grep -qw "$n"; then bad="$bad $n"; fi
@@ -166,8 +166,9 @@ shim_check() {
     [ -f "$f" ] || continue
     if grep -qa libxcselect "$f" 2>/dev/null; then
       n="$(basename "$f")"
+      ne="$(printf '%s' "$n" | sed 's/[][\\.*^$+?(){}|/]/\\&/g')"
       # a command position: line start, after ; & | ( ` $( then do else if ! or a leading /usr/bin/
-      if printf '%s\n' "$body" | grep -qE "(^|[;&|(\`]|\\\$\\(|[[:space:]](then|do|else|if|!))[[:space:]]*(/usr/bin/)?$n([[:space:]]|\$)"; then
+      if printf '%s\n' "$body" | grep -qE "(^|[;&|(\`]|\\\$\\(|[[:space:]](then|do|else|if|!))[[:space:]]*(/usr/bin/)?$ne([[:space:]]|\$)"; then
         bad="$bad $n"
       fi
     fi
