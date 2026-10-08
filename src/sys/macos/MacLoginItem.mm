@@ -3,6 +3,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QProcess>
 #include <QSaveFile>
 #include <QStandardPaths>
@@ -23,9 +24,14 @@ QString CurrentAppBundlePath() {
 
 ProxorPlatform::MacLoginItemStatus LegacyAgentStatus(const QString &plistPath) {
     @autoreleasepool {
-        NSURL *url = [NSURL fileURLWithPath:plistPath.toNSString()];
-        const SMAppServiceStatus status = [SMAppService statusForLegacyURL:url];
-        return ProxorPlatform::MapSMAppServiceStatus(static_cast<long>(status));
+        if (@available(macOS 13.0, *)) {
+            NSURL *url = [NSURL fileURLWithPath:plistPath.toNSString()];
+            const SMAppServiceStatus status = [SMAppService statusForLegacyURL:url];
+            return ProxorPlatform::MapSMAppServiceStatus(static_cast<long>(status));
+        }
+        // macOS 12: no SMAppService/Background Task Management; launchd loads ~/Library/LaunchAgents at login.
+        return QFileInfo::exists(plistPath) ? ProxorPlatform::MacLoginItemStatus::Enabled
+                                            : ProxorPlatform::MacLoginItemStatus::NotRegistered;
     }
 }
 
@@ -63,13 +69,15 @@ bool RemoveLaunchAgent(const QString &plistPath, const QString &label, QString *
 
 bool OpenLoginItemsSettings() {
     @autoreleasepool {
-        if ([SMAppService respondsToSelector:@selector(openSystemSettingsLoginItems)]) {
+        if (@available(macOS 13.0, *)) {
             // No result value; it is the documented way, so count it as opened.
             [SMAppService openSystemSettingsLoginItems];
             return true;
         }
-        NSURL *url = [NSURL URLWithString:@"x-apple.systempreferences:com.apple.LoginItems-Settings.extension"];
-        return url && [[NSWorkspace sharedWorkspace] openURL:url];
+        // macOS 12: System Preferences > Users & Groups > Login Items (anchor UNVERIFIED on 12), then the pane itself.
+        NSURL *url = [NSURL URLWithString:@"x-apple.systempreferences:com.apple.preferences.users?startupItems"];
+        if (url && [[NSWorkspace sharedWorkspace] openURL:url]) return true;
+        return [[NSWorkspace sharedWorkspace] openURL:[NSURL fileURLWithPath:@"/System/Library/PreferencePanes/Accounts.prefPane"]];
     }
 }
 
