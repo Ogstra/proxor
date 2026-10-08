@@ -13,6 +13,7 @@ service LibcoreService {
   rpc Test(TestReq) returns (TestResp) {}
   rpc QueryStats(QueryStatsReq) returns (QueryStatsResp) {}
   rpc ListConnections(EmptyReq) returns (ListConnectionsResp) {}
+  rpc ResetNetwork(EmptyReq) returns (EmptyResp) {}
 }
 
 message EmptyReq {}

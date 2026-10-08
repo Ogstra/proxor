@@ -30,6 +30,8 @@ namespace ProxorGui_rpc {
 
         std::string ListConnections();
 
+        bool ResetNetwork();
+
         libcore::TestResp Test(bool *rpcOK, const libcore::TestReq &request);
 
         libcore::UpdateResp Update(bool *rpcOK, const libcore::UpdateReq &request);

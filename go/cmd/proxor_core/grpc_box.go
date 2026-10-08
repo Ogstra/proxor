@@ -254,6 +254,15 @@ func (s *server) QueryStats(ctx context.Context, in *gen.QueryStatsReq) (out *ge
 	return
 }
 
+// ResetNetwork drops every proxied connection and tells the outbounds to refresh
+// their network state; the app calls it after the machine wakes from sleep.
+func (s *server) ResetNetwork(ctx context.Context, in *gen.EmptyReq) (*gen.EmptyResp, error) {
+	if instance != nil {
+		instance.Router().ResetNetwork()
+	}
+	return &gen.EmptyResp{}, nil
+}
+
 func (s *server) ListConnections(ctx context.Context, in *gen.EmptyReq) (*gen.ListConnectionsResp, error) {
 	out := &gen.ListConnectionsResp{}
 	if instance == nil {

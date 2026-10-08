@@ -27,6 +27,7 @@ const (
 	LibcoreService_Test_FullMethodName            = "/libcore.LibcoreService/Test"
 	LibcoreService_QueryStats_FullMethodName      = "/libcore.LibcoreService/QueryStats"
 	LibcoreService_ListConnections_FullMethodName = "/libcore.LibcoreService/ListConnections"
+	LibcoreService_ResetNetwork_FullMethodName    = "/libcore.LibcoreService/ResetNetwork"
 )
 
 // LibcoreServiceClient is the client API for LibcoreService service.
@@ -35,13 +36,13 @@ const (
 type LibcoreServiceClient interface {
 	Exit(ctx context.Context, in *EmptyReq, opts ...grpc.CallOption) (*EmptyResp, error)
 	Update(ctx context.Context, in *UpdateReq, opts ...grpc.CallOption) (*UpdateResp, error)
-	//
 	Validate(ctx context.Context, in *LoadConfigReq, opts ...grpc.CallOption) (*ErrorResp, error)
 	Start(ctx context.Context, in *LoadConfigReq, opts ...grpc.CallOption) (*ErrorResp, error)
 	Stop(ctx context.Context, in *EmptyReq, opts ...grpc.CallOption) (*ErrorResp, error)
 	Test(ctx context.Context, in *TestReq, opts ...grpc.CallOption) (*TestResp, error)
 	QueryStats(ctx context.Context, in *QueryStatsReq, opts ...grpc.CallOption) (*QueryStatsResp, error)
 	ListConnections(ctx context.Context, in *EmptyReq, opts ...grpc.CallOption) (*ListConnectionsResp, error)
+	ResetNetwork(ctx context.Context, in *EmptyReq, opts ...grpc.CallOption) (*EmptyResp, error)
 }
 
 type libcoreServiceClient struct {
@@ -132,19 +133,29 @@ func (c *libcoreServiceClient) ListConnections(ctx context.Context, in *EmptyReq
 	return out, nil
 }
 
+func (c *libcoreServiceClient) ResetNetwork(ctx context.Context, in *EmptyReq, opts ...grpc.CallOption) (*EmptyResp, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(EmptyResp)
+	err := c.cc.Invoke(ctx, LibcoreService_ResetNetwork_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // LibcoreServiceServer is the server API for LibcoreService service.
 // All implementations must embed UnimplementedLibcoreServiceServer
 // for forward compatibility.
 type LibcoreServiceServer interface {
 	Exit(context.Context, *EmptyReq) (*EmptyResp, error)
 	Update(context.Context, *UpdateReq) (*UpdateResp, error)
-	//
 	Validate(context.Context, *LoadConfigReq) (*ErrorResp, error)
 	Start(context.Context, *LoadConfigReq) (*ErrorResp, error)
 	Stop(context.Context, *EmptyReq) (*ErrorResp, error)
 	Test(context.Context, *TestReq) (*TestResp, error)
 	QueryStats(context.Context, *QueryStatsReq) (*QueryStatsResp, error)
 	ListConnections(context.Context, *EmptyReq) (*ListConnectionsResp, error)
+	ResetNetwork(context.Context, *EmptyReq) (*EmptyResp, error)
 	mustEmbedUnimplementedLibcoreServiceServer()
 }
 
@@ -178,6 +189,9 @@ func (UnimplementedLibcoreServiceServer) QueryStats(context.Context, *QueryStats
 }
 func (UnimplementedLibcoreServiceServer) ListConnections(context.Context, *EmptyReq) (*ListConnectionsResp, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListConnections not implemented")
+}
+func (UnimplementedLibcoreServiceServer) ResetNetwork(context.Context, *EmptyReq) (*EmptyResp, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResetNetwork not implemented")
 }
 func (UnimplementedLibcoreServiceServer) mustEmbedUnimplementedLibcoreServiceServer() {}
 func (UnimplementedLibcoreServiceServer) testEmbeddedByValue()                        {}
@@ -344,6 +358,24 @@ func _LibcoreService_ListConnections_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _LibcoreService_ResetNetwork_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EmptyReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LibcoreServiceServer).ResetNetwork(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LibcoreService_ResetNetwork_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LibcoreServiceServer).ResetNetwork(ctx, req.(*EmptyReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // LibcoreService_ServiceDesc is the grpc.ServiceDesc for LibcoreService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -382,6 +414,10 @@ var LibcoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListConnections",
 			Handler:    _LibcoreService_ListConnections_Handler,
+		},
+		{
+			MethodName: "ResetNetwork",
+			Handler:    _LibcoreService_ResetNetwork_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -274,6 +274,12 @@ namespace ProxorGui_rpc {
         }
     }
 
+    bool Client::ResetNetwork() {
+        libcore::EmptyReq request;
+        libcore::EmptyResp reply;
+        return default_grpc_channel->Call("ResetNetwork", request, &reply, 1000) == QNetworkReply::NoError;
+    }
+
     std::string Client::ListConnections() {
         libcore::EmptyReq request;
         libcore::ListConnectionsResp reply;

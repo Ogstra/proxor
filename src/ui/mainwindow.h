@@ -294,6 +294,7 @@ private:
     void wakeInstall();
     void wakeOnSleepEvent(bool sleeping);
     void wakeDetected(ProxorPlatform::WakeSource source);
+    void wakeResetCoreNetwork();
     void wakeRunStep();
     void wakeSubsStep();
     bool wakeOwnsSubscriptions() const;

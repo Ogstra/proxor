@@ -5,9 +5,11 @@
 #include "sys/SleepWake.hpp"
 #include "sub/GroupUpdater.hpp"
 #include "db/Database.hpp"
+#include "rpc/gRPC.h"
 
 #include <QDateTime>
 #include <QNetworkInformation>
+#include <QThreadPool>
 #include <QTimer>
 
 #ifdef Q_OS_MACOS
@@ -77,6 +79,22 @@ void MainWindow::wakeDetected(ProxorPlatform::WakeSource source) {
                                        .arg(sourceName)
                                        .arg(wake_coord.snapshot().profileId));
     if (wake_timer) wake_timer->start(0);
+    wakeResetCoreNetwork();
+}
+
+// With Tun on, every app's traffic goes through the core, so connections that were open before the sleep stay
+// dead until the core drops them. Done off the GUI thread: the call waits for the core's reply.
+void MainWindow::wakeResetCoreNetwork() {
+    if (!ProxorGui::dataStore->spmode_vpn || !ProxorGui::dataStore->core_running) return;
+    QTimer::singleShot(1500, this, [this] {
+        if (ProxorGui::dataStore->prepare_exit || !ProxorGui::dataStore->core_running) return;
+        QThreadPool::globalInstance()->start([this] {
+            const bool ok = ProxorGui_rpc::defaultClient->ResetNetwork();
+            QMetaObject::invokeMethod(this, [ok] {
+                ProxorGui_log::WriteDiagnostic(QStringLiteral("[Wake] core network reset: %1").arg(ok ? "ok" : "failed"));
+            }, Qt::QueuedConnection);
+        });
+    });
 }
 
 void MainWindow::wakeRunStep() {
