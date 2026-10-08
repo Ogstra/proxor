@@ -20,7 +20,7 @@ may only carry Windows files; macOS and Linux files are in the latest **prerelea
 If it reports missing DLLs, install the
 [Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe).
 
-### macOS (Apple Silicon)
+### macOS (Apple Silicon and Intel)
 
 ```bash
 brew install --cask ogstra/tap/proxor
@@ -71,7 +71,7 @@ More options, checksums and Tun permissions: [Install on Linux](docs/Install_Lin
 | System | Requirement |
 |---|---|
 | Windows | Windows 10 (1809 or later) or Windows 11, 64-bit |
-| macOS | macOS 15 or later, Apple Silicon |
+| macOS | Apple Silicon: macOS 15 or later. Intel: macOS 12 or later |
 | Linux | x86_64 |
 
 ## Supported proxy types
