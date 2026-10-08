@@ -138,6 +138,10 @@ if ! grep -qxF 'Proxor.app/Contents/Resources/helper/helper-install.sh' <<<"$ent
   echo "ERROR: zip does not contain Proxor.app/Contents/Resources/helper/helper-install.sh" >&2
   exit 1
 fi
+if ! grep -qxF 'Proxor.app/Contents/Resources/update/proxor-app-update.sh' <<<"$entries"; then
+  echo "ERROR: zip does not contain Proxor.app/Contents/Resources/update/proxor-app-update.sh" >&2
+  exit 1
+fi
 link_info="$(zipinfo "$zip" 'Proxor.app/Contents/MacOS/geosite.db')"
 if ! grep -q '^l' <<<"$link_info"; then
   echo "ERROR: geosite.db is not stored as a symlink" >&2
@@ -155,6 +159,8 @@ test -x "$check/Proxor.app/Contents/Resources/helper/helper-install.sh"
 test -x "$check/Proxor.app/Contents/Resources/helper/helper-uninstall.sh"
 test -L "$check/Proxor.app/Contents/MacOS/geosite.db"
 test -s "$check/Proxor.app/Contents/MacOS/geosite.db"
+test -f "$check/Proxor.app/Contents/Resources/update/proxor-app-update.sh"
+head -1 "$check/Proxor.app/Contents/Resources/update/proxor-app-update.sh" | grep -qx '#!/bin/bash'
 main_refs="$(otool -L "$check/Proxor.app/Contents/MacOS/Proxor")"
 if grep -q /opt/homebrew <<<"$main_refs"; then
   echo "ERROR: Proxor still links against /opt/homebrew" >&2
@@ -177,5 +183,6 @@ if [ "$arch" = x86_64 ]; then
   echo "INTEL-ARCH-OK (x86_64, minos $floor)"
 fi
 
+echo "MAC-UPDATE-SCRIPT-OK"
 shasum -a 256 "$zip"
 echo "macOS release asset ready: $zip"
