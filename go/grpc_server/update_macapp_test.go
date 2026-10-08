@@ -177,6 +177,7 @@ func TestMacAppDownloadRejectsAMismatch(t *testing.T) {
 	asset := "proxor-99.0.0-macos-arm64.zip"
 	srv, _ := macAppFake(t, "arm64", asset)
 	srv.setSums(strings.Repeat("0", 64) + "  " + asset + "\n")
+	checkMacApp(t, asset)
 	dir := t.TempDir()
 	dl := callUpdateReq(t, &gen.UpdateReq{Action: gen.UpdateAction_Download, Channel: "macos-app", DownloadDir: dir})
 	if !strings.Contains(dl.Error, "SHA-256") {
