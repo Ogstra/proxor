@@ -136,6 +136,10 @@ func selfUpdateRefusal(goos string) string {
 	return ""
 }
 
+func selfUpdateRefusalFor(goos, channel, downloadDir string) string {
+	return selfUpdateRefusal(goos)
+}
+
 // suffixesForChannel resolves the asset name suffix published for the channel the GUI
 // detected. Knowing a version exists is independent of being able to apply it, so this
 // resolves an asset even for channels the GUI will never call Download for (deb, rpm,
