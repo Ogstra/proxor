@@ -460,6 +460,10 @@ jobs:
         # No OS guard, same reason as the E2E gate: ruby YAML only.
         shell: bash
         run: bash .github/tests/test-macos-intel-gate.sh
+      - name: Verify the macOS update E2E gate
+        # No OS guard: ruby YAML only.
+        shell: bash
+        run: bash .github/tests/test-mac-update-e2e-gate.sh
       - name: Install Qt Core and Test
         uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
         with:
@@ -1022,6 +1026,80 @@ jobs:
         shell: bash
         run: sudo sh p50-app/Proxor.app/Contents/Resources/helper/helper-uninstall.sh || true
 
+  update-e2e-macos:
+    name: macOS update E2E
+    # Gates publish-release: the candidate macOS update path end to end. The core downloads and verifies the zip
+    # against a local fake release server, the relauncher suite runs on throwaway bundles, and the candidate
+    # Proxor.app (unzipped like Homebrew) is swapped by the relauncher bundled inside it and relaunched with the
+    # production open-then-exec relaunch. Only runner temp folders are touched; never a real install.
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
+    needs: [package-macos]
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checking out sources
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          submodules: "recursive"
+      - name: Install Golang
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - name: Download the candidate macOS zip (preview)
+        if: github.event.inputs.tag == ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: Proxor-${{ github.sha }}-macos-arm64-preview
+          path: e2e-zip
+      - name: Download the candidate macOS zip (release)
+        if: github.event.inputs.tag != ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-assets-macos
+          path: e2e-zip
+      - name: Run the macOS update end-to-end tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PROXOR_MAC_UPDATE_E2E_REQUIRE=1
+          go test ./go/grpc_server/ -run 'TestUpdateE2EMac' -count=1 -v
+          bash packaging/macos/tests/test-app-update.sh
+      - name: Swap the candidate Proxor.app with its own relauncher
+        shell: bash
+        run: |
+          set -euo pipefail
+          zip="$(ls e2e-zip/proxor-*-macos-arm64.zip)"
+          apps="$RUNNER_TEMP/mac-update-e2e/Apps"
+          mkdir -p "$apps"
+          /usr/bin/unzip -q "$zip" -d "$apps"
+          codesign --verify --deep --strict "$apps/Proxor.app"
+          # The GUI copies the relauncher out of the bundle before it swaps the bundle.
+          cp "$apps/Proxor.app/Contents/Resources/update/proxor-app-update.sh" "$RUNNER_TEMP/proxor-app-update.sh"
+          mkdir -p "$apps/.proxor-update"
+          cp "$zip" "$apps/.proxor-update/"
+          sleep 30 &
+          old=$!
+          ( sleep 1; kill "$old" ) &
+          bash "$RUNNER_TEMP/proxor-app-update.sh" install "$old" "$apps/.proxor-update/$(basename "$zip")" "$apps/Proxor.app" "$RUNNER_TEMP/mac-update-result.txt" -- -many -appdata "$RUNNER_TEMP/mac-update-data"
+          cat "$RUNNER_TEMP/mac-update-result.txt"
+          grep -q '^ok ' "$RUNNER_TEMP/mac-update-result.txt"
+          codesign --verify --deep --strict "$apps/Proxor.app"
+          left="$(ls -A "$apps" | grep -E '^\.(proxor-update|Proxor\.app\.previous\.)' || true)"
+          if [ -n "$left" ]; then echo "leftovers in $apps: $left"; exit 1; fi
+          if ! ps -axo args= | grep -F "$apps/Proxor.app/Contents/MacOS/Proxor" | grep -v grep >/dev/null; then
+            echo "the swapped Proxor.app is not running"
+            exit 1
+          fi
+          echo "MAC-UPDATE-E2E-OK"
+      - name: Stop the swapped candidate
+        if: always()
+        shell: bash
+        run: pkill -f "$RUNNER_TEMP/mac-update-e2e/Apps/Proxor.app/Contents/MacOS/" || true
+
   package-macos-intel:
     name: Build macOS x86_64 app
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
@@ -1156,8 +1234,8 @@ jobs:
     name: Publish verified release assets
     # !cancelled() plus explicit results: the optional Intel job is waited for (needs) but never required, so a
     # failed or skipped Intel build cannot skip the release. MACOS_INTEL_REQUIRED (top-level env) is the switch.
-    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'y' && github.event.inputs.tag != '' && needs.stage-package-source.result == 'success' && needs.appimage.result == 'success' && needs.package-windows.result == 'success' && needs.package-deb.result == 'success' && needs.package-rpm.result == 'success' && needs.package-arch.result == 'success' && needs.package-macos.result == 'success' }}
-    needs: [stage-package-source, appimage, package-windows, package-deb, package-rpm, package-arch, package-macos, package-macos-intel]
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'y' && github.event.inputs.tag != '' && needs.stage-package-source.result == 'success' && needs.appimage.result == 'success' && needs.package-windows.result == 'success' && needs.package-deb.result == 'success' && needs.package-rpm.result == 'success' && needs.package-arch.result == 'success' && needs.package-macos.result == 'success' && needs.update-e2e-macos.result == 'success' }}
+    needs: [stage-package-source, appimage, package-windows, package-deb, package-rpm, package-arch, package-macos, package-macos-intel, update-e2e-macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write
