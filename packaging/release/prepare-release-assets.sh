@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
-usage() { echo "Usage: $0 prepare-source-release|prepare-final-assets --input DIR --version X.Y.Z --output DIR [--public-source-url URL] [--windows-only]" >&2; exit 2; }
+usage() { echo "Usage: $0 prepare-source-release|prepare-final-assets --input DIR --version X.Y.Z --output DIR [--public-source-url URL] [--windows-only] [--require-macos-intel]" >&2; exit 2; }
 phase="${1:-}"; shift || true
-input= output= version= public_url= windows_only=n
-while [ "$#" -gt 0 ]; do case "$1" in --input) input="$2"; shift 2;; --output) output="$2"; shift 2;; --version) version="$2"; shift 2;; --public-source-url) public_url="$2"; shift 2;; --windows-only) windows_only=y; shift;; *) usage;; esac; done
+input= output= version= public_url= windows_only=n require_intel=n
+while [ "$#" -gt 0 ]; do case "$1" in --input) input="$2"; shift 2;; --output) output="$2"; shift 2;; --version) version="$2"; shift 2;; --public-source-url) public_url="$2"; shift 2;; --windows-only) windows_only=y; shift;; --require-macos-intel) require_intel=y; shift;; *) usage;; esac; done
 case "$version" in [0-9]*.[0-9]*.[0-9]*) ;; *) usage;; esac; [ -d "$input" ] && [ -n "$output" ] || usage
 source="$(find "$input" -type f -name "proxor-$version.tar.gz" -print -quit)"; manifest="$(find "$input" -type f -name "proxor-$version.source-manifest" -print -quit)"
 [ -n "$source" ] && [ -n "$manifest" ] || { echo 'verified source artifact is required' >&2; exit 1; }
 sha="$(shasum -a 256 "$source" | awk '{print $1}')"; grep -qx "version=$version" "$manifest"; grep -qx "sha256=$sha" "$manifest"
 mkdir -p "$output"; cp "$source" "$manifest" "$output/"
-if [ "$phase" = prepare-source-release ]; then [ "$windows_only" = n ] || usage; exit 0; fi
+if [ "$phase" = prepare-source-release ]; then [ "$windows_only" = n ] && [ "$require_intel" = n ] || usage; exit 0; fi
 [ "$phase" = prepare-final-assets ] || usage
 case "$public_url" in "https://github.com/Ogstra/proxor/releases/download/"*/"proxor-$version.tar.gz") ;; *) echo 'public source URL must be the attached release asset' >&2; exit 1;; esac
 # --windows-only ships a stable release with the Windows downloads alone while the other
 # platforms stay prereleases. The full path below is unchanged when the flag is absent.
 required_assets=('*-windows64.zip' '*-winget-x64.zip' '*-macos-arm64.zip' '*.AppImage' '*.deb' '*.rpm')
 if [ "$windows_only" = y ]; then required_assets=('*-windows64.zip' '*-winget-x64.zip'); fi
+# The macOS Intel zip is optional until the workflow's MACOS_INTEL_REQUIRED switch is y (it then passes --require-macos-intel).
+if [ "$require_intel" = y ] && [ "$windows_only" = n ]; then required_assets+=('*-macos-x86_64.zip'); fi
 for required in "${required_assets[@]}"; do find "$input" -type f -name "$required" -print -quit | grep -q . || { echo "missing $required" >&2; exit 1; }; done
 ! find "$input" -type f \( -iname '*.msi' -o -iname '*.dmg' \) -print -quit | grep -q .
 # Only what a user downloads and runs: debug symbols, debug packages and source RPMs
