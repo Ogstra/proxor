@@ -1,6 +1,6 @@
 # Build Proxor on macOS
 
-This document covers local Apple Silicon builds of the GUI application.
+This document covers local Apple Silicon and Intel builds of the GUI application.
 
 ## Status
 
@@ -10,6 +10,14 @@ Silicon only, macOS 15 (Sequoia) or later. The app is ad-hoc signed and not nota
 is not meant to be opened by double-click after a browser download (Gatekeeper blocks it): install
 through Homebrew instead. `./libs/build_macos.sh` and `./libs/package_macos.sh` reproduce the same
 build locally. macOS releases are published as prereleases.
+
+Intel Macs: a release may also carry `proxor-<version>-macos-x86_64.zip`, built by the
+`Build macOS x86_64 app` job (`package-macos-intel`) on the GitHub `macos-15-intel` runner with the
+official Qt 6.7.2 (aqtinstall). It is Intel only (not a universal binary) and needs macOS 12
+(Monterey) or later. The Intel zip is optional for now: a release can be published without it, so
+check the release page. The `MACOS_INTEL_REQUIRED` switch in the workflow makes it required later.
+The Intel build was compiled and linked for macOS 12 during development, but nothing has been run
+on a real Intel Mac or on macOS 12 yet.
 
 ## Install with Homebrew
 
@@ -23,6 +31,14 @@ Needs Homebrew 7 or newer (`brew update` first). The cask lives in `Ogstra/homeb
 bumped automatically when a release is published; it tracks prereleases too. The cask clears
 `com.apple.quarantine` after install because the app is not notarized. A zip downloaded manually
 needs `xattr -dr com.apple.quarantine Proxor.app`, or right-click and choose Open.
+
+The same commands work on Intel Macs once a release carries the Intel zip: the cask picks the zip
+for the Mac's architecture (Intel needs macOS 12, Apple Silicon macOS 15). Homebrew itself treats
+Intel Macs as unsupported (Tier 3, no new bottles) and says it will stop running on Intel in or
+after September 2027 (Homebrew Support Tiers page, read 2026-10-07). The cask only downloads our
+zip, so it still works, but without Homebrew support. Without Homebrew, download
+`proxor-<version>-macos-x86_64.zip` from the release page and run
+`xattr -dr com.apple.quarantine Proxor.app`.
 
 ## Tun and System Proxy
 
@@ -93,7 +109,9 @@ service. macOS releases are prereleases, so expect rough edges and report them.
   button that opens Login Items. The agent takes effect at your next login. Turning the option off
   removes the file. `brew upgrade --cask proxor` keeps it; `brew uninstall --zap` removes it. If the
   agent points at another copy of Proxor, Settings says so and turning the option on here moves it.
-- **Updates.** The update check finds new versions of `proxor-<version>-macos-arm64.zip`. Every
+- **Updates.** The update check finds new versions of the zip for your Mac's architecture
+  (`proxor-<version>-macos-arm64.zip` or `proxor-<version>-macos-x86_64.zip`). An Intel Mac sees an
+  update only when that release has the Intel zip. Every
   macOS release is a prerelease, so macOS always includes prereleases. A Homebrew install
   (`/Applications/Proxor.app` or `~/Applications/Proxor.app` with the cask present in Caskroom)
   shows `brew upgrade --cask proxor` with a Copy button, and the hint to run `brew update` first if
@@ -107,6 +125,10 @@ service. macOS releases are prereleases, so expect rough edges and report them.
   with "-" and add it back). The screen is captured through Qt (`QScreen::grabWindow`).
 - **Dock icon.** When the window is hidden (closed to the menu bar, or started with `-tray`),
   clicking the Dock icon brings the main window back and raises it. Launching never opens it.
+- **macOS 12 (Intel).** Start with system uses the same LaunchAgent. macOS 12 has no Login Items
+  status API for it, so the LaunchAgent counts as enabled when the file exists and Settings never
+  shows the "turned off in System Settings" note there. The "open Login Items" button opens
+  System Preferences > Users & Groups. This code path has not run on a real macOS 12.
 - **Theme.** See Notes: Fusion follows the macOS light/dark appearance; the System theme is hidden.
 
 Does NOT work yet on macOS:
@@ -176,6 +198,61 @@ host version as the floor, because Homebrew bottles target the OS they were buil
 ```bash
 MACOSX_DEPLOYMENT_TARGET=27.0 ./libs/build_macos.sh && MACOSX_DEPLOYMENT_TARGET=27.0 ./libs/package_macos.sh
 ```
+
+## Build for Intel Macs (x86_64, macOS 12)
+
+Prerequisites: Xcode Command Line Tools, CMake, Ninja, Go, and the official Qt 6.7.2 `clang_64`
+from aqtinstall (not the Homebrew Qt, whose bottles target the OS they were built on):
+
+```bash
+pip install aqtinstall
+aqt install-qt mac desktop 6.7.2 clang_64 --outputdir ~/Qt
+PROXOR_QT_DIR=~/Qt/6.7.2/macos ./libs/build_macos_intel.sh
+PROXOR_MACOS_ARCH=x86_64 MACOSX_DEPLOYMENT_TARGET=12.0 ./libs/package_macos.sh
+```
+
+The build script builds x86_64 static zxing-cpp, yaml-cpp and protobuf into
+`libs/deps/macos-x86_64` at deployment target 12.0, builds the darwin/amd64 `proxor_core`, builds
+the GUI, assembles the bundle, runs `macdeployqt`, thins every Mach-O to x86_64, sets
+`LSMinimumSystemVersion` to 12.0, ad-hoc signs, and checks architectures and minimum versions.
+Building on an Apple Silicon Mac needs Rosetta 2, because the x86_64 `protoc` built from the
+dependencies runs during the build. Output: `deployment/macos-x86_64/Proxor.app` and
+`deployment/proxor-<version>-macos-x86_64.zip`.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `PROXOR_QT_DIR` | `$QT_ROOT_DIR` (required) | Qt prefix, `.../6.7.2/macos` |
+| `MACOSX_DEPLOYMENT_TARGET` | `12.0` | Minimum macOS for the build and `LSMinimumSystemVersion` |
+| `DEPS_PREFIX` | `libs/deps/macos-x86_64/built` | Static dependency prefix (a custom one must already exist) |
+| `BUILD_DIR` | `build-macos-x86_64` | CMake build tree |
+| `SKIP_GO` | unset | Set to `1` to reuse `deployment/macos-amd64/proxor_core` |
+| `SKIP_DEPS` | unset | Set to `1` to skip building the dependencies |
+
+Go 1.26 is the last Go release that runs on macOS 12; moving the repository to Go 1.27 would raise
+the Intel floor to macOS 13.
+
+### Availability check
+
+```bash
+./libs/check_macos_availability.sh
+```
+
+Compiles every source at deployment target 12.0 with unguarded-availability warnings as errors and
+prints `AVAILABILITY-OK` when clean. Any new API newer than macOS 12 needs
+`if (@available(macOS X, *))` with a fallback. This only checks that the code compiles; it does not
+run the fallback.
+
+### Testing on Apple Silicon with Rosetta
+
+```bash
+arch -x86_64 deployment/macos-x86_64/Proxor.app/Contents/MacOS/Proxor -many -appdata <temporary folder>
+```
+
+This runs the Intel build through Rosetta 2, which checks the x86_64 build itself (bundle, signature,
+Qt plugins, UI). It does not prove macOS 12 behavior, because the host runs a newer macOS and the
+macOS 12 fallbacks never execute, and it does not stand in for real Intel hardware. Use a temporary
+`-appdata` folder so your real configuration is untouched. Apple says Rosetta stays available as a
+general tool through macOS 27 only.
 
 ## Run
 

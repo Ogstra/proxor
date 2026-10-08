@@ -46,4 +46,9 @@ case "$route" in
   R3) grep -qF 'does NOT work yet' "$doc" || fail "docs must say the Dock click does not work yet" ;;
   *) grep -qF 'clicking the Dock icon brings the main window back' "$doc" || fail "docs must say the Dock click brings the window back" ;;
 esac
+for s in 'macos-x86_64.zip' 'macOS 12' 'build_macos_intel.sh' 'PROXOR_MACOS_ARCH=x86_64' \
+         'check_macos_availability.sh' 'arch -x86_64' 'MACOS_INTEL_REQUIRED'; do
+  grep -qF -- "$s" "$doc" || fail "docs/Build_macOS.md must contain: $s"
+done
+if grep -qF 'is a universal binary' "$doc"; then fail "docs/Build_macOS.md must not say the Intel build is a universal binary"; fi
 echo "mac_docs: OK"

@@ -60,8 +60,10 @@ gh workflow run build-proxor-cmake.yml --ref main -f tag=vX.Y.Z -f publish=y -f 
 
 `bump-homebrew-tap` in `.github/workflows/build-proxor-cmake.yml` runs right after
 `publish-release` on every publishing dispatch. It downloads
-`proxor-<version>-macos-arm64.zip` and `SHA256SUMS` from the published release, verifies the
-hash, renders `packaging/homebrew/proxor.rb.in` into `Casks/proxor.rb` of `Ogstra/homebrew-tap`
+`proxor-<version>-macos-arm64.zip`, `SHA256SUMS` and, when `SHA256SUMS` lists it,
+`proxor-<version>-macos-x86_64.zip` from the published release, verifies each hash, renders
+`packaging/homebrew/proxor.rb.in` (Apple Silicon only) or `packaging/homebrew/proxor-two-arch.rb.in`
+(Apple Silicon and Intel) into `Casks/proxor.rb` of `Ogstra/homebrew-tap`
 and pushes `proxor <version>` to `main`. It refuses to move the cask to an older version and
 does nothing when the tap already has this version. To re-run it (for example after rotating
 the token) or to preview it:
@@ -76,6 +78,17 @@ currently prereleases); the tap allows this through
 `audit_exceptions/github_prerelease_allowlist.json`. A separate stable-only cask would be a new
 `proxor@beta`-style split later, not a change to this one. Changes to the cask are commits to
 `packaging/homebrew/proxor.rb.in`, never edits in the tap.
+
+#### Intel macOS zip
+
+`proxor-<version>-macos-x86_64.zip` is built by the `Build macOS x86_64 app` job
+(`package-macos-intel`). It is optional for publishing while `MACOS_INTEL_REQUIRED` is `"n"` in
+`.github/workflows/build-proxor-cmake.yml`: a release without it is published as before and the
+cask stays Apple Silicon only. Setting it to `"y"` makes publish refuse a release without the
+Intel zip. With `y`, a failed Intel job leaves a source-only release: publish-release creates the
+release and uploads the source tarball first, then `prepare-final-assets --require-macos-intel`
+fails, so the release has no other downloads and no `SHA256SUMS`, and the tap bump does not run.
+Re-run the failed jobs or delete the release before retrying.
 
 There is still no automatic publish path to COPR/Fedora or any other store. The
 release workflow holds exactly one publishing credential, `HOMEBREW_TAP_TOKEN`, confined to the
