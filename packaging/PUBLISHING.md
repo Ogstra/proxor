@@ -12,6 +12,11 @@ approved. Review the release report and every entry in
       update path (check, download, SHA256SUMS verification, rename while a scanner holds the file, apply with the
       candidate `updater.exe`) against a local fake release server; `package-windows`, and through it
       `publish-release`, need it, so a red job blocks the release.
+- [ ] The `macOS update E2E` job (`update-e2e-macos`) is green for the release commit on a non-publishing
+      dispatch. It runs the candidate's core download against a local fake release server, the relauncher test
+      suite and a real swap of the candidate `Proxor.app` with the relauncher inside it; `publish-release` needs it.
+
+macOS copies of Proxor 1.6.14 and older update by hand once (download the zip, quit Proxor, replace Proxor.app).
 
 Windows installs of Proxor 1.6.11 or older cannot finish an in-app update (rename of `update-package.zip.part`
 fails with "being used by another process"): their users close Proxor, download `proxor-<version>-windows64.zip`
