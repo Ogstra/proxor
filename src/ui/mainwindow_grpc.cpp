@@ -8,6 +8,10 @@
 #include "rpc/gRPC.h"
 #include "main/PackagePolicy.hpp"
 #include "platform/PingPolicy.hpp"
+#ifdef Q_OS_MACOS
+#include "platform/MacAppUpdatePolicy.hpp"
+#include <QDir>
+#endif
 #ifdef Q_OS_LINUX
 #include "platform/ResolvConf.hpp"
 #endif
@@ -812,11 +816,19 @@ void MainWindow::CheckUpdate(bool silent) {
         // can be replaced -- so the AppImage is the one exception to the appdata gate.
         auto allowSelfUpdate = packageUpdate.allowDownload &&
             (mode == PackageMode::AppImage || !ProxorGui::dataStore->flag_use_appdata);
+#ifdef Q_OS_MACOS
+        const auto macRoute = macAppUpdateRoute(mode);
+        if (macRoute != ProxorPlatform::MacAppUpdateRoute::Guidance) allowSelfUpdate = true;
+#endif
         auto notePreRelease = response.is_pre_release() ? QObject::tr("Prerelease") : QObject::tr("Release");
         auto releasePageUrl = QUrl(response.release_url().c_str());
         QString releaseNote = response.release_note().c_str();
         const auto assetName = QString::fromUtf8(response.assets_name().c_str());
+#ifdef Q_OS_MACOS
+        const auto guidance = macRoute == ProxorPlatform::MacAppUpdateRoute::Guidance ? UpdateGuidanceText(mode, assetName) : QString();
+#else
         const auto guidance = UpdateGuidanceText(mode, assetName);
+#endif
 #ifdef Q_OS_MACOS
         // brew only refreshes its taps once a day, so a fresh release may not be visible yet.
         if (mode == PackageMode::Homebrew)
@@ -836,12 +848,28 @@ void MainWindow::CheckUpdate(bool silent) {
             guidance);
 
         connect(dlg, &QDialog::accepted, this, [=] {
+#ifdef Q_OS_MACOS
+            if (dlg->chosenAction() == DialogUpdateAvailable::Download && allowSelfUpdate && (packageUpdate.allowDownload || macRoute != ProxorPlatform::MacAppUpdateRoute::Guidance)) {
+#else
             if (dlg->chosenAction() == DialogUpdateAvailable::Download && allowSelfUpdate && packageUpdate.allowDownload) {
+#endif
                 // Remembered here, not re-derived in onUpdateStaged(), so the AppImage
                 // completion handler can name the exact staged path without a second RPC.
                 staged_asset_name = QFileInfo(assetName).fileName();
 #ifdef Q_OS_WIN
                 update_release_url = releasePageUrl.toString();
+#endif
+#ifdef Q_OS_MACOS
+                mac_app_update_route = macRoute;
+                mac_app_update_release_url = releasePageUrl.toString();
+                if (macRoute != ProxorPlatform::MacAppUpdateRoute::Guidance) {
+                    const auto bundleDir = QDir::cleanPath(QCoreApplication::applicationDirPath() + QStringLiteral("/../.."));
+                    mac_app_update_zip_dir = ProxorPlatform::MacAppUpdateStageDir(bundleDir);
+                    if (!QDir().mkpath(mac_app_update_zip_dir)) {
+                        macAppUpdateFailed(true, QObject::tr("could not create %1.").arg(mac_app_update_zip_dir), releasePageUrl.toString());
+                        return;
+                    }
+                }
 #endif
                 updateProgressDialog = new UpdateProgressDialog(response.assets_name().c_str(), this);
                 connect(updateProgressDialog, &UpdateProgressDialog::downloadComplete, this, &MainWindow::onUpdateStaged);
@@ -861,7 +889,22 @@ void MainWindow::CheckUpdate(bool silent) {
                         const QFileInfo appImageInfo(qEnvironmentVariable("APPIMAGE"));
                         request2.set_download_dir(appImageInfo.absolutePath().toStdString());
                     }
+#ifdef Q_OS_MACOS
+                    if (macRoute != ProxorPlatform::MacAppUpdateRoute::Guidance) {
+                        request2.set_channel(PackageModeName(mode).toStdString());
+                        request2.set_download_dir(mac_app_update_zip_dir.toStdString());
+                    }
+#endif
                     auto response2 = ProxorGui_rpc::defaultClient->Update(&ok2, request2);
+#ifdef Q_OS_MACOS
+                    if (!ok2 && macRoute != ProxorPlatform::MacAppUpdateRoute::Guidance) {
+                        runOnUiThread([=] {
+                            if (updateProgressDialog) updateProgressDialog->close();
+                            macAppUpdateFailed(true, QObject::tr("the Proxor core stopped responding during the download."), releasePageUrl.toString());
+                        });
+                        return;
+                    }
+#endif
 #ifdef Q_OS_WIN
                     if (!ok2) {
                         runOnUiThread([=] {
@@ -877,6 +920,13 @@ void MainWindow::CheckUpdate(bool silent) {
 
                     if (!response2.error().empty()) {
                         runOnUiThread([=] {
+#ifdef Q_OS_MACOS
+                            if (macRoute != ProxorPlatform::MacAppUpdateRoute::Guidance) {
+                                if (updateProgressDialog) updateProgressDialog->close();
+                                macAppUpdateFailed(true, QString::fromStdString(response2.error()), releasePageUrl.toString());
+                                return;
+                            }
+#endif
 #ifdef Q_OS_WIN
                             ShowUpdateFailedDialog(this, UpdateFailureStage::Download, QString::fromStdString(response2.error()),
                                                    QStringLiteral(NKR_VERSION), releasePageUrl.toString());
