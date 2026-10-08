@@ -120,8 +120,8 @@ func updateArchiveSuffixes(goos, goarch string) ([]string, error) {
 		return nil, fmt.Errorf("self-update is not available for Linux/%s", goarch)
 	case goos == "darwin" && goarch == "arm64":
 		return []string{"-macos-arm64.zip"}, nil
-	case goos == "darwin":
-		return nil, fmt.Errorf("Proxor for macOS is published for Apple silicon (arm64) only; no update package exists for %s/%s", goos, goarch)
+	case goos == "darwin" && goarch == "amd64":
+		return []string{"-macos-x86_64.zip"}, nil
 	default:
 		return nil, fmt.Errorf("self-update is not available on %s/%s", goos, goarch)
 	}
