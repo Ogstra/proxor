@@ -87,3 +87,25 @@ mv "$tmp/win-aside" "$tmp/in/proxor-1.2.3-windows64.zip.d"
 rm -rf "$tmp/in/stray-flatpak"
 "$script" prepare-final-assets --input "$tmp/in" --version 1.2.3 --output "$tmp/final-no-flatpak" --public-source-url "$url"
 test ! -e "$tmp/final-no-flatpak/proxor-1.2.3.flatpak"
+
+# The macOS Intel zip is optional: absent -> same release as before; present -> shipped and checksummed;
+# --require-macos-intel refuses a release without it. It is a final-assets option and never part of --windows-only.
+intel=proxor-1.2.3-macos-x86_64.zip
+"$script" prepare-final-assets --input "$tmp/in" --version 1.2.3 --output "$tmp/final-no-intel" --public-source-url "$url"
+test ! -e "$tmp/final-no-intel/$intel"
+! grep -q 'macos-x86_64' "$tmp/final-no-intel/SHA256SUMS"
+if err="$("$script" prepare-final-assets --input "$tmp/in" --version 1.2.3 --output "$tmp/final-req-missing" --public-source-url "$url" --require-macos-intel 2>&1)"; then
+  echo 'a release without the Intel zip must be refused with --require-macos-intel' >&2; exit 1
+fi
+grep -qF 'missing *-macos-x86_64.zip' <<<"$err"
+mkdir -p "$tmp/in/$intel.d"; printf '%s' "$intel" > "$tmp/in/$intel.d/$intel"
+"$script" prepare-final-assets --input "$tmp/in" --version 1.2.3 --output "$tmp/final-intel" --public-source-url "$url"
+test -f "$tmp/final-intel/$intel"
+grep -q "$intel" "$tmp/final-intel/SHA256SUMS"
+(cd "$tmp/final-intel" && shasum -a 256 -c SHA256SUMS >/dev/null)
+"$script" prepare-final-assets --input "$tmp/in" --version 1.2.3 --output "$tmp/final-intel-req" --public-source-url "$url" --require-macos-intel
+test -f "$tmp/final-intel-req/$intel"
+"$script" prepare-final-assets --input "$tmp/in" --version 1.2.3 --output "$tmp/final-win-intel" --public-source-url "$url" --windows-only
+test ! -e "$tmp/final-win-intel/$intel"
+! grep -q 'macos-x86_64' "$tmp/final-win-intel/SHA256SUMS"
+! "$script" prepare-source-release --input "$tmp/in" --version 1.2.3 --output "$tmp/src-intel" --require-macos-intel
