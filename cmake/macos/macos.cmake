@@ -32,9 +32,12 @@ set(PLATFORM_SOURCES
     src/sys/macos/MacSleepWake.mm
     src/ui/mainwindow_wake.cpp
     assets/macos/proxor.icns
+    packaging/macos/proxor-app-update.sh
 )
 # App icon (Dock, Finder, Launchpad): copied into Contents/Resources and named in Info.plist.
 set_source_files_properties(assets/macos/proxor.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+# macOS in-app update relauncher: run by the GUI from a temporary copy after it quits.
+set_source_files_properties(packaging/macos/proxor-app-update.sh PROPERTIES MACOSX_PACKAGE_LOCATION Resources/update)
 find_library(CORE_FOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
 find_library(CORE_SERVICES_FRAMEWORK CoreServices REQUIRED)
 find_library(APPKIT_FRAMEWORK AppKit REQUIRED)
