@@ -58,4 +58,48 @@ grep -qF 'HOMEBREW_TAP_TOKEN is required' <<<"$out" || fail "case 5 message"
 # 7. tag without leading v is rejected
 if "$script" --tag 1.2.3 --assets "$(assets 1.2.3)" --tap-url "$tap" --work "$tmp/w7" >/dev/null 2>&1; then fail "case 7 accepted"; fi
 
+# assets_intel VERSION [bad|absent]: like assets, plus the x86_64 zip and its SHA256SUMS line.
+# bad: the listed hash is wrong; absent: the zip is listed but not in the assets directory.
+assets_intel() {
+  d="$(assets "$1")"
+  printf 'intel zip %s' "$1" > "$d/proxor-$1-macos-x86_64.zip"
+  hi="$(shasum -a 256 "$d/proxor-$1-macos-x86_64.zip" | awk '{print $1}')"
+  [ "${2:-}" != bad ] || hi="$(printf q | shasum -a 256 | awk '{print $1}')"
+  printf '%s  ./proxor-%s-macos-x86_64.zip\n' "$hi" "$1" >> "$d/SHA256SUMS"
+  [ "${2:-}" != absent ] || rm -f "$d/proxor-$1-macos-x86_64.zip"
+  echo "$d"
+}
+
+# 8. a release that lists the Intel zip yields the two-architecture cask
+"$script" --tag v1.3.0 --assets "$(assets_intel 1.3.0)" --tap-url "$tap" --work "$tmp/w8" >/dev/null
+[ "$(cask_version)" = 1.3.0 ] || fail "case 8 version"
+isha="$(shasum -a 256 "$tmp/assets-1.3.0/proxor-1.3.0-macos-x86_64.zip" | awk '{print $1}')"
+asha="$(shasum -a 256 "$tmp/assets-1.3.0/proxor-1.3.0-macos-arm64.zip" | awk '{print $1}')"
+cask8="$(git --git-dir "$tmp/tap.git" show main:Casks/proxor.rb)"
+grep -qxF "         intel: \"$isha\"" <<<"$cask8" || fail "case 8 intel sha256"
+grep -qxF "  sha256 arm:   \"$asha\"," <<<"$cask8" || fail "case 8 arm sha256"
+grep -qF 'macos-#{arch}.zip"' <<<"$cask8" || fail "case 8 url"
+[ "$(git --git-dir "$tmp/tap.git" log -1 --format=%s main)" = "proxor 1.3.0" ] || fail "case 8 subject"
+if git --git-dir "$tmp/tap.git" log -1 --format=%B main | grep -qi 'co-authored-by\|claude'; then fail "case 8 attribution trailer"; fi
+before8="$(head_of)"
+
+# 9. repeating it is a no-op
+out="$("$script" --tag v1.3.0 --assets "$tmp/assets-1.3.0" --tap-url "$tap" --work "$tmp/w9" 2>&1)" || fail "case 9 exit"
+grep -qF 'the tap already carries proxor 1.3.0' <<<"$out" || fail "case 9 message"
+[ "$(head_of)" = "$before8" ] || fail "case 9 moved main"
+
+# 10. Intel checksum mismatch refused
+if out="$("$script" --tag v1.3.1 --assets "$(assets_intel 1.3.1 bad)" --tap-url "$tap" --work "$tmp/w10" 2>&1)"; then fail "case 10 accepted"; fi
+grep -qF 'checksum mismatch for proxor-1.3.1-macos-x86_64.zip' <<<"$out" || fail "case 10 message"
+[ "$(head_of)" = "$before8" ] || fail "case 10 moved main"
+
+# 11. Intel zip listed but missing from the assets refused
+if "$script" --tag v1.3.1 --assets "$(assets_intel 1.3.1 absent)" --tap-url "$tap" --work "$tmp/w11" >/dev/null 2>&1; then fail "case 11 accepted"; fi
+[ "$(head_of)" = "$before8" ] || fail "case 11 moved main"
+
+# 12. downgrade to a release without the Intel zip is still refused from a two-arch cask
+if out="$("$script" --tag v1.2.9 --assets "$(assets 1.2.9)" --tap-url "$tap" --work "$tmp/w12" 2>&1)"; then fail "case 12 accepted"; fi
+grep -qF 'refusing to downgrade' <<<"$out" || fail "case 12 message"
+[ "$(head_of)" = "$before8" ] || fail "case 12 moved main"
+
 echo "test-bump-tap.sh: OK"

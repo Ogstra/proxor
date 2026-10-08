@@ -12,7 +12,10 @@
 #include "main/GuiUtils.hpp"
 #include "main/ProxorGui.hpp"
 #include "sys/AutoRun.hpp"
+#include "platform/PlatformCapabilitiesApp.hpp"
+#include "platform/CapabilityUi.hpp"
 
+#include <QBoxLayout>
 #include <QDialogButtonBox>
 
 #include <QFileDialog>
@@ -29,6 +32,12 @@
 #include <QPalette>
 #include <QStandardItemModel>
 #include <QTimer>
+#ifdef Q_OS_MACOS
+#include <QFile>
+#include <QPushButton>
+#include "platform/MacLoginItemPolicy.hpp"
+#include "sys/macos/MacLoginItem.h"
+#endif
 
 namespace {
 // On Windows the native style resolves light and dark from the OS setting itself, so the
@@ -289,6 +298,53 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     ui->ping_type->setCurrentIndex(ProxorGui::dataStore->ping_type);
     D_LOAD_BOOL(old_share_link_format)
     ui->start_with_system->setChecked(AutoRun_IsEnabled());
+    {
+        const auto autoStart = ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::AutoStart);
+        auto *autoStartNote = ProxorPlatform::MakeCapabilityNote(ui->start_with_system->parentWidget());
+        ui->verticalLayout_app_behavior->insertWidget(ui->verticalLayout_app_behavior->indexOf(ui->start_with_system) + 1, autoStartNote);
+        ProxorPlatform::ApplyCapability(ui->start_with_system, autoStart, autoStartNote);
+        if (autoStart.support == ProxorPlatform::Support::Unsupported) ui->start_with_system->setChecked(false);
+#ifdef Q_OS_MACOS
+        // macOS has its own say over login items: show what it will really do and let the user fix it.
+        mac_autostart_loaded = ui->start_with_system->isChecked();
+        {
+            const auto agent = ProxorPlatform::MacLaunchAgentFile(ProxorMac::LaunchAgentsDir(), ProxorPlatform::MacAutostartLabel());
+            QStringList args;
+            if (QFile f(agent); f.open(QIODevice::ReadOnly)) args = ProxorPlatform::ParseMacLaunchAgentArguments(f.readAll());
+            const auto view = ProxorPlatform::DecideMacAutostartView(QFile::exists(agent), ProxorPlatform::MacLaunchAgentTarget(args),
+                                                                     ProxorMac::CurrentAppBundlePath(), ProxorMac::LegacyAgentStatus(agent));
+            if (!view.note.isEmpty()) {
+                autoStartNote->setText(view.note);
+                autoStartNote->setVisible(true);
+            }
+            if (view.needsAttention || autoStart.support == ProxorPlatform::Support::Unsupported) {
+                auto *openLogin = new QPushButton(tr("Open Login Items Settings"), ui->start_with_system->parentWidget());
+                ui->verticalLayout_app_behavior->insertWidget(ui->verticalLayout_app_behavior->indexOf(autoStartNote) + 1, openLogin);
+                connect(openLogin, &QPushButton::clicked, this, [this] {
+                    if (!ProxorMac::OpenLoginItemsSettings())
+                        MessageBoxWarning(tr("Login Items"), tr("Could not open System Settings. Open %1 yourself.").arg(ProxorPlatform::MacLoginItemsLocation()));
+                });
+            }
+        }
+#endif
+
+        const auto icmp = ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::IcmpPing);
+        if (icmp.support != ProxorPlatform::Support::Supported) {
+            ui->ping_type->setItemData(1, icmp.reason, Qt::ToolTipRole);
+            auto *icmpNote = ProxorPlatform::MakeCapabilityNote(ui->ping_type->parentWidget());
+            ui->verticalLayout_latency->insertWidget(1, icmpNote);
+            auto refreshIcmpNote = [this, icmp, icmpNote](int index) {
+                if (index == 1) {
+                    icmpNote->setText(icmp.reason);
+                    icmpNote->setVisible(true);
+                } else {
+                    icmpNote->setVisible(false);
+                }
+            };
+            connect(ui->ping_type, QOverload<int>::of(&QComboBox::currentIndexChanged), this, refreshIcmpNote);
+            refreshIcmpNote(ui->ping_type->currentIndex());
+        }
+    }
     ui->remember_enable->setChecked(ProxorGui::dataStore->remember_enable);
     ui->allow_lan->setChecked(QStringList{"::", "0.0.0.0"}.contains(ProxorGui::dataStore->inbound_address));
 
@@ -313,7 +369,28 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     // Style
     D_LOAD_BOOL(check_update_on_start)
     D_LOAD_BOOL(check_include_pre)
+#ifdef Q_OS_MACOS
+    {
+        // Every Proxor release is a prerelease, so on macOS the update check always includes them.
+        const auto preNote = PrereleaseSettingNote(ProxorGui::CurrentPackageMode());
+        ui->check_include_pre->setChecked(true);
+        ui->check_include_pre->setEnabled(false);
+        ui->check_include_pre->setToolTip(preNote);
+        auto *preLabel = ProxorPlatform::MakeCapabilityNote(ui->check_include_pre->parentWidget());
+        if (auto *box = qobject_cast<QBoxLayout *>(ui->check_include_pre->parentWidget()->layout()))
+            box->insertWidget(box->indexOf(ui->check_include_pre) + 1, preLabel);
+        preLabel->setText(preNote);
+        preLabel->setVisible(true);
+    }
+#endif
     D_LOAD_BOOL(start_minimal)
+    {
+        const auto tray = ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::SystemTray);
+        auto *trayNote = ProxorPlatform::MakeCapabilityNote(ui->start_minimal->parentWidget());
+        if (auto *box = qobject_cast<QBoxLayout *>(ui->start_minimal->parentWidget()->layout()))
+            box->insertWidget(box->indexOf(ui->start_minimal) + 1, trayNote);
+        ProxorPlatform::ApplyCapability(ui->start_minimal, tray, trayNote);
+    }
     D_LOAD_INT(max_log_line)
     //
     if (ProxorGui::dataStore->traffic_loop_interval == 500) {
@@ -342,6 +419,17 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
         ui->theme->setCurrentIndex(currentThemeIndex);
     }
     ui->theme_mode->setCurrentIndex(ThemeModeIndexForTheme(storedTheme));
+#ifdef Q_OS_MACOS
+    {
+        // The System (native macOS) theme is hidden on macOS; say what is used instead.
+        auto *themeNote = ProxorPlatform::MakeCapabilityNote(ui->theme_mode->parentWidget());
+        if (auto *box = qobject_cast<QBoxLayout *>(ui->theme_mode->parentWidget()->layout()))
+            box->addWidget(themeNote);
+        themeNote->setText(tr("The native macOS (System) theme is not available yet. Fusion is the default and "
+                              "follows the macOS light/dark appearance when Mode is System."));
+        themeNote->setVisible(true);
+    }
+#endif
     RefreshThemeModeOptions(ui->theme, ui->theme_mode);
     // Re-run once shown so the disabled combo repaints greyed (the construction
     // -time call runs before the widget is visible, so its repaint is a no-op).
@@ -402,6 +490,11 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
         trayColored->setToolTip(tr("Off: a monochrome icon that follows the light/dark menu bar."));
         trayColored->setChecked(ProxorGui::dataStore->tray_icon_colored);
         ui->horizontalLayout_tray_icon->insertWidget(1, trayColored);
+        auto *traySpeed = new QCheckBox(tr("Show speed in the menu bar"), ui->tray_icon_box);
+        traySpeed->setObjectName(QStringLiteral("tray_speed_view"));
+        traySpeed->setToolTip(tr("Shows the live upload and download speed next to the icon while a profile is running."));
+        traySpeed->setChecked(ProxorGui::dataStore->tray_speed_view);
+        ui->horizontalLayout_tray_icon->insertWidget(2, traySpeed);
     }
 #endif
     D_LOAD_BOOL(sub_use_proxy)
@@ -484,7 +577,15 @@ void DialogBasicSettings::accept() {
     D_SAVE_STRING(test_download_url)
     ProxorGui::dataStore->ping_type = ui->ping_type->currentIndex();
     D_SAVE_BOOL(old_share_link_format)
-    AutoRun_SetEnabled(ui->start_with_system->isChecked());
+#ifdef Q_OS_MACOS
+    // Only a real change touches the login agent: saving other settings must not rewrite or delete it.
+    if (ProxorPlatform::IsUsable(ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::AutoStart)) &&
+        ui->start_with_system->isChecked() != mac_autostart_loaded)
+        AutoRun_SetEnabled(ui->start_with_system->isChecked());
+#else
+    if (ProxorPlatform::IsUsable(ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::AutoStart)))
+        AutoRun_SetEnabled(ui->start_with_system->isChecked());
+#endif
     ProxorGui::dataStore->remember_enable = ui->remember_enable->isChecked();
     ProxorGui::dataStore->inbound_address = ui->allow_lan->isChecked() ? "::" : "127.0.0.1";
 
@@ -529,6 +630,9 @@ void DialogBasicSettings::accept() {
 #ifdef Q_OS_MACOS
     if (auto *trayColored = findChild<QCheckBox *>(QStringLiteral("tray_icon_colored"))) {
         ProxorGui::dataStore->tray_icon_colored = trayColored->isChecked();
+    }
+    if (auto *traySpeed = findChild<QCheckBox *>(QStringLiteral("tray_speed_view"))) {
+        ProxorGui::dataStore->tray_speed_view = traySpeed->isChecked();
     }
 #endif
     D_SAVE_BOOL(sub_use_proxy)

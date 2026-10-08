@@ -21,6 +21,14 @@ PackageUpdateDecision DecidePackageUpdate(PackageMode mode) {
         case PackageMode::NativeUnknownManager:
             return {true, false, false, false,
                     QStringLiteral("Update Proxor with the package manager that installed it.")};
+        case PackageMode::Homebrew:
+            // No trailing period: the dialog shows a string like this as a command with a Copy button.
+            return {true, false, false, false, QStringLiteral("brew upgrade --cask proxor")};
+        case PackageMode::MacApp:
+            // No in-app self-update on macOS (ad-hoc signed, not notarized).
+            return {true, false, false, false,
+                    QStringLiteral("Download %1 from the release page, quit Proxor, and replace Proxor.app "
+                                   "in your Applications folder with the one inside the zip.")};
         case PackageMode::AppImage:
             // The AppImage updates itself by replacing the file $APPIMAGE points at;
             // it never launches the archive-only ./updater.
@@ -42,10 +50,29 @@ QString UpdateGuidanceText(PackageMode mode, const QString &assetFileName) {
             return tmpl.arg(assetFileName);
         }
         // No asset name to substitute: never let a literal "%1" reach the UI.
+        if (mode == PackageMode::MacApp) {
+            return tmpl.arg(QStringLiteral("the macOS zip"));
+        }
         return QStringLiteral("Update Proxor with the package manager that installed it; "
                                "the exact file name is on the release page.");
     }
     return tmpl;
+}
+
+bool UpdateIncludesPrereleases(PackageMode mode, bool userSetting) {
+    // Every Proxor release for macOS is published as a prerelease.
+    if (mode == PackageMode::Homebrew || mode == PackageMode::MacApp) {
+        return true;
+    }
+    return userSetting;
+}
+
+QString PrereleaseSettingNote(PackageMode mode) {
+    if (mode == PackageMode::Homebrew || mode == PackageMode::MacApp) {
+        return QStringLiteral("Every Proxor release for macOS is published as a prerelease, "
+                              "so on macOS the update check always includes prereleases.");
+    }
+    return {};
 }
 
 FlatpakLifecycleDecision DecideFlatpakLifecycle(PackageMode mode, FlatpakLifecycleEntryPoint) {

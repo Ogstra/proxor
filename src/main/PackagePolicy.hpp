@@ -33,6 +33,12 @@ FlatpakLifecycleDecision DecideFlatpakLifecycle(PackageMode mode, FlatpakLifecyc
 // reaches the UI.
 QString UpdateGuidanceText(PackageMode mode, const QString &assetFileName);
 
+// macOS publishes only prereleases, so Homebrew/MacApp always include them; every other
+// mode follows the user's setting unchanged.
+bool UpdateIncludesPrereleases(PackageMode mode, bool userSetting);
+// Reason shown next to the (forced) prerelease setting; empty when the user is in control.
+QString PrereleaseSettingNote(PackageMode mode);
+
 struct UpdaterLaunchProbe {
     bool updaterExists;
     bool updaterIsExecutable;

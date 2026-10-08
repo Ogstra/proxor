@@ -1,0 +1,4 @@
+Enabled: Yes
+Server: 10.0.0.1
+Port: 3128
+Authenticated Proxy Enabled: 0

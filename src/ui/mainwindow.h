@@ -24,6 +24,8 @@
 #include <utility>
 
 #include "GroupSort.hpp"
+#include "platform/QrScanPolicy.hpp"
+#include <QImage>
 
 #include "sys/WifiMonitor.hpp"
 
@@ -31,6 +33,11 @@
 #include "db/Group.hpp"
 #include "main/GuiUtils.hpp"
 #include "ui/model/ProxyListModel.h"
+#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
+#include <QTimer>
+#include "platform/WakeCoordinator.hpp"
+#include "platform/WakeSubscriptionRetry.hpp"
+#endif
 
 #endif
 
@@ -42,6 +49,8 @@ namespace ProxorGui_sys {
 namespace ProxorMac {
     class StatusItem;
 }
+#include "sys/macos/MacHelperPolicy.h"
+#include "sys/macos/MacModeCoordinator.h"
 #endif
 
 QT_BEGIN_NAMESPACE
@@ -51,6 +60,7 @@ namespace Ui {
 class QLabel;
 #ifdef Q_OS_MACOS
 class QMenu;
+class QTimer;
 #endif
 QT_END_NAMESPACE
 
@@ -71,6 +81,8 @@ public:
     void refresh_groups();
 
     void refresh_status(const QString &traffic_update = "");
+    // Live proxy speed next to the macOS menu bar icon (no-op elsewhere); clear=true removes it.
+    void update_tray_speed(qint64 uploadBytesPerSecond, qint64 downloadBytesPerSecond, bool clear = false);
 
     void proxor_start(int _id = -1, bool startedByWifiTrigger = false);
 
@@ -92,7 +104,7 @@ public:
 
     void openSettings(const QString &section = QString());
 
-    void RegisterHotkey(bool unregister);
+    QStringList RegisterHotkey(bool unregister);
 
     bool StopVPNProcess(bool unconditional = false);
 
@@ -150,6 +162,12 @@ private slots:
 
     void on_menu_scan_qr_triggered();
 
+    void on_menu_scan_qr_image_triggered();
+
+    void on_menu_scan_qr_clipboard_triggered();
+
+    void importQrFromImage(const QImage &image, ProxorPlatform::QrSource source);
+
     void on_menu_clear_test_result_triggered();
 
     void on_menu_manage_groups_triggered();
@@ -178,12 +196,36 @@ private slots:
 
     void onWifiSsidChanged(const QString &ssid);
 
+    void onWifiReadingChanged(const ProxorWifi::WifiReading &reading);
+
 private:
     Ui::MainWindow *ui;
     QSystemTrayIcon *tray;
 #ifdef Q_OS_MACOS
     ProxorMac::StatusItem *mac_status_item = nullptr;
     QMenu *mac_tray_menu = nullptr;
+    QString mac_tun_failure_reason;
+    bool mac_spmode_restoring = false;
+    bool mac_screen_capture_requested = false;
+    bool macScreenCaptureReadyOrExplain();
+    QTimer *mac_tun_ready_timer = nullptr;
+    bool mac_stop_keeps_remembered_profile = false;
+    void macInstallHelperThen(const QString &feature, MacHelperEnableAction action, std::function<void()> onReady);
+    void macTunFailed(const QString &reason);
+    void macOnTunReady();
+    void macOnTunStopped(const QString &reason);
+    void macOnHelperLost();
+    bool mac_startup_probe_pending = false;
+    bool mac_install_prompted_this_session = false; // the automatic launch prompt happens at most once
+    bool mac_tun_request_saves = true;              // whether a failed Tun start may un-remember Tun
+    QTimer *mac_startup_probe_timer = nullptr;
+    void macStartupRestore(bool rememberedSystemProxy, bool rememberedTun);
+    void macStartupProbed(MacHelperState st, bool rememberedTun, bool rememberedSystemProxy);
+    MacModeCoordinator *mac_modes = nullptr;
+    void macApplySystemProxy(bool interactive, bool saved = false);
+    void macPauseModes(bool systemProxy, bool tun);
+    void macResumeModes(bool systemProxy, bool tun);
+    void macWakeCheckModes(ProxorPlatform::WakeModes before);
 #endif
     QShortcut *shortcut_ctrl_f = new QShortcut(QKeySequence("Ctrl+F"), this);
     QShortcut *shortcut_ctrl_v = new QShortcut(QKeySequence("Ctrl+V"), this);
@@ -194,6 +236,13 @@ private:
     //
     ProxorGui_sys::CoreProcess *core_process = nullptr;
     WifiMonitor *wifi_monitor = nullptr;
+    bool wifi_permission_asked = false;
+    bool wifi_settings_hint_logged = false;
+    QString wifi_hosts_ssid;
+    QString wifi_last_logged_status;
+    void refreshWifiMonitoring();
+    bool applyOnDemandForSsid(const QString &ssid);
+    void applyOnDemandAfterStartup();
     qint64 vpn_pid = 0;
     //
     bool update_staged = false;
@@ -201,6 +250,9 @@ private:
                                 // onUpdateStaged() can derive the AppImage staged path
                                 // without a second RPC
     QPointer<UpdateProgressDialog> updateProgressDialog;
+#ifdef Q_OS_WIN
+    QString update_release_url; // release page of the update being downloaded, for the failure dialog (phase 57)
+#endif
     ProxyListModel *proxyListModel = nullptr;
     QLabel *m_quotaLabel = nullptr;
     //
@@ -212,6 +264,9 @@ private:
     int icon_status = -1;
     std::shared_ptr<ProxorGui::ProxyEntity> running;
     bool start_pending = false;
+    QAction *tray_toggle_action = nullptr; // tray menu: Connect / Disconnect
+    int last_started_profile_id = -1;       // Connect with nothing marked reconnects this profile
+    std::atomic_bool start_cancel{false}; // Stop pressed while a start is in flight
     bool started_via_ssid_trigger = false;
     bool startup_tun_pending = false;
     bool startup_tun_authorized = false;
@@ -221,6 +276,21 @@ private:
     bool application_was_inactive = false;
     bool subscription_resume_check_pending = false;
     qint64 subscription_timer_last_tick_ms = 0;
+#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
+    // Sleep/wake resilience (phase 56): native events + the timer gap feed one coordinator. Windows keeps the timer heuristic only.
+    ProxorPlatform::WakeCoordinator wake_coord;
+    ProxorPlatform::WakeSubscriptionRetry wake_subs;
+    QTimer *wake_timer = nullptr;
+    QTimer *wake_subs_timer = nullptr;
+    void wakeInstall();
+    void wakeOnSleepEvent(bool sleeping);
+    void wakeDetected(ProxorPlatform::WakeSource source);
+    void wakeRunStep();
+    void wakeSubsStep();
+    bool wakeOwnsSubscriptions() const;
+    bool wakeBlocked() const;
+    ProxorPlatform::WakeSnapshot wakeSnapshotNow() const;
+#endif
     QString auto_start_consumed_ssid;
     QString traffic_update_cache;
     QTime last_test_time;

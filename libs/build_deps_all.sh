@@ -26,9 +26,7 @@ if [ -n "$cmake_major" ] && [ "$cmake_major" -ge 4 ] 2>/dev/null; then
   echo "CMake $cmake_major detected; passing $CMAKE_COMPAT_ARGS to legacy dependencies."
 fi
 
-# Pinned by sha256. These same three archives are also verified by
-# packaging/flatpak/io.github.Ogstra.Proxor.yml, and
-# libs/tests/test-dependency-pins.sh fails the build if the two ever drift.
+# Pinned by sha256 and verified by fetch_verified before anything is unpacked.
 ZXING_URL="https://github.com/nu-book/zxing-cpp/archive/refs/tags/v2.0.0.tar.gz"
 ZXING_SHA256="12b76b7005c30d34265fc20356d340da179b0b4d43d2c1b35bcca86776069f76"
 YAMLCPP_URL="https://github.com/jbeder/yaml-cpp/archive/refs/tags/yaml-cpp-0.7.0.tar.gz"

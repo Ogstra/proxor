@@ -9,6 +9,7 @@
 
 #include <QCoreApplication>
 #include <QNetworkAccessManager>
+#include <QNetworkProxy>
 #include <QNetworkReply>
 #include <QTimer>
 #include <QtEndian>
@@ -146,6 +147,11 @@ namespace QtGrpc {
             //
             thread = new QThread;
             nm = new QNetworkAccessManager();
+            // The core control channel is loopback: never ask the OS for a system proxy. On macOS that query
+            // (QNetworkProxyFactory::systemProxyForQuery) runs a CFRunLoop under a process-wide mutex and can block
+            // for seconds, e.g. while a subscription update does the same on its own thread; every RPC (Start, Stop,
+            // Validate, QueryStats) then stalls behind it and the app looks hung.
+            nm->setProxy(QNetworkProxy::NoProxy);
             nm->setCache(new NoCache);
             nm->moveToThread(thread);
             thread->start();

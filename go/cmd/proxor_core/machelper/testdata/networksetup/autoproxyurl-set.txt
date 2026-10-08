@@ -1,0 +1,2 @@
+URL: http://wpad.example/proxy.pac
+Enabled: Yes

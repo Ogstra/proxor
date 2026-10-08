@@ -258,6 +258,7 @@ namespace ProxorGui {
         _add(new configItem("ua_include_hwid", &ua_include_hwid, itemType::boolean));
 #ifdef Q_OS_MACOS
         _add(new configItem("tray_icon_colored", &tray_icon_colored, itemType::boolean));
+        _add(new configItem("tray_speed_view", &tray_speed_view, itemType::boolean));
 #endif
         _add(new configItem("last_run_version", &last_run_version, itemType::string));
         _add(new configItem("test_url", &test_latency_url, itemType::string));
@@ -299,6 +300,7 @@ namespace ProxorGui {
         _add(new configItem("vpn_hide_console", &vpn_hide_console, itemType::boolean));
         _add(new configItem("vpn_strict_route", &vpn_strict_route, itemType::boolean));
         _add(new configItem("vpn_bypass_process", &vpn_rule_process, itemType::string));
+        _add(new configItem("vpn_bypass_vpn_clients", &vpn_bypass_vpn_clients, itemType::boolean));
         _add(new configItem("vpn_bypass_cidr", &vpn_rule_cidr, itemType::string));
         _add(new configItem("vpn_rule_white", &vpn_rule_white, itemType::boolean));
         _add(new configItem("check_include_pre", &check_include_pre, itemType::boolean));
@@ -319,6 +321,8 @@ namespace ProxorGui {
         _add(new configItem("core_enable_color", &core_enable_color, itemType::boolean));
         _add(new configItem("vpn_internal_tun", &vpn_internal_tun, itemType::boolean));
         _add(new configItem("ssid_on_demand_enabled", &ssid_on_demand_enabled, itemType::boolean));
+        _add(new configItem("wifi_permission_prompted", &wifi_permission_prompted, itemType::boolean));
+        _add(new configItem("local_network_prompted", &local_network_prompted, itemType::boolean));
         _add(new configItem("ssid_trigger_list", &ssid_trigger_list, itemType::stringList));
         _add(new configItem("ssid_on_demand_profile_id", &ssid_on_demand_profile_id, itemType::integer));
         _add(new configItem("ssid_on_demand_profile_name", &ssid_on_demand_profile_name, itemType::string));
@@ -601,6 +605,12 @@ namespace ProxorGui {
                 nativeChannelMarkerPath = QStringLiteral("/usr/share/proxor/package-channel");
             }
 #endif
+#ifdef Q_OS_MACOS
+            // macOS: the Homebrew cask or any other copy (release zip, local build); neither self-updates.
+            return DetectMacPackageMode(QDir(QCoreApplication::applicationDirPath() + QStringLiteral("/../..")).absolutePath(),
+                                        QDir::homePath(),
+                                        {QStringLiteral("/opt/homebrew/Caskroom/proxor"), QStringLiteral("/usr/local/Caskroom/proxor")});
+#endif
             return DetectPackageMode(PackageRootPath(), qEnvironmentVariable("FLATPAK_ID"),
                                       appImagePath, nativeChannelMarkerPath);
         }();
@@ -617,6 +627,10 @@ namespace ProxorGui {
     }
 
     bool UseInternalTun() {
+#ifdef Q_OS_MACOS
+        // macOS: the Tun instance runs in the root helper (two-process mode); the user core never runs as root.
+        return false;
+#endif
 #ifdef Q_OS_LINUX
         if (IsFlatpak(CurrentPackageMode())) return false;
 #endif

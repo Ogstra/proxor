@@ -558,6 +558,8 @@
     <addaction name="menu_add_from_input"/>
     <addaction name="menu_add_from_clipboard"/>
     <addaction name="menu_scan_qr"/>
+    <addaction name="menu_scan_qr_image"/>
+    <addaction name="menu_scan_qr_clipboard"/>
     <addaction name="menu_add_subscription"/>
     <addaction name="separator"/>
     <addaction name="menu_select_all"/>
@@ -660,6 +662,16 @@
   <action name="menu_scan_qr">
    <property name="text">
     <string>Add from QR Code on Screen</string>
+   </property>
+  </action>
+  <action name="menu_scan_qr_image">
+   <property name="text">
+    <string>Add from QR Code in Image File...</string>
+   </property>
+  </action>
+  <action name="menu_scan_qr_clipboard">
+   <property name="text">
+    <string>Add from QR Code in Clipboard Image</string>
    </property>
   </action>
   <action name="menu_delete">

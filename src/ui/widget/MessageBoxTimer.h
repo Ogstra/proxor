@@ -1,11 +1,15 @@
 #pragma once
 
 #include <QMessageBox>
+#include <QPointer>
 #include <QTimer>
 
+// Shows `msgbox` after `delayMs` unless cancel() came first. The box is NON-modal: a modal exec() here froze
+// every other control (Stop included) behind a "restart the software" prompt whenever a start took longer than
+// the delay. cancel() always wins, even if the timeout was already queued.
 class MessageBoxTimer : public QTimer {
 public:
-    QMessageBox *msgbox = nullptr;
+    QPointer<QMessageBox> msgbox;
     bool showed = false;
 
     explicit MessageBoxTimer(QObject *parent, QMessageBox *msgbox, int delayMs) : QTimer(parent) {
@@ -17,17 +21,20 @@ public:
     };
 
     void cancel() {
+        cancelled = true;
         QTimer::stop();
         if (msgbox != nullptr && showed) {
-            msgbox->reject(); // return the timeoutFunc
+            msgbox->reject(); // hides the non-modal box
         }
     };
 
 private:
+    bool cancelled = false;
+
     void timeoutFunc() {
-        if (msgbox == nullptr) return;
+        if (cancelled || msgbox == nullptr) return;
         showed = true;
-        msgbox->exec();
-        msgbox = nullptr;
+        msgbox->setWindowModality(Qt::NonModal);
+        msgbox->show();
     }
 };

@@ -3,11 +3,16 @@
 
 #include "main/GuiUtils.hpp"
 #include "main/ProxorGui.hpp"
+#include "platform/PlatformCapabilitiesApp.hpp"
+#include "platform/CapabilityUi.hpp"
+#include "platform/PlatformCapabilities.hpp"
+#include "platform/ProcessNames.hpp"
 #include "ui/mainwindow_interface.h"
 
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QEvent>
+#include <QLabel>
 #include <QListWidget>
 #include <QMessageBox>
 #include <QProcess>
@@ -15,6 +20,20 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+
+#ifdef Q_OS_MACOS
+#include "sys/macos/MacHelperClient.h"
+#include "sys/macos/MacHelperService.h"
+#include "sys/macos/MacHelperInstaller.h"
+
+#include <QGroupBox>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QPointer>
+#include <QPushButton>
+
+#include <memory>
+#endif
 
 DialogVPNSettings::DialogVPNSettings(QWidget *parent) : QDialog(parent), ui(new Ui::DialogVPNSettings) {
     ui->setupUi(this);
@@ -31,7 +50,139 @@ DialogVPNSettings::DialogVPNSettings(QWidget *parent) : QDialog(parent), ui(new 
     ui->hide_console->setVisible(false);
 #endif
     ui->strict_route->setChecked(ProxorGui::dataStore->vpn_strict_route);
+    {
+        auto *bypassClients = new QCheckBox(tr("Keep WireGuard, OpenVPN and Tailscale outside the tunnel"), ui->gb_process_name);
+        bypassClients->setObjectName(QStringLiteral("vpn_bypass_vpn_clients"));
+        bypassClients->setToolTip(tr("On: these VPN clients connect directly. Off: their traffic goes through the proxy, for example to carry WireGuard over a VLESS Reality proxy."));
+        bypassClients->setChecked(ProxorGui::dataStore->vpn_bypass_vpn_clients);
+        ui->verticalLayout_4->insertWidget(0, bypassClients);
+    }
     ui->single_core->setChecked(ProxorGui::dataStore->vpn_internal_tun);
+#ifdef Q_OS_MACOS
+    // The single-core Tun option does not apply on macOS (Tun runs in the Proxor service).
+    ui->single_core->setVisible(false);
+    {
+        auto *box = new QGroupBox(tr("Tun service"), this);
+        auto *boxLayout = new QVBoxLayout(box);
+        auto *status = new QLabel(box);
+        status->setWordWrap(true);
+        auto *buttons = new QHBoxLayout();
+        auto *install = new QPushButton(box);
+        auto *remove = new QPushButton(tr("Remove Tun service"), box);
+        buttons->addWidget(install);
+        buttons->addWidget(remove);
+        buttons->addStretch();
+        boxLayout->addWidget(status);
+        boxLayout->addLayout(buttons);
+
+        // Insert above the bottom row (whitelist / troubleshooting / OK-Cancel).
+        if (auto *vbox = qobject_cast<QVBoxLayout *>(layout()))
+            vbox->insertWidget(std::max(0, vbox->count() - 1), box);
+        else
+            layout()->addWidget(box);
+
+        auto state = std::make_shared<MacHelperState>(MacHelperState::NotInstalled);
+
+        QPointer<DialogVPNSettings> self(this);
+
+        // Copyable and self-contained: also captured by the async install/remove callbacks. The probe never
+        // blocks the UI thread; the classification is applied when it answers (and only if the dialog is alive).
+        const auto refresh = [self, status, install, remove, state]() {
+            if (!self) return;
+            status->setText(tr("Checking..."));
+            install->setEnabled(false);
+            remove->setEnabled(false);
+            MacHelperSvc()->probe(self.data(), 1000, [self, status, install, remove, state](const MacHelperProbe &probe, MacHelperState st) {
+                if (!self) return;
+                *state = st;
+                install->setVisible(true);
+                install->setEnabled(true);
+                remove->setEnabled(true);
+                switch (st) {
+                case MacHelperState::NotInstalled:
+                    status->setText(tr("Not installed. Turning on Tun Mode or System Proxy installs it (one administrator password prompt)."));
+                    install->setText(tr("Install"));
+                    remove->setEnabled(false);
+                    break;
+                case MacHelperState::InstalledNotRunning:
+                    status->setText(tr("Installed but not running. Allow Proxor in System Settings > General > Login Items & Extensions, or reinstall."));
+                    install->setText(tr("Reinstall"));
+                    break;
+                case MacHelperState::NotAuthorized:
+                    status->setText(tr("Installed by another user of this Mac; it does not accept this user yet."));
+                    install->setText(tr("Allow this user"));
+                    // Removing it would break the other user's Tun; they can remove it themselves.
+                    remove->setEnabled(false);
+                    break;
+                case MacHelperState::Outdated:
+                    status->setText(tr("Installed, needs an update for this version of Proxor."));
+                    install->setText(tr("Update"));
+                    break;
+                case MacHelperState::Ready:
+                    status->setText(tr("Running (service %1, sing-box %2).").arg(probe.build, probe.singbox));
+                    install->setVisible(false);
+                    break;
+                }
+            });
+        };
+
+        connect(install, &QPushButton::clicked, this, [this, self, refresh, state] {
+            if (MacHelperInstaller::InstallInProgress()) {
+                MessageBoxInfo(software_name, tr("The Proxor service installation is already waiting for your answer."));
+                return;
+            }
+            MacHelperInstaller::ConfirmAndInstall(
+                this, tr("Tun Mode"), DecideMacHelperEnable(*state), [self, refresh](MacAdminScriptResult r) {
+                    if (!self) return;
+                    refresh();
+                    if (r.outcome == MacAdminScriptOutcome::Failed)
+                        MessageBoxWarning(software_name, tr("The Proxor service could not be installed: %1").arg(r.reason));
+                });
+        });
+
+        connect(remove, &QPushButton::clicked, this, [this, self, refresh] {
+            const auto answer = QMessageBox::question(
+                this, tr("Remove Tun service"),
+                tr("Remove the Proxor Tun service? Tun Mode and System Proxy will be turned off. You can install it again later."));
+            if (answer != QMessageBox::Yes) return;
+            GetMainWindow()->proxor_set_spmode_vpn(false);
+            GetMainWindow()->proxor_set_spmode_system_proxy(false);
+            MacHelperInstaller::Uninstall(this, [self, refresh](MacAdminScriptResult r) {
+                if (!self) return;
+                refresh();
+                if (r.outcome == MacAdminScriptOutcome::Failed)
+                    MessageBoxWarning(software_name, tr("The Proxor service could not be removed: %1").arg(r.reason));
+            });
+        });
+
+        refresh();
+    }
+#endif
+    {
+        using namespace ProxorPlatform;
+        auto *tunNote = MakeCapabilityNote(this);
+        ui->verticalLayout->insertWidget(0, tunNote);
+        const auto tun = CurrentCapability(Capability::TunMode);
+        if (!IsUsable(tun)) {
+            QList<QWidget *> pageWidgets;
+            for (int i = 0; i < ui->verticalLayout->count(); i++) {
+                auto *w = ui->verticalLayout->itemAt(i)->widget();
+                if (w != nullptr && w != tunNote) pageWidgets << w;
+            }
+            ApplyCapability(pageWidgets, tun, tunNote);
+        } else {
+            QStringList reasons;
+            for (const auto &entry : {std::make_pair(static_cast<QWidget *>(ui->strict_route), CurrentCapability(Capability::TunStrictRoute)),
+                                      std::make_pair(static_cast<QWidget *>(ui->single_core), CurrentCapability(Capability::TunSingleCore))}) {
+                ApplyCapability(entry.first, entry.second);
+                if (entry.second.support != Support::Supported && !entry.second.reason.isEmpty()) reasons << entry.second.reason;
+            }
+            if (!reasons.isEmpty()) {
+                tunNote->setText(reasons.join("\n"));
+                tunNote->setVisible(true);
+            }
+        }
+    }
     //
     D_LOAD_STRING_PLAIN(vpn_rule_cidr)
     D_LOAD_STRING_PLAIN(vpn_rule_process)
@@ -48,16 +199,25 @@ DialogVPNSettings::DialogVPNSettings(QWidget *parent) : QDialog(parent), ui(new 
     ui->whitelist_mode->setChecked(ProxorGui::dataStore->vpn_rule_white);
 
     connect(ui->btn_pick_process, &QPushButton::clicked, this, [this] {
+        QSet<QString> names;
+        int skippedNames = 0;
+        const bool readProc = ProxorPlatform::CompiledHostOs() == ProxorPlatform::HostOs::Linux;
+        if (readProc) {
+            const auto list = ProxorPlatform::ListLinuxProcessNames();
+            for (const auto &n : list.names) names.insert(n);
+            skippedNames = list.skipped;
+        }
         QProcess proc;
+        if (!readProc) {
 #ifdef Q_OS_WIN
         proc.start("tasklist", {"/fo", "csv", "/nh"});
 #else
         proc.start("ps", {"-eo", "comm"});
 #endif
         if (!proc.waitForFinished(4000)) return;
+        }
 
-        QSet<QString> names;
-        const QString out = proc.readAllStandardOutput();
+        const QString out = readProc ? QString() : QString(proc.readAllStandardOutput());
         for (const auto &line : out.split('\n')) {
             const auto trimmed = line.trimmed();
             if (trimmed.isEmpty()) continue;
@@ -67,6 +227,12 @@ DialogVPNSettings::DialogVPNSettings(QWidget *parent) : QDialog(parent), ui(new 
             auto name = trimmed.left(comma);
             if (name.startsWith('"') && name.endsWith('"'))
                 name = name.mid(1, name.size() - 2);
+            if (!name.isEmpty()) names.insert(name);
+#elif defined(Q_OS_MACOS)
+            // macOS `ps -o comm` prints the full executable path (plus a "COMM" header), while
+            // sing-box process_name rules match the executable's file name.
+            if (trimmed == QLatin1String("COMM")) continue;
+            const auto name = trimmed.section(QLatin1Char('/'), -1);
             if (!name.isEmpty()) names.insert(name);
 #else
             if (!trimmed.isEmpty()) names.insert(trimmed);
@@ -87,6 +253,11 @@ DialogVPNSettings::DialogVPNSettings(QWidget *parent) : QDialog(parent), ui(new 
         for (const auto &name : sorted)
             list->addItem(name);
         auto *btns = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dlg);
+        if (skippedNames > 0) {
+            auto *note = new QLabel(tr("%n process(es) of other users are not listed: their full names cannot be read without administrator rights.", "", skippedNames), dlg);
+            note->setWordWrap(true);
+            layout->addWidget(note);
+        }
         layout->addWidget(list);
         layout->addWidget(btns);
         connect(btns, &QDialogButtonBox::accepted, dlg, &QDialog::accept);
@@ -145,6 +316,9 @@ bool DialogVPNSettings::save(QStringList &flags) {
     ProxorGui::dataStore->vpn_ipv6 = ui->vpn_ipv6->isChecked();
     ProxorGui::dataStore->vpn_hide_console = ui->hide_console->isChecked();
     ProxorGui::dataStore->vpn_strict_route = ui->strict_route->isChecked();
+    if (auto *bypassClients = findChild<QCheckBox *>(QStringLiteral("vpn_bypass_vpn_clients"))) {
+        ProxorGui::dataStore->vpn_bypass_vpn_clients = bypassClients->isChecked();
+    }
     ProxorGui::dataStore->vpn_rule_white = ui->whitelist_mode->isChecked();
     bool isInternalChanged = ProxorGui::dataStore->vpn_internal_tun != ui->single_core->isChecked();
     ProxorGui::dataStore->vpn_internal_tun = ui->single_core->isChecked();

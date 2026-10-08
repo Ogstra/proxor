@@ -51,6 +51,38 @@ func Create(configContent []byte) (*box.Box, context.CancelFunc, error) {
 	return createWithOptions(ctx, options)
 }
 
+// ParseOptions decodes a config with the same registry-aware parser Create uses,
+// so a caller that validates the typed options runs exactly what it validated.
+func ParseOptions(content []byte) (context.Context, option.Options, error) {
+	ctx := baseContext()
+	options, err := json.UnmarshalExtendedContext[option.Options](ctx, content)
+	if err != nil {
+		return nil, option.Options{}, E.Cause(err, "decode config")
+	}
+	return ctx, options, nil
+}
+
+// CheckOptions creates (but does not start) an instance from typed options, like Check.
+func CheckOptions(ctx context.Context, options option.Options) error {
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	instance, err := box.New(box.Options{
+		Context:           runCtx,
+		Options:           options,
+		PlatformLogWriter: platformWriter,
+	})
+	if err != nil {
+		return E.Cause(err, "create service")
+	}
+	instance.Close()
+	return nil
+}
+
+// CreateFromOptions creates and starts an instance from typed options.
+func CreateFromOptions(ctx context.Context, options option.Options) (*box.Box, context.CancelFunc, error) {
+	return createWithOptions(ctx, options)
+}
+
 // Check validates a config by creating a box instance without starting it (no port binding).
 func Check(configContent []byte) error {
 	ctx := baseContext()

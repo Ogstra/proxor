@@ -8,6 +8,8 @@
 #include "sub/GroupUpdater.hpp"
 #include "sys/ExternalProcess.hpp"
 #include "sys/WifiMonitor.hpp"
+#include "sys/wifi/WifiBackend.hpp"
+#include "sys/wifi/WifiPermission.hpp"
 #include "main/PackagePolicy.hpp"
 
 #include "ui/ThemeManager.hpp"
@@ -21,14 +23,22 @@
 #include "ui/dialog_vpn_settings.h"
 #include "ui/dialog_ssid_settings.h"
 #include "ui/dialog_hotkey.h"
+#ifdef Q_OS_WIN
+#include "ui/dialog_update_available.h"
+#endif
+#include "platform/PlatformCapabilitiesApp.hpp"
+#include "platform/HotkeyReport.hpp"
+#include "platform/QrScanPolicy.hpp"
+#include "platform/QrImageDecode.hpp"
+#include "platform/LinuxSystemProxyPlan.hpp"
+#include "platform/TrayPolicy.hpp"
+#include "platform/PortalShortcutTrigger.hpp"
+#include "sys/DesktopPortal.hpp"
 
 #include "3rdparty/fix_old_qt.h"
 #include "3rdparty/qrcodegen.hpp"
 #include "3rdparty/qv2ray/v2/components/proxy/QvProxyConfigurator.hpp"
 
-#ifndef NKR_NO_ZXING
-#include "3rdparty/ZxingQtReader.hpp"
-#endif
 
 #ifdef Q_OS_WIN
 #include "3rdparty/WinCommander.hpp"
@@ -44,11 +54,22 @@
 
 #ifdef Q_OS_MACOS
 #include "ui/mac/MacPlatform.h"
+#include "platform/MacReopenPolicy.hpp"
 #include "ui/mac/MacLook.h"
 #include "ui/mac/MacDialogs.h"
+#include "sys/macos/MacHelperClient.h"
+#include "sys/macos/MacHelperService.h"
+#include "sys/macos/MacHelperInstaller.h"
+#include "sys/macos/MacLocalNetwork.h"
+#include "platform/TraySpeed.hpp"
+#include "platform/LocalNetworksApp.hpp"
+#include "sys/macos/MacScreenCapture.h"
 #endif
 
 #include <QClipboard>
+#include <QFileDialog>
+#include <QMimeData>
+#include <QImageReader>
 #include <QApplication>
 #include <QAbstractItemView>
 #include <QBrush>
@@ -392,6 +413,27 @@ void UI_InitMainWindow() {
     mainwindow = new MainWindow;
 }
 
+namespace {
+// No tray host (GNOME without AppIndicator, Flatpak, bare WM) must never leave an invisible process.
+bool noTrayCloseNoticeShown = false;
+
+void ApplyStartupVisibility(MainWindow *w, int waitedMs) {
+    using namespace ProxorPlatform;
+    const auto tray = CurrentCapability(Capability::SystemTray);
+    switch (DecideStartupVisibility(ProxorGui::dataStore->flag_tray, tray, waitedMs, 10000)) {
+        case StartupVisibility::StayHidden:
+            return;
+        case StartupVisibility::WaitForTray:
+            QTimer::singleShot(500, w, [w, waitedMs] { ApplyStartupVisibility(w, waitedMs + 500); });
+            return;
+        case StartupVisibility::ShowWindow:
+            w->show();
+            if (ProxorGui::dataStore->flag_tray && MW_show_log) MW_show_log(NoTrayStartupNotice(tray));
+            return;
+    }
+}
+} // namespace
+
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow) {
     mainwindow = this;
     MW_dialog_message = [=](const QString &a, const QString &b) {
@@ -558,7 +600,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->label_inbound->installEventFilter(this);
     ui->splitter->installEventFilter(this);
     //
-    RegisterHotkey(false);
+    const QStringList hotkeyProblems = RegisterHotkey(false);
     //
     auto last_size = ProxorGui::dataStore->mw_size.split("x");
     if (last_size.length() == 2) {
@@ -791,6 +833,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         ProxorGui_log::Write(ProxorGui_log::InferLevel(log), log);
         runOnUiThread([=] { show_log_impl(log); });
     };
+    // Diagnostic only: goes to the log file, not the window log.
+    ProxorGui_log::Write(ProxorGui_log::Level::Info, "Platform: " + ProxorPlatform::DescribePlatformEnvironment(ProxorPlatform::CurrentPlatformEnvironment()));
+    for (const auto &problem : hotkeyProblems) MW_show_log(tr("Hotkeys: %1").arg(problem));
 
     // table UI
     proxyListModel = new ProxyListModel(this);
@@ -995,6 +1040,53 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     // Setup Tray
     tray = new QSystemTrayIcon(this); // 初始化托盘对象tray
+    // Tray context menu: only what is useful from the tray. The full App menu stays in the toolbar.
+    auto buildTrayMenu = [this]() {
+        const QList<QAction *> hidden{ui->menu_spmode->menuAction(), ui->menu_check_updates, ui->menu_about,
+                                      ui->menu_report_bug, ui->menu_donate, ui->actionRestart_Program};
+        auto *menu = new QMenu(this);
+        bool pendingSeparator = false;
+        for (auto *action : ui->menu_program->actions()) {
+            const bool isRestartProxy = action == ui->actionRestart_Proxy; // replaced by Connect / Disconnect
+            if (!isRestartProxy && hidden.contains(action)) continue;
+            if (action->isSeparator()) {
+                pendingSeparator = !menu->isEmpty();
+                continue;
+            }
+            if (pendingSeparator) menu->addSeparator();
+            pendingSeparator = false;
+#ifdef Q_OS_MACOS
+            if (isRestartProxy) {
+                // Same switch as Settings > "Show speed in the menu bar"; kept in sync when the menu opens.
+                auto *speedAction = new QAction(tr("Show speed in the menu bar"), menu);
+                speedAction->setCheckable(true);
+                speedAction->setChecked(ProxorGui::dataStore->tray_speed_view);
+                connect(speedAction, &QAction::toggled, this, [this](bool checked) {
+                    if (ProxorGui::dataStore->tray_speed_view == checked) return;
+                    ProxorGui::dataStore->tray_speed_view = checked;
+                    ProxorGui::dataStore->Save();
+                    if (!checked) update_tray_speed(0, 0, true);
+                });
+                connect(menu, &QMenu::aboutToShow, speedAction, [speedAction] {
+                    QSignalBlocker blocker(speedAction);
+                    speedAction->setChecked(ProxorGui::dataStore->tray_speed_view);
+                });
+                menu->addAction(speedAction);
+                menu->addSeparator();
+            }
+#endif
+            if (isRestartProxy) {
+                // One action for both directions, same behavior as the Start/Stop button of the window.
+                tray_toggle_action = new QAction(tr("Connect"), menu);
+                connect(tray_toggle_action, &QAction::triggered, this, [this] { on_toolButton_toggle_proxy_clicked(); });
+                menu->addAction(tray_toggle_action);
+                continue;
+            }
+            menu->addAction(action);
+        }
+        return menu;
+    };
+
 #ifdef Q_OS_MACOS
     // Never call tray->setContextMenu/setIcon/show() on macOS: QSystemTrayIcon::setContextMenu
     // is exactly what crashes (see MacPlatform.mm's header comment and tray-crash.log). `tray`
@@ -1002,33 +1094,29 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     // tray->activated(Trigger) into the same lambda; its own (never shown) status item is inert.
     // Proxor owns a real NSStatusItem instead, with a dedicated tray menu (not shared with the
     // toolbar's ui->menu_program, since one NSMenu cannot have two supermenus).
-    mac_tray_menu = new QMenu(this);
-    for (auto *action : ui->menu_program->actions()) {
-        if (action->isSeparator()) {
-            mac_tray_menu->addSeparator();
-            continue;
-        }
-        if (action == ui->menu_spmode->menuAction()) {
-            auto *spmodeMirror = mac_tray_menu->addMenu(action->text());
-            for (auto *spAction : ui->menu_spmode->actions()) {
-                spmodeMirror->addAction(spAction);
-            }
-            connect(spmodeMirror, &QMenu::aboutToShow, this, [this] { emit ui->menu_spmode->aboutToShow(); });
-            continue;
-        }
-        mac_tray_menu->addAction(action);
-    }
+    mac_tray_menu = buildTrayMenu();
     mac_status_item = new ProxorMac::StatusItem;
     mac_status_item->setColored(ProxorGui::dataStore->tray_icon_colored);
+    mac_status_item->setActive(false);
     mac_status_item->setIcon(Icon::GetTrayIcon(Icon::NONE));
     mac_status_item->setMenu(mac_tray_menu);
     mac_status_item->setVisible(true);
+    // Started hidden in the menu bar (-tray): no Dock icon until the window is shown.
+    QTimer::singleShot(0, this, [this] {
+        if (!isVisible() && !isMinimized()) ProxorMac::SetDockIconVisible(false);
+    });
     ProxorMac::InstallQuitInterceptor(this, [this] {
         if (!ProxorGui::dataStore->prepare_exit) on_menu_exit_triggered();
     });
+    // Dock icon click (kAEReopenApplication): bring the hidden or minimized window back. Never fires at launch.
+    ProxorMac::InstallReopenHandler(this, [this] {
+        if (ProxorPlatform::DecideReopen(isVisible(), isMinimized(), ProxorGui::dataStore->prepare_exit) != ProxorPlatform::ReopenAction::ShowWindow) return;
+        ProxorGui_log::Write(ProxorGui_log::Level::Info, ProxorPlatform::ReopenLogLine());
+        ActivateWindow(this);
+    });
 #else
     tray->setIcon(Icon::GetTrayIcon(Icon::NONE));
-    tray->setContextMenu(ui->menu_program); // 创建托盘菜单
+    tray->setContextMenu(buildTrayMenu()); // dedicated tray menu (not the toolbar App menu)
     tray->show();                           // 让托盘图标显示在系统托盘上
 #endif
     connect(tray, &QSystemTrayIcon::activated, this, [=](QSystemTrayIcon::ActivationReason reason) {
@@ -1051,6 +1139,20 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     connect(ui->actionShow_window, &QAction::triggered, this, [=] { tray->activated(QSystemTrayIcon::ActivationReason::Trigger); });
     //
     connect(ui->checkBox_VPN, &QCheckBox::clicked, this, [=](bool checked) { proxor_set_spmode_vpn(checked); });
+#ifdef Q_OS_MACOS
+    connect(MacHelperSvc(), &MacHelperService::tunReady, this, &MainWindow::macOnTunReady);
+    connect(MacHelperSvc(), &MacHelperService::tunStopped, this, &MainWindow::macOnTunStopped);
+    connect(MacHelperSvc(), &MacHelperService::helperLog, this, [=](const QString &line) { MW_show_log("[Tun] " + line); });
+    connect(MacHelperSvc(), &MacHelperService::connectionLost, this, &MainWindow::macOnHelperLost);
+    mac_modes = new MacModeCoordinator({
+        [this] { return ProxorGui::dataStore->spmode_system_proxy; },
+        [this] { return ProxorGui::dataStore->spmode_vpn; },
+        [this] { return vpn_pid != 0; },
+        [this] { return ProxorGui::dataStore->started_id >= 0; },
+        [this](bool sp, bool tun) { macPauseModes(sp, tun); },
+        [this](bool sp, bool tun) { macResumeModes(sp, tun); },
+    }, kMacUserStopGraceMs, this);
+#endif
     connect(ui->checkBox_SystemProxy, &QCheckBox::clicked, this, [=](bool checked) { proxor_set_spmode_system_proxy(checked); });
     connect(ui->menu_spmode, &QMenu::aboutToShow, this, [=]() {
         ui->menu_spmode_disabled->setChecked(!(ProxorGui::dataStore->spmode_system_proxy || ProxorGui::dataStore->spmode_vpn));
@@ -1067,6 +1169,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 #ifdef NKR_NO_ZXING
     // on_menu_scan_qr_triggered needs the barcode reader this build does not link.
     ui->menu_scan_qr->setVisible(false);
+    ui->menu_scan_qr_image->setVisible(false);
+    ui->menu_scan_qr_clipboard->setVisible(false);
 #endif
     connect(ui->menu_tcp_ping, &QAction::triggered, this, [=]() { speedtest_current_group(0, false); });
     connect(ui->menu_url_test, &QAction::triggered, this, [=]() { speedtest_current_group(1, false); });
@@ -1156,7 +1260,16 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     setup_grpc();
 
     const bool restore_system_proxy = ProxorGui::dataStore->remember_spmode.contains("system_proxy");
+#ifdef Q_OS_MACOS
+    // A remembered Tun holds the remembered profile only until the asynchronous helper probe answers
+    // (macStartupProbed, bounded by a safety timer): Ready restores it, any other state starts the profile
+    // without Tun (MacHelperPolicy). Fresh configs land here too: DataStore defaults remember_spmode to {"vpn"}.
+    const bool mac_remembered_vpn = ProxorGui::dataStore->remember_spmode.contains("vpn") || ProxorGui::dataStore->flag_restart_tun_on;
+    mac_startup_probe_pending = mac_remembered_vpn || restore_system_proxy;
+    const bool restore_vpn = mac_remembered_vpn; // provisional until the probe answers
+#else
     const bool restore_vpn = ProxorGui::dataStore->remember_spmode.contains("vpn") || ProxorGui::dataStore->flag_restart_tun_on;
+#endif
     // A remembered TUN must be ready before any automatic work creates traffic.
     startup_tun_pending = restore_vpn;
     if (startup_tun_pending && ProxorGui::dataStore->remember_enable && ProxorGui::dataStore->remember_id >= 0) {
@@ -1180,9 +1293,19 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         },
         DS_cores);
 
-    wifi_monitor = new WifiMonitor(this);
+    wifi_monitor = new WifiMonitor(CreatePlatformWifiBackend(), 5000, this);
+    WifiMonitor::setAppInstance(wifi_monitor);
     connect(wifi_monitor, &WifiMonitor::ssidChanged, this, &MainWindow::onWifiSsidChanged);
-    wifi_monitor->start();
+    connect(wifi_monitor, &WifiMonitor::readingChanged, this, &MainWindow::onWifiReadingChanged);
+    refreshWifiMonitoring();
+#ifdef Q_OS_MACOS
+    if (!ProxorGui::dataStore->local_network_prompted) {
+        ProxorGui::dataStore->local_network_prompted = true;
+        ProxorGui::dataStore->Save();
+        // After the Location prompt, so the two native prompts do not start together.
+        QTimer::singleShot(2500, this, [] { MacLocalNetwork::TriggerPrompt(); });
+    }
+#endif
 
     connect(qApp, &QGuiApplication::commitDataRequest, this, &MainWindow::on_commitDataRequest);
 
@@ -1206,12 +1329,22 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         const bool resumed = subscription_timer_last_tick_ms > 0 && now - subscription_timer_last_tick_ms > 70 * 1000;
         subscription_timer_last_tick_ms = now;
         if (resumed) {
+#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
+            wakeDetected(ProxorPlatform::WakeSource::TimerGap);
+#else
             queue_resume_subscription_check();
+#endif
             return;
         }
+#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
+        if (wakeOwnsSubscriptions()) return; // the wake run updates subscriptions until it finishes
+#endif
         if (!startup_tun_pending && !startup_tun_failed) UI_update_due_groups_on_timer();
     });
     TM_auto_update_subsctiption_Reset_Minute(ProxorGui::dataStore->sub_auto_update);
+#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
+    wakeInstall();
+#endif
     #if QT_VERSION >= QT_VERSION_CHECK(6, 4, 0)
     const bool niLoaded = QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability);
     #elif QT_VERSION >= QT_VERSION_CHECK(6, 3, 0)
@@ -1258,12 +1391,15 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ProxorMac::InstallDialogPolish();
     ProxorMac::PolishMainWindow(this);
 #endif
-    if (!ProxorGui::dataStore->flag_tray) show();
+    ApplyStartupVisibility(this, 0);
 
     // Restore spmode after the window has entered the event loop so prompts
     // like the Tun admin warning are shown the same way as manual activation.
     if (ProxorGui::dataStore->remember_enable || ProxorGui::dataStore->flag_restart_tun_on || restore_vpn) {
         setTimeout([=] {
+#ifdef Q_OS_MACOS
+            macStartupRestore(restore_system_proxy, restore_vpn);
+#else
             if (restore_system_proxy) {
                 proxor_set_spmode_system_proxy(true, false);
             }
@@ -1275,6 +1411,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
                     failStartupTunAuthorization();
                 }
             }
+#endif
         }, this, 0);
     }
 }
@@ -1323,6 +1460,16 @@ void MainWindow::closeEvent(QCloseEvent *event) {
 #else
     if (tray->isVisible()) {
 #endif
+        const auto trayCap = ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::SystemTray);
+        if (ProxorPlatform::DecideCloseAction(trayCap) == ProxorPlatform::CloseAction::Minimize) {
+            showMinimized();
+            event->ignore();
+            if (!noTrayCloseNoticeShown) {
+                noTrayCloseNoticeShown = true;
+                MessageBoxInfo(software_name, ProxorPlatform::NoTrayCloseNotice(trayCap));
+            }
+            return;
+        }
         ui->proxyListTable->clearSelection();
         hide();          // 隐藏窗口
         event->ignore(); // 忽略事件
@@ -1342,6 +1489,9 @@ void MainWindow::changeEvent(QEvent *event) {
 void MainWindow::showEvent(QShowEvent *event) {
     QMainWindow::showEvent(event);
     update_connection_statistics_polling_state();
+#ifdef Q_OS_MACOS
+    ProxorMac::SetDockIconVisible(true);
+#endif
 #ifdef Q_OS_WIN
     themeManager->ReapplyTitleBar();
 #endif
@@ -1350,6 +1500,10 @@ void MainWindow::showEvent(QShowEvent *event) {
 void MainWindow::hideEvent(QHideEvent *event) {
     QMainWindow::hideEvent(event);
     update_connection_statistics_polling_state();
+#ifdef Q_OS_MACOS
+    // Closed to the menu bar: no Dock icon. A minimized window keeps it, since it lives in the Dock.
+    if (!isMinimized() && mac_status_item != nullptr && mac_status_item->isVisible()) ProxorMac::SetDockIconVisible(false);
+#endif
 }
 
 MainWindow::~MainWindow() {
@@ -1442,34 +1596,160 @@ std::shared_ptr<ProxorGui::ProxyEntity> MainWindow::resolveSsidOnDemandProfile()
     return best.profile;
 }
 
+void MainWindow::refreshWifiMonitoring() {
+    if (wifi_monitor == nullptr || ProxorGui::dataStore == nullptr) return;
+    const QString hosts = ProxorGui::dataStore->routing != nullptr ? ProxorGui::dataStore->routing->hosts_mapping : QString();
+    const bool needed = ProxorWifi::MonitoringNeeded(ProxorGui::dataStore->ssid_on_demand_enabled,
+                                                     ProxorGui::dataStore->ssid_trigger_list, hosts);
+    if (needed != wifi_monitor->isActive()) {
+        wifi_monitor->setActive(needed);
+        if (MW_show_log) {
+            const QString watchLine = needed ? tr("[Wi-Fi] Watching the Wi-Fi network (On-Demand or \"Skip on SSIDs\" is configured).")
+                                             : tr("[Wi-Fi] Stopped watching the Wi-Fi network: nothing uses it.");
+#ifdef Q_OS_WIN
+            MW_show_log(watchLine);
+#else
+            ProxorGui_log::WriteDiagnostic(watchLine);
+#endif
+        }
+    }
+
+    const auto perm = ProxorWifi::CurrentWifiPermission();
+    bool askAtFirstStart = false;
+#ifdef Q_OS_MACOS
+    // macOS asks for Location once at the first start even before On-Demand is configured,
+    // so the permission is not first requested in the middle of setting On-Demand up.
+    askAtFirstStart = !ProxorGui::dataStore->wifi_permission_prompted && perm == ProxorWifi::PermissionState::NotDetermined;
+#endif
+    switch (ProxorWifi::DecidePermissionPrompt(perm, needed || askAtFirstStart, wifi_permission_asked)) {
+        case ProxorWifi::PermissionPrompt::ExplainThenRequest: {
+            wifi_permission_asked = true;
+#ifdef Q_OS_MACOS
+            ProxorGui::dataStore->wifi_permission_prompted = true;
+            ProxorGui::dataStore->Save();
+#endif
+#ifdef Q_OS_MACOS
+            // Straight to the native macOS Location prompt; its text comes from Info.plist.
+            QTimer::singleShot(0, this, [this] {
+                ProxorWifi::RequestWifiPermission(this, [this](ProxorWifi::PermissionState s) {
+                    if (MW_show_log) {
+                        ProxorGui_log::WriteDiagnostic(tr("[Wi-Fi] Permission answer: %1")
+                                        .arg(s == ProxorWifi::PermissionState::Granted ? tr("allowed") : ProxorWifi::DescribePermission(s)));
+                    }
+                    wifi_monitor->refreshNow();
+                });
+            });
+            break;
+#endif
+            QTimer::singleShot(0, this, [this, perm] {
+                QMessageBox box(GetMessageBoxParent());
+                box.setIcon(QMessageBox::Information);
+                box.setWindowTitle(tr("Wi-Fi network name"));
+                box.setText(ProxorWifi::DescribePermission(perm));
+                auto *cont = box.addButton(tr("Continue..."), QMessageBox::AcceptRole);
+                box.addButton(tr("Not Now"), QMessageBox::RejectRole);
+                box.exec();
+                if (box.clickedButton() == cont) {
+                    ProxorWifi::RequestWifiPermission(this, [this](ProxorWifi::PermissionState s) {
+                        if (MW_show_log) {
+                            ProxorGui_log::WriteDiagnostic(tr("[Wi-Fi] Permission answer: %1")
+                                            .arg(s == ProxorWifi::PermissionState::Granted ? tr("allowed") : ProxorWifi::DescribePermission(s)));
+                        }
+                        wifi_monitor->refreshNow();
+                    });
+                } else if (MW_show_log) {
+                    MW_show_log(tr("[Wi-Fi] Permission not requested; On-Demand cannot see the Wi-Fi network until it is allowed (Settings > On-Demand)."));
+                }
+            });
+            break;
+        }
+        case ProxorWifi::PermissionPrompt::PointToSettings:
+            if (!wifi_settings_hint_logged) {
+                wifi_settings_hint_logged = true;
+                if (MW_show_log) MW_show_log("[Wi-Fi] " + ProxorWifi::DescribePermission(perm));
+            }
+            break;
+        case ProxorWifi::PermissionPrompt::None:
+            break;
+    }
+}
+
+void MainWindow::onWifiReadingChanged(const ProxorWifi::WifiReading &reading) {
+    const auto text = ProxorWifi::DescribeReading(reading);
+    if (text == wifi_last_logged_status) return;
+    wifi_last_logged_status = text;
+#ifdef Q_OS_WIN
+    if (MW_show_log) MW_show_log("[Wi-Fi] " + text);
+#else
+    // Window log only for what needs the user's attention; the usual SSID changes go to the log file.
+    const bool needsAttention = reading.state == ProxorWifi::ReadState::PermissionNeeded ||
+                                reading.state == ProxorWifi::ReadState::Unavailable;
+    if (needsAttention && wifi_monitor != nullptr && wifi_monitor->isActive()) {
+        if (MW_show_log) MW_show_log("[Wi-Fi] " + text);
+    } else {
+        ProxorGui_log::WriteDiagnostic("[Wi-Fi] " + text);
+    }
+#endif
+}
+
 void MainWindow::onWifiSsidChanged(const QString &ssid) {
+    const QString previous = wifi_hosts_ssid;
+    wifi_hosts_ssid = ssid;
+    const bool viaTrigger = started_via_ssid_trigger;
+    const int startedId = ProxorGui::dataStore->started_id;
+
+    if (applyOnDemandForSsid(ssid)) return;
+
     if (startup_tun_pending || startup_tun_failed) return;
-    if (!ProxorGui::dataStore->ssid_on_demand_enabled) return;
+    if (ProxorGui::dataStore->started_id < 0) return;
+    if (ProxorGui::dataStore->routing == nullptr) return;
+    if (!ProxorWifi::HostsSkipDiffers(ProxorGui::dataStore->routing->hosts_mapping, previous, ssid)) return;
+
+    MW_show_log(tr("[Hosts] Wi-Fi network changed to %1: restarting the profile so \"Skip on SSIDs\" applies.")
+                    .arg(ssid.isEmpty() ? tr("no Wi-Fi network") : "\"" + ssid + "\""));
+    proxor_start(startedId, viaTrigger);
+}
+
+// The Wi-Fi name is usually read before the startup Tun hold is released, and applyOnDemandForSsid refuses
+// while the hold is on. Evaluate the current network again once the hold is gone, so a trigger network
+// the app starts on is not missed until the next network change.
+void MainWindow::applyOnDemandAfterStartup() {
+    QTimer::singleShot(0, this, [this] {
+        if (!wifi_hosts_ssid.isEmpty()) applyOnDemandForSsid(wifi_hosts_ssid);
+    });
+}
+
+bool MainWindow::applyOnDemandForSsid(const QString &ssid) {
+    if (startup_tun_pending || startup_tun_failed) return false;
+    if (!ProxorGui::dataStore->ssid_on_demand_enabled) return false;
 
     bool isTrigger = !ssid.isEmpty() &&
                      ProxorGui::dataStore->ssid_trigger_list.contains(ssid, Qt::CaseSensitive);
 
     if (isTrigger) {
-        if (ProxorGui::dataStore->started_id >= 0) return;
-        if (auto_start_consumed_ssid == ssid) return;
+        if (ProxorGui::dataStore->started_id >= 0) return false;
+        if (auto_start_consumed_ssid == ssid) return false;
 
         auto targetProfile = resolveSsidOnDemandProfile();
         if (targetProfile == nullptr) {
             MW_show_log(tr("[On-Demand] Trigger SSID \"%1\" detected but no target profile could be resolved").arg(ssid));
-            return;
+            return false;
         }
 
         auto_start_consumed_ssid = ssid;
         MW_show_log(tr("[On-Demand] Trigger SSID \"%1\" detected — starting profile %2")
                         .arg(ssid, targetProfile->DisplayTypeAndNameSummary()));
         proxor_start(targetProfile->id, true);
+        return true;
     } else {
         auto_start_consumed_ssid.clear();
         if (started_via_ssid_trigger && ProxorGui::dataStore->started_id >= 0) {
             MW_show_log(tr("[On-Demand] Non-trigger SSID \"%1\" — stopping proxy").arg(ssid));
             proxor_stop(false, false);
+            return true;
         }
     }
+    return false;
 }
 
 // Group tab manage
@@ -1572,6 +1852,9 @@ void MainWindow::update_connection_statistics_polling_state() {
 }
 
 void MainWindow::queue_resume_subscription_check() {
+#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
+    if (wakeOwnsSubscriptions()) return;
+#endif
     if (subscription_resume_check_pending || !UI_has_scheduled_subscription_updates()) return;
     subscription_resume_check_pending = true;
     setTimeout([this] {
@@ -1677,6 +1960,7 @@ void MainWindow::dialog_message_impl(const QString &sender, const QString &info)
         refresh_status();
 #endif
         auto suggestRestartProxy = ProxorGui::dataStore->Save();
+        refreshWifiMonitoring();
         if (info.contains("RouteChanged")) {
             suggestRestartProxy = true;
         }
@@ -1892,6 +2176,13 @@ void MainWindow::on_commitDataRequest() {
     if (ProxorGui::dataStore->remember_enable && last_id >= 0) {
         ProxorGui::dataStore->remember_id = last_id;
     }
+#ifdef Q_OS_MACOS
+    // Restore the session as it was when Proxor quit: stopped by hand before quitting means no
+    // automatic start next time (the remembered id would otherwise revive an older profile).
+    if (ProxorGui::dataStore->remember_enable && last_id < 0 && ProxorGui::dataStore->remember_id >= 0) {
+        ProxorGui::dataStore->remember_id = -1919;
+    }
+#endif
     //
     ProxorGui::dataStore->Save();
     ProxorGui::profileManager->SaveManager();
@@ -1947,7 +2238,11 @@ void MainWindow::onUpdateStaged() {
     // fact and not an invariant: check before promising a restart into it.
     const auto launch = DecideUpdaterLaunch(ProxorGui::ProbeUpdaterLaunch());
     if (!launch.canLaunch) {
+#ifdef Q_OS_WIN
+        ShowUpdateFailedDialog(this, UpdateFailureStage::Install, launch.reason, QStringLiteral(NKR_VERSION), update_release_url);
+#else
         MessageBoxWarning(software_name, tr("%1 The app will stay open.").arg(launch.reason));
+#endif
         MW_show_log(tr("Update downloaded, but it cannot be installed: %1").arg(launch.reason));
         return;
     }
@@ -1974,6 +2269,9 @@ void MainWindow::on_menu_exit_triggered() {
             }
         }
         ProxorGui::dataStore->prepare_exit = true;
+#ifdef Q_OS_MACOS
+        mac_modes->reset();
+#endif
         //
         proxor_set_spmode_system_proxy(false, false);
         proxor_set_spmode_vpn(false, false);
@@ -2059,6 +2357,9 @@ void MainWindow::on_menu_exit_triggered() {
     // QCoreApplication::quit() ends in -[NSApp terminate:], which sends another spontaneous
     // QEvent::Quit; let it through now that the real exit path has finished.
     ProxorMac::AllowQuit();
+    // Deliberate lease close: the helper stops Tun and restores the proxy. The window is already hidden,
+    // so waiting here (bounded) does not freeze anything visible; queued restores run before it (FIFO).
+    MacHelperSvc()->shutdown(3000);
 #endif
     QCoreApplication::quit();
 }
@@ -2078,6 +2379,51 @@ void MainWindow::proxor_set_spmode_system_proxy(bool enable, bool save) {
         }
     }
     if (enable != ProxorGui::dataStore->spmode_system_proxy) {
+#ifdef Q_OS_MACOS
+        if (enable) {
+            if (!MacHelperSvc()->isConnected()) {
+                // Never wait for the helper on the UI thread: probe asynchronously and re-enter once when it answers.
+                const bool restoring = mac_spmode_restoring;
+                MacHelperSvc()->probe(this, 1000, [this, save, restoring](const MacHelperProbe &, MacHelperState st) {
+                    if (st == MacHelperState::Ready && MacHelperSvc()->isConnected()) {
+                        const bool before = mac_spmode_restoring;
+                        mac_spmode_restoring = restoring;
+                        proxor_set_spmode_system_proxy(true, save);
+                        mac_spmode_restoring = before;
+                        return;
+                    }
+                    auto macAction = DecideMacHelperEnable(st);
+                    if (macAction == MacHelperEnableAction::Proceed) macAction = MacHelperEnableAction::AskReinstall; // Ready but the connection dropped again
+                    if (restoring) { // startup restore: never prompt
+                        MW_show_log(tr("System Proxy is remembered, but the Proxor service is not available; leaving it off. Turn on System Proxy to install the service."));
+                        refresh_status();
+                        return;
+                    }
+                    macInstallHelperThen(tr("System Proxy"), macAction, [this] { proxor_set_spmode_system_proxy(true); });
+                    refresh_status();
+                });
+                refresh_status();
+                return;
+            }
+            if (ProxorGui::dataStore->started_id < 0) {
+                // No profile runs: never point the Mac at a dead port. Applied by proxor_start.
+                mac_modes->setSystemProxyParked(true);
+                ProxorGui_log::WriteDiagnostic(tr("System Proxy is on; it takes effect when a profile starts."));
+            } else {
+                // The switch shows on optimistically; macApplySystemProxy reverts it if the helper reports a failure.
+                mac_modes->setSystemProxyParked(false);
+                macApplySystemProxy(true, save);
+            }
+        } else {
+            mac_modes->setSystemProxyParked(false);
+            if (MacHelperSvc()->isConnected() || MacHelperSvc()->lastState() == MacHelperState::Ready) {
+                MacHelperSvc()->sysproxyRestore(this, 20000, [this](const MacHelperService::Reply &r) {
+                    if (!r.ok) MW_show_log(tr("[Warning] System Proxy restore: %1").arg(r.error));
+                });
+            }
+        }
+    }
+#else
         if (enable) {
             auto socks_port = ProxorGui::dataStore->inbound_socks_port;
             auto http_port = ProxorGui::dataStore->inbound_socks_port;
@@ -2097,10 +2443,22 @@ void MainWindow::proxor_set_spmode_system_proxy(bool enable, bool save) {
             ClearSystemProxy();
         }
     }
+#endif
+
+    if (const auto problem = ProxorPlatform::TakeSystemProxyProblem(); !problem.isEmpty()) {
+        MW_show_log("[System Proxy] " + problem);
+        if (!enable) MessageBoxWarning(software_name, problem);
+    }
 
     if (save) {
         ProxorGui::dataStore->remember_spmode.removeAll("system_proxy");
+#ifdef Q_OS_MACOS
+        // Like Tun on every platform, System Proxy on macOS is remembered whether or not
+        // "Remember last profile" is on (it only comes up once a profile runs).
+        if (enable) {
+#else
         if (enable && ProxorGui::dataStore->remember_enable) {
+#endif
             ProxorGui::dataStore->remember_spmode.append("system_proxy");
         }
         ProxorGui::dataStore->Save();
@@ -2109,6 +2467,31 @@ void MainWindow::proxor_set_spmode_system_proxy(bool enable, bool save) {
     ProxorGui::dataStore->spmode_system_proxy = enable;
     refresh_status();
 }
+
+#ifdef Q_OS_MACOS
+void MainWindow::macInstallHelperThen(const QString &feature, MacHelperEnableAction action, std::function<void()> onReady) {
+    if (MacHelperInstaller::InstallInProgress()) {
+        // One installer at a time: the switch stays off, exactly like after a declined install.
+        ProxorGui_log::WriteDiagnostic(tr("The Proxor service installation is already waiting for your answer."));
+        return;
+    }
+    MW_show_log(tr("Waiting for the administrator password prompt to install the Proxor service..."));
+    MacHelperInstaller::ConfirmAndInstall(this, feature, action, [this, feature, onReady = std::move(onReady)](MacAdminScriptResult result) {
+        switch (result.outcome) {
+        case MacAdminScriptOutcome::Ok:
+            MW_show_log(tr("Proxor service installed."));
+            onReady();
+            break;
+        case MacAdminScriptOutcome::Cancelled:
+            MessageBoxWarning(software_name, tr("%1 was not turned on: the Proxor service was not installed.").arg(feature));
+            break;
+        case MacAdminScriptOutcome::Failed:
+            MessageBoxWarning(software_name, tr("The Proxor service could not be installed: %1").arg(result.reason));
+            break;
+        }
+    });
+}
+#endif
 
 void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
     // A Flatpak sandbox has no TUN device, so asking is a guaranteed failure
@@ -2132,11 +2515,27 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
     // Turning Tun off means there is no tunnel left to wait for, so startup work that was
     // held back by a failed authorization -- the subscription update after an update
     // restart, for one -- can finally run.
+#ifdef Q_OS_MACOS
+    if (!enable && startup_tun_failed && !startup_network_work) {
+        startup_tun_failed = false;
+        mac_tun_failure_reason.clear();
+        mac_stop_keeps_remembered_profile = false;
+        if (!ProxorGui::dataStore->prepare_exit) {
+            MW_show_log(tr("Tun Mode turned off; starting the profile without Tun."));
+            resumeDeferredStartupProfile();
+        }
+    }
+#endif
     if (!enable && startup_tun_failed && startup_network_work) {
         startup_tun_failed = false;
         MW_show_log(tr("Tun mode turned off; running the startup work that was waiting for it."));
         auto startupWork = std::move(startup_network_work);
         startupWork();
+#ifdef Q_OS_MACOS
+        mac_tun_failure_reason.clear();
+        mac_stop_keeps_remembered_profile = false;
+        if (!ProxorGui::dataStore->prepare_exit) resumeDeferredStartupProfile();
+#endif
     }
     if (enable != ProxorGui::dataStore->spmode_vpn) {
         if (enable) {
@@ -2173,13 +2572,47 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
                     proxor_set_spmode_FAILED
                 }
             } else {
+#ifdef Q_OS_MACOS
+                if (!MacHelperSvc()->isConnected()) {
+                    // Never wait for the helper on the UI thread: probe asynchronously and re-enter once when it answers.
+                    // The check box stays off meanwhile (refresh_status via the FAILED return).
+                    const bool restoring = mac_spmode_restoring;
+                    MacHelperSvc()->probe(this, 1000, [this, save, restoring](const MacHelperProbe &, MacHelperState st) {
+                        if (st == MacHelperState::Ready && MacHelperSvc()->isConnected()) {
+                            const bool before = mac_spmode_restoring;
+                            mac_spmode_restoring = restoring;
+                            proxor_set_spmode_vpn(true, save);
+                            mac_spmode_restoring = before;
+                            return;
+                        }
+                        auto macAction = DecideMacHelperEnable(st);
+                        if (macAction == MacHelperEnableAction::Proceed) macAction = MacHelperEnableAction::AskReinstall; // Ready but the connection dropped again
+                        if (startup_tun_pending) { // should be impossible (startup gated), but never deadlock
+                            startup_tun_pending = false;
+                            startup_tun_authorized = false;
+                            applyOnDemandAfterStartup();
+                            MW_show_log(DecideMacTunStartup(true, st).logLine);
+                            if (!ProxorGui::dataStore->prepare_exit) resumeDeferredStartupProfile();
+                            if (startup_network_work) {
+                                auto w = std::move(startup_network_work);
+                                w();
+                            }
+                            refresh_status();
+                            return;
+                        }
+                        macInstallHelperThen(tr("Tun Mode"), macAction, [this] { proxor_set_spmode_vpn(true); });
+                        refresh_status(); // the check box stays off until the service is installed
+                    });
+                    proxor_set_spmode_FAILED
+                }
+#endif
 #ifdef Q_OS_LINUX
                 if (!Linux_HavePkexec()) {
                     MessageBoxWarning(software_name, tr("Tun mode needs pkexec. Install PolicyKit and try again."));
                     proxor_set_spmode_FAILED
                 }
                 if (qEnvironmentVariableIsSet("APPIMAGE")) {
-                    MW_show_log(tr("AppImage Tun uses a separate privileged compatibility core."));
+                    ProxorGui_log::WriteDiagnostic(tr("AppImage Tun uses a separate privileged compatibility core."));
                 }
 #endif
                 if (ProxorGui::dataStore->need_keep_vpn_off) {
@@ -2188,6 +2621,9 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
                 }
                 const bool restoringProfile = startup_tun_pending && startup_deferred_profile_id >= 0;
                 if (ProxorGui::dataStore->started_id >= 0 || restoringProfile) {
+#ifdef Q_OS_MACOS
+                    mac_tun_request_saves = save; // a failed start un-remembers Tun only when the user asked for it
+#endif
                     if (!StartVPNProcess()) {
                         proxor_set_spmode_FAILED
                     }
@@ -2198,6 +2634,7 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
                     if (startup_tun_pending) {
                         startup_tun_pending = false;
                         startup_tun_authorized = true;
+                        applyOnDemandAfterStartup();
                         if (startup_network_work) {
                             auto startupWork = std::move(startup_network_work);
                             startupWork();
@@ -2267,6 +2704,21 @@ void MainWindow::syncWindowsHostsMapping(bool enable) {
 #endif
 }
 
+void MainWindow::update_tray_speed(qint64 uploadBytesPerSecond, qint64 downloadBytesPerSecond, bool clear) {
+#ifdef Q_OS_MACOS
+    if (mac_status_item == nullptr) return;
+    if (clear || !ProxorGui::dataStore->tray_speed_view) {
+        mac_status_item->setSpeedText(QString());
+        return;
+    }
+    mac_status_item->setSpeedText(ProxorPlatform::FormatTraySpeed(uploadBytesPerSecond, downloadBytesPerSecond));
+#else
+    Q_UNUSED(uploadBytesPerSecond)
+    Q_UNUSED(downloadBytesPerSecond)
+    Q_UNUSED(clear)
+#endif
+}
+
 void MainWindow::refresh_status(const QString &traffic_update) {
     auto refresh_speed_label = [=] {
         if (traffic_update_cache == "") {
@@ -2309,7 +2761,9 @@ void MainWindow::refresh_status(const QString &traffic_update) {
     //
     ui->checkBox_VPN->setChecked(ProxorGui::dataStore->spmode_vpn);
     ui->checkBox_SystemProxy->setChecked(ProxorGui::dataStore->spmode_system_proxy);
+    if (ProxorGui::dataStore->started_id >= 0) last_started_profile_id = ProxorGui::dataStore->started_id;
     const bool showStopState = running != nullptr || start_pending;
+    if (tray_toggle_action != nullptr) tray_toggle_action->setText(showStopState ? tr("Disconnect") : tr("Connect"));
     ui->toolButton_toggle_proxy->setText(showStopState ? tr("Stop") : tr("Start"));
     ui->toolButton_toggle_proxy->setIcon(showStopState ? makeToggleProxyIcon(QColor(255, 59, 48))
                                                        : makeToggleProxyIcon(QColor(52, 199, 89)));
@@ -2366,6 +2820,8 @@ void MainWindow::refresh_status(const QString &traffic_update) {
         if (mac_status_item) {
             mac_status_item->setToolTip(make_title(true));
             mac_status_item->setColored(ProxorGui::dataStore->tray_icon_colored);
+            mac_status_item->setActive(icon_status_new != Icon::NONE);
+            if (!ProxorGui::dataStore->tray_speed_view) mac_status_item->setSpeedText(QString());
             if (icon_status_new != icon_status) mac_status_item->setIcon(Icon::GetTrayIcon(icon_status_new));
         }
 #endif
@@ -2587,6 +3043,15 @@ void MainWindow::on_menu_add_from_input_triggered() {
 
 void MainWindow::on_menu_add_from_clipboard_triggered() {
     auto clipboard = QApplication::clipboard()->text();
+#ifndef NKR_NO_ZXING
+    if (clipboard.trimmed().isEmpty()) {
+        const auto *mime = QApplication::clipboard()->mimeData();
+        if (mime && mime->hasImage()) {
+            on_menu_scan_qr_clipboard_triggered();
+            return;
+        }
+    }
+#endif
     ProxorGui_sub::groupUpdater->AsyncUpdate(clipboard);
 }
 
@@ -2807,28 +3272,147 @@ void MainWindow::display_qr_link(bool nkrFormat) {
     w->deleteLater();
 }
 
+void MainWindow::importQrFromImage(const QImage &image, ProxorPlatform::QrSource source) {
+    const auto text = ProxorPlatform::DecodeQrFromImage(image);
+    const auto msg = ProxorPlatform::QrScanMessage(source, {!image.isNull(), !text.isEmpty()},
+                                                   ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::ScreenQrCapture));
+    if (!msg.isEmpty()) {
+        MessageBoxInfo(software_name, msg);
+        return;
+    }
+    show_log_impl("QR Code Result:\n" + text);
+    ProxorGui_sub::groupUpdater->AsyncUpdate(text);
+}
+
+void MainWindow::on_menu_scan_qr_image_triggered() {
+    const auto path = QFileDialog::getOpenFileName(this, tr("Select an image with a QR code"), QString(),
+                                                   tr("Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp)"));
+    if (path.isEmpty()) return;
+    QImageReader reader(path);
+    reader.setAutoTransform(true);
+    importQrFromImage(reader.read(), ProxorPlatform::QrSource::ImageFile);
+}
+
+void MainWindow::on_menu_scan_qr_clipboard_triggered() {
+    const auto *mime = QApplication::clipboard()->mimeData();
+    QImage img;
+    if (mime && mime->hasImage()) img = qvariant_cast<QImage>(mime->imageData());
+    importQrFromImage(img, ProxorPlatform::QrSource::ClipboardImage);
+}
+
+#ifdef Q_OS_MACOS
+// Screen Recording is checked before any capture: without it macOS returns only the wallpaper (phase 53, MAC-QR).
+bool MainWindow::macScreenCaptureReadyOrExplain() {
+    using namespace ProxorPlatform;
+    const bool granted = ProxorMac::ScreenCapturePreflight();
+    const auto d = DecideMacScreenScan(granted, mac_screen_capture_requested);
+    if (d.capture) return true;
+    show_log_impl(tr("Scan QR code from screen: the Screen Recording permission is missing (preflight=false)."));
+    if (d.requestAccess) {
+        mac_screen_capture_requested = true;
+        ProxorMac::ScreenCaptureRequest(); // macOS shows its own prompt the first time
+    }
+    QMessageBox box(QMessageBox::Information, software_name, MacScreenRecordingMessage(), QMessageBox::Close, this);
+    auto *settingsBtn = box.addButton(tr("Open System Settings"), QMessageBox::ActionRole);
+    auto *fileBtn = box.addButton(tr("Choose Image File..."), QMessageBox::ActionRole);
+    auto *clipBtn = box.addButton(tr("Use Clipboard Image"), QMessageBox::ActionRole);
+    box.exec();
+    if (box.clickedButton() == settingsBtn) {
+        if (!ProxorMac::OpenScreenRecordingSettings())
+            MessageBoxWarning(software_name, tr("Open System Settings > Privacy & Security > Screen & System Audio Recording and allow Proxor."));
+    } else if (box.clickedButton() == fileBtn) {
+        on_menu_scan_qr_image_triggered();
+    } else if (box.clickedButton() == clipBtn) {
+        on_menu_scan_qr_clipboard_triggered();
+    }
+    return false;
+}
+
+#endif
 void MainWindow::on_menu_scan_qr_triggered() {
 #ifndef NKR_NO_ZXING
-    using namespace ZXingQt;
+    using namespace ProxorPlatform;
+#ifdef Q_OS_MACOS
+    if (!macScreenCaptureReadyOrExplain()) return;
+    const CapabilityStatus cap{}; // permission granted: a miss is a real "not found"
+#else
+    const auto cap = CurrentCapability(Capability::ScreenQrCapture);
+#endif
+    auto offerAlternatives = [this](const QString &message) {
+        QMessageBox box(QMessageBox::Information, software_name, message, QMessageBox::Close, this);
+        auto *fileBtn = box.addButton(tr("Choose Image File..."), QMessageBox::ActionRole);
+        auto *clipBtn = box.addButton(tr("Use Clipboard Image"), QMessageBox::ActionRole);
+        box.exec();
+        if (box.clickedButton() == fileBtn) on_menu_scan_qr_image_triggered();
+        else if (box.clickedButton() == clipBtn) on_menu_scan_qr_clipboard_triggered();
+    };
+    if (!IsUsable(cap)) {
+        offerAlternatives(QrScanMessage(QrSource::Screen, {false, false}, cap));
+        return;
+    }
+
+    if (SelectScreenCaptureBackend(CurrentPlatformEnvironment()) == ScreenCaptureBackend::Portal) {
+        hide();
+        QTimer::singleShot(400, this, [this, cap, offerAlternatives] {
+            ProxorDesktop::TakeScreenshot(QString(), this, [this, cap, offerAlternatives](const ProxorDesktop::ScreenshotResult &r) {
+                show();
+                if (r.result.outcome == ProxorDesktop::PortalOutcome::Cancelled) {
+                    show_log_impl(tr("Scan QR code from screen: %1").arg(r.result.detail));
+                    return;
+                }
+                if (r.result.outcome != ProxorDesktop::PortalOutcome::Granted) {
+                    offerAlternatives(tr("The desktop did not provide a screenshot: %1 Add the QR code from an image file or the clipboard instead.").arg(r.result.detail));
+                    return;
+                }
+                QImageReader reader(r.imagePath);
+                reader.setAutoTransform(true);
+                const auto image = reader.read();
+                if (r.temporary) QFile::remove(r.imagePath);
+                else show_log_impl(tr("Scan QR code from screen: the desktop saved the screenshot at %1 and Proxor leaves it there (GNOME keeps screenshots in Pictures/Screenshots). Delete it if you do not need it.").arg(r.imagePath));
+                const auto text = DecodeQrFromImage(image);
+                const auto msg = QrScanMessage(QrSource::Screen, {!image.isNull(), !text.isEmpty()}, cap);
+                if (!msg.isEmpty()) {
+                    MessageBoxInfo(software_name, msg);
+                    return;
+                }
+                show_log_impl("QR Code Result:\n" + text);
+                ProxorGui_sub::groupUpdater->AsyncUpdate(text);
+            });
+        });
+        return;
+    }
 
     hide();
     QThread::sleep(1);
 
-    auto screen = QGuiApplication::primaryScreen();
-    auto geom = screen->geometry();
-    auto qpx = screen->grabWindow(0, geom.x(), geom.y(), geom.width(), geom.height());
+    // Primary screen first, then every other screen.
+    QList<QScreen *> screens = QGuiApplication::screens();
+    if (auto *primary = QGuiApplication::primaryScreen()) {
+        screens.removeAll(primary);
+        screens.prepend(primary);
+    }
+    bool anyImage = false;
+    QString text;
+    for (auto *screen : screens) {
+        const auto g = screen->geometry();
+        const auto image = screen->grabWindow(0, g.x(), g.y(), g.width(), g.height()).toImage();
+        if (image.isNull()) continue;
+        anyImage = true;
+        text = DecodeQrFromImage(image);
+        if (!text.isEmpty()) break;
+    }
 
     show();
 
-    auto hints = DecodeHints()
-                     .setFormats(BarcodeFormat::QRCode)
-                     .setTryRotate(false)
-                     .setBinarizer(Binarizer::FixedThreshold);
-
-    auto result = ReadBarcode(qpx.toImage(), hints);
-    const auto &text = result.text();
-    if (text.isEmpty()) {
-        MessageBoxInfo(software_name, tr("QR Code not found"));
+#ifdef Q_OS_MACOS
+    if (!anyImage) { // preflight said granted but the grab is empty: still the permission, not "not found"
+        MessageBoxInfo(software_name, MacScreenRecordingMessage());
+        return;
+    }
+#endif
+    const auto msg = QrScanMessage(QrSource::Screen, {anyImage, !text.isEmpty()}, cap);
+    if (!msg.isEmpty()) {
+        MessageBoxInfo(software_name, msg);
     } else {
         show_log_impl("QR Code Result:\n" + text);
         ProxorGui_sub::groupUpdater->AsyncUpdate(text);
@@ -3021,7 +3605,9 @@ QList<int> MainWindow::get_toggle_proxy_ids(const std::shared_ptr<ProxorGui::Gro
 }
 
 void MainWindow::on_toolButton_toggle_proxy_clicked() {
-    if (ProxorGui::dataStore->started_id >= 0) {
+    // The button shows "Stop" while a start is pending, so it must cancel that start instead of
+    // asking for another one.
+    if (ProxorGui::dataStore->started_id >= 0 || start_pending) {
         proxor_stop();
         return;
     }
@@ -3031,6 +3617,12 @@ void MainWindow::on_toolButton_toggle_proxy_clicked() {
 
     auto toggleProxyIds = get_toggle_proxy_ids(group);
     if (toggleProxyIds.isEmpty()) {
+        // Nothing marked in the Toggle column: reconnect the profile that ran last, when there is one.
+        const int fallbackId = last_started_profile_id >= 0 ? last_started_profile_id : ProxorGui::dataStore->remember_id;
+        if (fallbackId >= 0 && ProxorGui::profileManager->GetProfile(fallbackId) != nullptr) {
+            proxor_start(fallbackId);
+            return;
+        }
         MessageBoxWarning(software_name, tr("Select at least one proxy in the Toggle column first."));
         return;
     }
@@ -3473,36 +4065,76 @@ void MainWindow::refresh_connection_list(const QJsonArray &arr) {
 #include <QHotkey>
 
 inline QList<std::shared_ptr<QHotkey>> RegisteredHotkey;
+inline std::unique_ptr<ProxorDesktop::GlobalShortcutSession> PortalHotkeySession;
 
-void MainWindow::RegisterHotkey(bool unregister) {
-    while (!RegisteredHotkey.isEmpty()) {
-        auto hk = RegisteredHotkey.takeFirst();
-        hk->deleteLater();
-    }
-    if (unregister) return;
+QStringList MainWindow::RegisterHotkey(bool unregister) {
+    // The shared_ptr destructor unregisters the OS hotkey; the objects are not QObject-parented.
+    RegisteredHotkey.clear();
+    // Closes the old portal session (asynchronously, so shutdown never blocks the UI thread).
+    PortalHotkeySession.reset();
+    if (unregister) return {};
 
-    QStringList regstr{
-        ProxorGui::dataStore->hotkey_mainwindow,
-        ProxorGui::dataStore->hotkey_group,
-        ProxorGui::dataStore->hotkey_route,
-        ProxorGui::dataStore->hotkey_system_proxy_menu,
+    QList<ProxorPlatform::HotkeyBinding> bindings{
+        {tr("Show main window"), ProxorGui::dataStore->hotkey_mainwindow},
+        {tr("Manage groups"), ProxorGui::dataStore->hotkey_group},
+        {tr("Routing settings"), ProxorGui::dataStore->hotkey_route},
+        {tr("System proxy menu"), ProxorGui::dataStore->hotkey_system_proxy_menu},
     };
+    auto plan = ProxorPlatform::PlanHotkeyRegistration(
+        bindings, ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::GlobalHotkeys));
 
-    for (const auto &key: regstr) {
-        if (key.isEmpty()) continue;
-        if (regstr.count(key) > 1) return; // Conflict hotkey
+    if (ProxorPlatform::SelectHotkeyBackend(ProxorPlatform::CurrentPlatformEnvironment()) == ProxorPlatform::HotkeyBackend::Portal) {
+        // Stable ids per action; the desktop remembers bindings by id.
+        const QHash<QString, QString> idForAction{
+            {tr("Show main window"), "show-main-window"}, {tr("Manage groups"), "manage-groups"},
+            {tr("Routing settings"), "routing-settings"}, {tr("System proxy menu"), "system-proxy-menu"}};
+        QList<ProxorDesktop::ShortcutRequest> requests;
+        QHash<QString, QString> sequenceForId, actionForId;
+        for (const auto &b : plan.toRegister) {
+            const auto id = idForAction.value(b.action);
+            requests << ProxorDesktop::ShortcutRequest{id, b.action, ProxorPlatform::PortalTriggerFromKeySequence(b.sequence)};
+            sequenceForId.insert(id, b.sequence);
+            actionForId.insert(id, b.action);
+        }
+        if (!requests.isEmpty()) {
+            PortalHotkeySession = ProxorDesktop::CreateGlobalShortcutSession(this);
+            if (PortalHotkeySession) {
+                PortalHotkeySession->onActivated = [this, sequenceForId](const QString &id) { HotkeyEvent(sequenceForId.value(id)); };
+                PortalHotkeySession->bind(requests, QString(), [requests, actionForId](const QList<ProxorDesktop::BoundShortcut> &bound, const ProxorDesktop::PortalResult &r) {
+                    if (!MW_show_log) return;
+                    if (r.outcome != ProxorDesktop::PortalOutcome::Granted) {
+                        MW_show_log(QObject::tr("Hotkeys: %1").arg(r.detail));
+                        return;
+                    }
+                    for (const auto &req : requests) {
+                        auto it = std::find_if(bound.begin(), bound.end(), [&](const auto &x) { return x.id == req.id; });
+                        if (it == bound.end())
+                            MW_show_log(QObject::tr("Hotkeys: the desktop did not bind \"%1\". Set it in the desktop's keyboard shortcut settings.").arg(actionForId.value(req.id)));
+                        else
+                            MW_show_log(QObject::tr("Hotkeys: \"%1\" is bound to %2 by the desktop.")
+                                            .arg(actionForId.value(req.id), it->triggerDescription.isEmpty() ? QObject::tr("a key you choose in the desktop's settings") : it->triggerDescription));
+                    }
+                });
+            } else {
+                plan.problems << tr("Global hotkeys: the desktop's GlobalShortcuts portal could not be used.");
+            }
+        }
+        return plan.problems;
     }
-    for (const auto &key: regstr) {
-        QKeySequence k(key);
+
+    for (const auto &b : plan.toRegister) {
+        QKeySequence k(b.sequence);
         if (k.isEmpty()) continue;
         auto hk = std::make_shared<QHotkey>(k, true);
         if (hk->isRegistered()) {
+            const QString key = b.sequence;
             RegisteredHotkey += hk;
             connect(hk.get(), &QHotkey::activated, this, [=] { HotkeyEvent(key); });
         } else {
-            hk->deleteLater();
+            plan.problems << ProxorPlatform::HotkeyRejectedText(b);
         }
     }
+    return plan.problems;
 }
 
 void MainWindow::HotkeyEvent(const QString &key) {
@@ -3522,7 +4154,18 @@ void MainWindow::HotkeyEvent(const QString &key) {
 
 #else
 
-void MainWindow::RegisterHotkey(bool unregister) {}
+QStringList MainWindow::RegisterHotkey(bool unregister) {
+    if (unregister) return {};
+    QList<ProxorPlatform::HotkeyBinding> bindings{
+        {tr("Show main window"), ProxorGui::dataStore->hotkey_mainwindow},
+        {tr("Manage groups"), ProxorGui::dataStore->hotkey_group},
+        {tr("Routing settings"), ProxorGui::dataStore->hotkey_route},
+        {tr("System proxy menu"), ProxorGui::dataStore->hotkey_system_proxy_menu},
+    };
+    return ProxorPlatform::PlanHotkeyRegistration(
+               bindings, ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::GlobalHotkeys))
+        .problems;
+}
 
 void MainWindow::HotkeyEvent(const QString &key) {}
 
@@ -3539,6 +4182,43 @@ bool MainWindow::StartVPNProcess() {
     auto configPath = ProxorGui::WriteVPNSingBoxConfig();
     auto scriptPath = ProxorGui::WriteVPNLinuxScript();
     //
+#ifdef Q_OS_MACOS
+    {
+        QFile f(configPath);
+        f.open(QIODevice::ReadOnly);
+        const auto config = f.readAll();
+        vpn_pid = 1; // marker: Tun requested from the helper (set before the async call so a second start is a no-op)
+        MacHelperSvc()->tunStart(this, config, ProxorGui::dataStore->inbound_socks_port, 10000, [this](const MacHelperService::Reply &reply) {
+            if (!reply.ok) {
+                vpn_pid = 0;
+                if (startup_tun_pending) {
+                    macTunFailed(reply.error);
+                    return;
+                }
+                MessageBoxWarning(software_name, MacTunFailureText(reply.error));
+                // Manual Tun after a profile is already up (proxor_start), or the switch was shown on optimistically.
+                if (ProxorGui::dataStore->spmode_vpn) proxor_set_spmode_vpn(false, mac_tun_request_saves);
+                return;
+            }
+            if (startup_tun_pending) {
+                authorizeStartupTun(); // resumes the deferred profile so the SOCKS port the helper waits for comes up
+                if (!mac_tun_ready_timer) {
+                    mac_tun_ready_timer = new QTimer(this);
+                    mac_tun_ready_timer->setSingleShot(true);
+                    connect(mac_tun_ready_timer, &QTimer::timeout, this, [this] {
+                        if (startup_tun_pending) {
+                            MacHelperSvc()->tunStop(nullptr, 5000, {});
+                            macTunFailed(tr("the Tun interface did not come up within 45 seconds"));
+                        }
+                    });
+                }
+                mac_tun_ready_timer->start(45000);
+            }
+        });
+        ProxorGui_log::WriteDiagnostic(tr("Tun requested from the Proxor service; waiting for the interface."));
+        return true;
+    }
+#endif
 #ifdef Q_OS_WIN
     runOnNewThread([=] {
         vpn_pid = 1; // TODO get pid?
@@ -3575,23 +4255,7 @@ bool MainWindow::StartVPNProcess() {
     });
     //
     vpn_process->setProcessChannelMode(QProcess::SeparateChannels);
-#ifdef Q_OS_MACOS
-    auto shellQuote = [](QString value) {
-        return QStringLiteral("'") + value.replace(QStringLiteral("'"), QStringLiteral("'\\\"'\\\"'")) + QStringLiteral("'");
-    };
-    auto appleScriptQuote = [](QString value) {
-        value.replace('\\', QStringLiteral("\\\\"));
-        value.replace('"', QStringLiteral("\\\""));
-        return QStringLiteral("\"") + value + QStringLiteral("\"");
-    };
-    const auto command = QStringLiteral("bash %1 %2 %3 '' %4").arg(
-        shellQuote(scriptPath),
-        shellQuote(corePath),
-        shellQuote(configPath),
-        shellQuote(Int2String(ProxorGui::dataStore->inbound_socks_port))
-    );
-    vpn_process->start("osascript", {"-e", QStringLiteral("do shell script %1 with administrator privileges").arg(appleScriptQuote(command))});
-#else
+#ifndef Q_OS_MACOS
     QStringList vpnArgs{"bash", scriptPath, corePath, configPath, "proxor-tun"};
     // The script only starts after a profile is active or is being restored.
     // Wait for its SOCKS listener before TUN routes system traffic.
@@ -3642,6 +4306,219 @@ void MainWindow::resumeDeferredStartupProfile() {
     }
 }
 
+#ifdef Q_OS_MACOS
+void MainWindow::macTunFailed(const QString &reason) {
+    mac_tun_failure_reason = reason.isEmpty() ? tr("unknown error") : reason;
+    vpn_pid = 0;
+    if (mac_tun_ready_timer) mac_tun_ready_timer->stop();
+    if (ProxorGui::dataStore->started_id >= 0) {
+        // The deferred profile was already resumed: stop it, no profile runs until Tun works or Tun is turned off.
+        // remember_id must keep naming it (see proxor_stop stage2), so a quit or crash while blocked restores it.
+        startup_deferred_profile_id = ProxorGui::dataStore->started_id;
+        mac_stop_keeps_remembered_profile = true;
+        proxor_stop();
+    }
+    failStartupTunAuthorization();
+    // The check box shows Tun on so the user can switch it off: that is the escape from the block.
+    ProxorGui::dataStore->spmode_vpn = true;
+    refresh_status();
+    const auto text = MacTunFailureText(mac_tun_failure_reason);
+    MW_show_log(text);
+    MessageBoxWarning(software_name, text);
+}
+
+void MainWindow::macStartupRestore(bool rememberedSystemProxy, bool rememberedTun) {
+    if (!mac_startup_probe_pending) return; // nothing remembered: nothing to restore
+    MacHelperSvc()->probe(this, 1000, [this, rememberedTun, rememberedSystemProxy](const MacHelperProbe &, MacHelperState st) {
+        macStartupProbed(st, rememberedTun, rememberedSystemProxy);
+    });
+    // Safety net: a probe that never answers must not hold the remembered profile forever.
+    if (!mac_startup_probe_timer) {
+        mac_startup_probe_timer = new QTimer(this);
+        mac_startup_probe_timer->setSingleShot(true);
+        connect(mac_startup_probe_timer, &QTimer::timeout, this, [this, rememberedTun, rememberedSystemProxy] {
+            macStartupProbed(MacHelperState::InstalledNotRunning, rememberedTun, rememberedSystemProxy);
+        });
+    }
+    mac_startup_probe_timer->start(8000);
+}
+
+void MainWindow::macStartupProbed(MacHelperState st, bool rememberedTun, bool rememberedSystemProxy) {
+    if (!mac_startup_probe_pending) return; // runs at most once (probe answer or safety timer)
+    mac_startup_probe_pending = false;
+    if (mac_startup_probe_timer) mac_startup_probe_timer->stop();
+    const auto d = DecideMacTunStartup(rememberedTun, st);
+    if (st == MacHelperState::Ready) {
+        mac_spmode_restoring = true;
+        if (rememberedSystemProxy) {
+            proxor_set_spmode_system_proxy(true, false);
+        }
+        if (rememberedTun && d.setStartupTunPending) {
+            proxor_set_spmode_vpn(true, false);
+            if (ProxorGui::UseInternalTun() && ProxorGui::dataStore->spmode_vpn) {
+                completeStartupTunAuthorization();
+            } else if (!ProxorGui::UseInternalTun() && !ProxorGui::dataStore->spmode_vpn) {
+                failStartupTunAuthorization();
+            }
+        }
+        mac_spmode_restoring = false;
+    } else {
+        // Not Ready: never block. First release the startup hold so the profile connects in plain proxy mode
+        // before any dialog appears (a hidden or ignored dialog, e.g. a tray start at login, can never deadlock).
+        const auto inst = DecideMacStartupInstall(rememberedTun, rememberedSystemProxy, st, mac_install_prompted_this_session);
+        if (startup_tun_pending) {
+            // Release the hold without deadlock: the same steps as the "should be impossible" branch of proxor_set_spmode_vpn.
+            startup_tun_pending = false;
+            startup_tun_authorized = false;
+            applyOnDemandAfterStartup();
+            if (!ProxorGui::dataStore->prepare_exit) resumeDeferredStartupProfile();
+            if (startup_network_work) {
+                auto w = std::move(startup_network_work);
+                w();
+            }
+        }
+        if (inst.action == MacStartupInstallAction::Prompt && !ProxorGui::dataStore->prepare_exit) {
+            mac_install_prompted_this_session = true; // at most one automatic prompt per session
+            if (MacHelperInstaller::InstallInProgress()) {
+                // The user already opened an installer (toggle or Tun settings): no second dialog.
+                ProxorGui_log::WriteDiagnostic(tr("The Proxor service installation is already waiting for your answer."));
+                return;
+            }
+            MW_show_log(tr("%1 is on, but the Proxor network service is not installed or needs an update; asking to install it. Connected without it meanwhile.").arg(inst.feature));
+            // Parentless when the window is hidden, so the dialog is not a sheet on an invisible window.
+            MacHelperInstaller::ConfirmAndInstall(isVisible() ? this : nullptr, inst.feature, inst.enableAction,
+                                                  [this, rememberedTun, rememberedSystemProxy](MacAdminScriptResult result) {
+                if (result.outcome == MacAdminScriptOutcome::Ok) {
+                    MW_show_log(tr("Proxor service installed."));
+                    // The service is Ready now: the profile already runs, so Tun comes up on it without a restart.
+                    const bool before = mac_spmode_restoring;
+                    mac_spmode_restoring = true;
+                    if (rememberedSystemProxy) proxor_set_spmode_system_proxy(true, false);
+                    if (rememberedTun) proxor_set_spmode_vpn(true, false);
+                    mac_spmode_restoring = before;
+                    return;
+                }
+                // Cancelled or Failed: the profile stays connected without Tun; remember_spmode is untouched,
+                // so the next launch (for example after a brew upgrade) asks again.
+                auto text = MacStartupInstallDeclinedText(rememberedTun, rememberedSystemProxy);
+                if (result.outcome == MacAdminScriptOutcome::Failed) {
+                    const auto failure = tr("The Proxor service could not be installed: %1").arg(result.reason);
+                    MW_show_log(failure);
+                    text = failure + QStringLiteral("\n\n") + text;
+                }
+                MW_show_log(MacStartupInstallDeclinedText(rememberedTun, rememberedSystemProxy));
+                refresh_status();
+                MessageBoxWarning(software_name, text);
+            });
+            return;
+        }
+        // LogOnly (or nothing to ask): today's behavior.
+        if (!inst.logLine.isEmpty()) MW_show_log(inst.logLine);
+        if (rememberedTun && rememberedSystemProxy) {
+            MW_show_log(tr("System Proxy is remembered, but the Proxor service is not available; leaving it off. Turn on System Proxy to install the service."));
+        }
+    }
+}
+
+void MainWindow::macOnTunReady() {
+    if (mac_tun_ready_timer) mac_tun_ready_timer->stop();
+    mac_tun_failure_reason.clear();
+    mac_stop_keeps_remembered_profile = false;
+    MW_show_log(tr("Tun interface ready."));
+    if (startup_tun_pending) completeStartupTunAuthorization();
+}
+
+void MainWindow::macOnTunStopped(const QString &reason) {
+    if (startup_tun_pending) {
+        macTunFailed(reason);
+        return;
+    }
+    vpn_pid = 0;
+    if (ProxorGui::dataStore->spmode_vpn && !ProxorGui::dataStore->prepare_exit) {
+        MW_show_log(MacTunFailureText(reason));
+        proxor_set_spmode_vpn(false, false); // not the user's choice: Tun stays remembered for the next launch
+    }
+}
+
+void MainWindow::macOnHelperLost() {
+    // The service's lease cleanup already restored the proxy and stopped Tun: forget any pending pause/park.
+    mac_modes->reset();
+    if (vpn_pid != 0 || startup_tun_pending) macOnTunStopped(tr("the Proxor service stopped"));
+    if (ProxorGui::dataStore->spmode_system_proxy) {
+        ProxorGui::dataStore->spmode_system_proxy = false;
+        refresh_status();
+        MW_show_log(tr("System Proxy turned off: the Proxor service stopped and restored your previous proxy settings."));
+    }
+}
+
+void MainWindow::macApplySystemProxy(bool interactive, bool saved) {
+    MacHelperSvc()->sysproxyApply(this, ProxorGui::dataStore->inbound_socks_port,
+                                   ProxorPlatform::ReplaceBlanketPrivateRanges(MacDefaultProxyBypass(), ProxorPlatform::CurrentPrivateNetworks()), 20000,
+                                  [this, interactive, saved](const MacHelperService::Reply &r) {
+        if (!r.ok) {
+            if (interactive) {
+                MessageBoxWarning(software_name, tr("System Proxy could not be configured: %1").arg(r.error));
+                // The switch was shown on optimistically: revert it (unless the user already turned it off).
+                if (ProxorGui::dataStore->spmode_system_proxy) {
+                    ProxorGui::dataStore->spmode_system_proxy = false;
+                    if (saved) {
+                        ProxorGui::dataStore->remember_spmode.removeAll("system_proxy");
+                        ProxorGui::dataStore->Save();
+                    }
+                    refresh_status();
+                }
+            } else {
+                MW_show_log(tr("[Warning] System Proxy could not be re-applied: %1").arg(r.error));
+            }
+            return;
+        }
+        for (const auto &f: r.body.value("failed").toArray()) {
+            MW_show_log(tr("[Warning] System Proxy: %1").arg(f.toString()));
+        }
+        QStringList applied;
+        for (const auto &a: r.body.value("applied").toArray()) applied << a.toString();
+        MW_show_log(tr("System Proxy set on: %1").arg(applied.join(", ")));
+    });
+}
+
+void MainWindow::macPauseModes(bool systemProxy, bool tun) {
+    // Only the helper state changes here: both switches stay checked and remembered.
+    // Tun goes first: the helper answers requests in order, and the System Proxy restore
+    // takes seconds on a Mac with several network services. Until Tun is down every
+    // connection still goes to the stopped profile's port.
+    if (tun) {
+        vpn_pid = 0;
+        if (mac_tun_ready_timer) mac_tun_ready_timer->stop();
+        MacHelperSvc()->tunStop(this, 5000, [this](const MacHelperService::Reply &r) {
+            if (r.ok) {
+                MW_show_log(tr("Tun paused: no profile is running; it resumes when a profile starts."));
+            } else {
+                MW_show_log(tr("[Warning] Tun stop: %1").arg(r.error));
+            }
+        });
+    }
+    if (systemProxy && (MacHelperSvc()->isConnected() || MacHelperSvc()->lastState() == MacHelperState::Ready)) {
+        MacHelperSvc()->sysproxyRestore(this, 20000, [this](const MacHelperService::Reply &r) {
+            if (r.ok) {
+                MW_show_log(tr("System Proxy paused: your previous network proxy settings are back while no profile is running."));
+            } else {
+                MW_show_log(tr("[Warning] System Proxy restore: %1").arg(r.error));
+            }
+        });
+    }
+}
+
+void MainWindow::macResumeModes(bool systemProxy, bool tun) {
+    // Tun first, for the same reason as in macPauseModes: it is quick, the proxy is not.
+    if (tun) {
+        ProxorGui_log::WriteDiagnostic(tr("Proxy profile ready; starting Tun."));
+        mac_tun_request_saves = false; // a resume must never un-remember Tun
+        StartVPNProcess();
+    }
+    if (systemProxy) macApplySystemProxy(false);
+}
+#endif
+
 void MainWindow::authorizeStartupTun() {
     if (!startup_tun_pending || startup_tun_authorized) return;
     startup_tun_authorized = true;
@@ -3653,6 +4530,7 @@ void MainWindow::completeStartupTunAuthorization() {
     if (!startup_tun_pending) return;
     startup_tun_pending = false;
     startup_tun_authorized = true;
+    applyOnDemandAfterStartup();
     MW_show_log(tr("Tun interface ready; resuming deferred startup work."));
 
     resumeDeferredStartupProfile();
@@ -3674,6 +4552,18 @@ void MainWindow::failStartupTunAuthorization() {
 }
 
 bool MainWindow::StopVPNProcess(bool unconditional) {
+#ifdef Q_OS_MACOS
+    {
+        if (unconditional || vpn_pid != 0 || MacHelperSvc()->isConnected()) {
+            MacHelperSvc()->tunStop(this, 5000, [this](const MacHelperService::Reply &r) {
+                if (!r.ok && r.error != "timeout" && MacHelperSvc()->isConnected()) MW_show_log(tr("[Warning] Tun stop: %1").arg(r.error));
+            });
+        }
+        vpn_pid = 0;
+        if (mac_tun_ready_timer) mac_tun_ready_timer->stop();
+        return true; // stopping never asks for a password and never fails the toggle, so the exit retry loop terminates
+    }
+#endif
     if (unconditional || vpn_pid != 0) {
         bool ok;
         core_process->processId();
@@ -3684,10 +4574,7 @@ bool MainWindow::StopVPNProcess(bool unconditional) {
         ok = ret == 0;
 #else
         QProcess p;
-#ifdef Q_OS_MACOS
-        p.start("osascript", {"-e", QStringLiteral("do shell script \"%1\" with administrator privileges")
-                                        .arg("pkill -2 -U 0 proxor_core")});
-#else
+#ifndef Q_OS_MACOS
         if (unconditional) {
             p.start(Linux_PkexecPath(), {"killall", "-2", "proxor_core"});
         } else {

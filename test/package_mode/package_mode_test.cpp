@@ -19,6 +19,9 @@ private slots:
     void appImagePathYieldsAppImage();
     void flatpakWinsOverAppImagePath();
     void packageModeNameRoundTripsEveryMode();
+    void macDetectsHomebrewInApplicationsAndUserApplications();
+    void macFallsBackToMacAppWhenAnyConditionFails();
+    void macModesAreNotPackageManagerManagedAndKeepAssetPaths();
 };
 
 void PackageModeTest::detectsWingetOnlyFromPackageRootMarker() {
@@ -117,6 +120,67 @@ void PackageModeTest::packageModeNameRoundTripsEveryMode() {
     QCOMPARE(PackageModeName(PackageMode::Rpm), QStringLiteral("rpm"));
     QCOMPARE(PackageModeName(PackageMode::Arch), QStringLiteral("arch"));
     QCOMPARE(PackageModeName(PackageMode::NativeUnknownManager), QStringLiteral("unknown-package-manager"));
+}
+
+namespace {
+
+// <tmp>/Caskroom/proxor/<entry>; entry is a directory name such as "1.6.11" or ".metadata".
+QString MakeCaskroom(const QTemporaryDir &tmp, const QString &entry) {
+    const QString dir = tmp.filePath(QStringLiteral("Caskroom/proxor"));
+    if (!entry.isEmpty()) {
+        QDir().mkpath(dir + QLatin1Char('/') + entry);
+    }
+    return dir;
+}
+
+} // namespace
+
+void PackageModeTest::macDetectsHomebrewInApplicationsAndUserApplications() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const QString home = tmp.filePath(QStringLiteral("home"));
+    const QString caskroom = MakeCaskroom(tmp, QStringLiteral("1.6.11"));
+    QCOMPARE(DetectMacPackageMode(QStringLiteral("/Applications/Proxor.app"), home, {caskroom}), PackageMode::Homebrew);
+    QCOMPARE(DetectMacPackageMode(home + QStringLiteral("/Applications/Proxor.app"), home, {caskroom}),
+             PackageMode::Homebrew);
+    // The first caskroom that qualifies is enough.
+    QCOMPARE(DetectMacPackageMode(QStringLiteral("/Applications/Proxor.app"), home,
+                                  {tmp.filePath(QStringLiteral("missing")), caskroom}),
+             PackageMode::Homebrew);
+}
+
+void PackageModeTest::macFallsBackToMacAppWhenAnyConditionFails() {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const QString home = tmp.filePath(QStringLiteral("home"));
+    const QString app = QStringLiteral("/Applications/Proxor.app");
+    // No caskroom directory at all.
+    QCOMPARE(DetectMacPackageMode(app, home, {tmp.filePath(QStringLiteral("none"))}), PackageMode::MacApp);
+    QCOMPARE(DetectMacPackageMode(app, home, {}), PackageMode::MacApp);
+    // Caskroom holding only hidden entries.
+    QCOMPARE(DetectMacPackageMode(app, home, {MakeCaskroom(tmp, QStringLiteral(".metadata"))}), PackageMode::MacApp);
+
+    QTemporaryDir other;
+    QVERIFY(other.isValid());
+    const QString caskroom = MakeCaskroom(other, QStringLiteral("1.6.11"));
+    // A local build with a caskroom present.
+    QCOMPARE(DetectMacPackageMode(QStringLiteral("/Users/x/dev/proxor/build-macos/Proxor.app"), home, {caskroom}),
+             PackageMode::MacApp);
+    // A renamed copy.
+    QCOMPARE(DetectMacPackageMode(QStringLiteral("/Applications/Proxor 2.app"), home, {caskroom}), PackageMode::MacApp);
+}
+
+void PackageModeTest::macModesAreNotPackageManagerManagedAndKeepAssetPaths() {
+    QCOMPARE(PackageModeName(PackageMode::Homebrew), QStringLiteral("homebrew"));
+    QCOMPARE(PackageModeName(PackageMode::MacApp), QStringLiteral("macos-app"));
+    QVERIFY(IsPackageManagerManaged(PackageMode::Homebrew));
+    QVERIFY(!IsPackageManagerManaged(PackageMode::MacApp));
+    QVERIFY(!IsFlatpak(PackageMode::Homebrew));
+    QVERIFY(!IsFlatpak(PackageMode::MacApp));
+    const QString root = QStringLiteral("/Applications/Proxor.app/Contents/MacOS");
+    const auto expected = CoreAssetSearchPaths(PackageMode::NativeOrPortable, root);
+    QCOMPARE(CoreAssetSearchPaths(PackageMode::Homebrew, root), expected);
+    QCOMPARE(CoreAssetSearchPaths(PackageMode::MacApp, root), expected);
 }
 
 QTEST_MAIN(PackageModeTest)

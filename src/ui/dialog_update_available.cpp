@@ -2,6 +2,8 @@
 #include "ui_dialog_update_available.h"
 
 #include <QPushButton>
+#include <QCoreApplication>
+#include <QDesktopServices>
 #include <QApplication>
 #include <QClipboard>
 #include <QGuiApplication>
@@ -290,4 +292,88 @@ DialogUpdateAvailable::DialogUpdateAvailable(
 
 DialogUpdateAvailable::~DialogUpdateAvailable() {
     delete ui;
+}
+
+// ---- Update failure dialog (phase 57) ----
+
+QString UpdateFailureText(UpdateFailureStage stage, const QString &error) {
+    const QString trimmed = error.trimmed();
+    const QString err = trimmed.isEmpty() ? QCoreApplication::translate("DialogUpdateFailed", "unknown error") : trimmed;
+    switch (stage) {
+    case UpdateFailureStage::Check:
+        return QCoreApplication::translate("DialogUpdateFailed", "Proxor could not check for updates: %1").arg(err);
+    case UpdateFailureStage::Download:
+        return QCoreApplication::translate("DialogUpdateFailed", "The update could not be downloaded: %1").arg(err);
+    case UpdateFailureStage::Install:
+        return QCoreApplication::translate("DialogUpdateFailed", "The update was downloaded but could not be installed: %1").arg(err);
+    }
+    return err;
+}
+
+QString UpdateKeepsWorkingText(const QString &currentVersion) {
+    return QCoreApplication::translate("DialogUpdateFailed",
+                                       "Proxor %1 is still installed and keeps working. You can download the new version manually from the release page:")
+        .arg(currentVersion);
+}
+
+QUrl UpdateManualDownloadUrl(const QString &releaseUrl) {
+    const QUrl url(releaseUrl, QUrl::StrictMode);
+    if (url.isValid() && url.scheme() == QLatin1String("https") &&
+        url.host().compare(QLatin1String("github.com"), Qt::CaseInsensitive) == 0 &&
+        url.path().startsWith(QLatin1String("/Ogstra/proxor/releases"))) {
+        return url;
+    }
+    return QUrl(QString::fromLatin1(kProxorReleasesPage));
+}
+
+DialogUpdateFailed::DialogUpdateFailed(UpdateFailureStage stage, const QString &error, const QString &currentVersion,
+                                       const QString &releaseUrl, QWidget *parent, UrlOpener openUrl)
+    : QDialog(parent), m_url(UpdateManualDownloadUrl(releaseUrl)), m_openUrl(std::move(openUrl)) {
+    if (!m_openUrl) m_openUrl = [](const QUrl &u) { return QDesktopServices::openUrl(u); };
+    setWindowTitle(tr("Update failed"));
+    setMinimumWidth(420);
+
+    auto *layout = new QVBoxLayout(this);
+
+    auto *errorLabel = new QLabel(UpdateFailureText(stage, error), this);
+    errorLabel->setObjectName("labelUpdateFailedError");
+    errorLabel->setWordWrap(true);
+    errorLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    layout->addWidget(errorLabel);
+
+    auto *keepsLabel = new QLabel(UpdateKeepsWorkingText(currentVersion), this);
+    keepsLabel->setObjectName("labelUpdateFailedKeepsWorking");
+    keepsLabel->setWordWrap(true);
+    layout->addWidget(keepsLabel);
+
+    auto *urlEdit = new QLineEdit(m_url.toString(), this);
+    urlEdit->setObjectName("lineEditManualUrl");
+    urlEdit->setReadOnly(true);
+    layout->addWidget(urlEdit);
+
+    auto *row = new QHBoxLayout();
+    row->addStretch();
+    auto *download = new QPushButton(tr("Download manually"), this);
+    download->setObjectName("buttonDownloadManually");
+    download->setDefault(true);
+    row->addWidget(download);
+    auto *close = new QPushButton(tr("Close"), this);
+    close->setObjectName("buttonUpdateFailedClose");
+    row->addWidget(close);
+    layout->addLayout(row);
+
+    connect(download, &QPushButton::clicked, this, [this] {
+        if (m_openUrl(m_url)) accept();
+    });
+    connect(close, &QPushButton::clicked, this, &QDialog::reject);
+}
+
+void ShowUpdateFailedDialog(QWidget *parent, UpdateFailureStage stage, const QString &error,
+                            const QString &currentVersion, const QString &releaseUrl) {
+    auto *dialog = new DialogUpdateFailed(stage, error, currentVersion, releaseUrl, parent);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->setModal(false);
+    dialog->show();
+    dialog->raise();
+    dialog->activateWindow();
 }

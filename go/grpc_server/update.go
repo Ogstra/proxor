@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"grpc_server/gen"
 	"io"
@@ -27,6 +28,18 @@ const (
 	updateRepoOwner       = "Ogstra"
 	updateRepoName        = "proxor"
 	updateUserAgentPrefix = "Proxor-Updater/"
+)
+
+// Test seams: single-line declarations, assigned only from _test.go files (guarded by a test and by phase-proof.sh).
+var updateAPIBaseURL = "https://api.github.com"
+var updateGOOS = runtime.GOOS
+var updateGOARCH = runtime.GOARCH
+var retrySleep = time.Sleep
+
+const (
+	renameAttempts   = 12
+	renameFirstDelay = 100 * time.Millisecond
+	renameMaxDelay   = 2 * time.Second
 )
 
 type githubReleaseAsset struct {
@@ -105,9 +118,22 @@ func updateArchiveSuffixes(goos, goarch string) ([]string, error) {
 		return []string{"linux64.AppImage"}, nil
 	case goos == "linux" && goarch == "arm64":
 		return nil, fmt.Errorf("self-update is not available for Linux/%s", goarch)
+	case goos == "darwin" && goarch == "arm64":
+		return []string{"-macos-arm64.zip"}, nil
+	case goos == "darwin" && goarch == "amd64":
+		return []string{"-macos-x86_64.zip"}, nil
 	default:
 		return nil, fmt.Errorf("self-update is not available on %s/%s", goos, goarch)
 	}
+}
+
+// selfUpdateRefusal returns a non-empty message when the core must not download or apply
+// an update itself on goos. macOS is updated by Homebrew or by replacing the app by hand.
+func selfUpdateRefusal(goos string) string {
+	if goos == "darwin" {
+		return "Proxor on macOS is updated by Homebrew: run brew upgrade --cask proxor (or download the macOS zip from the release page)."
+	}
+	return ""
 }
 
 // suffixesForChannel resolves the asset name suffix published for the channel the GUI
@@ -253,6 +279,20 @@ func releaseAssetVersion(release githubRelease, asset githubReleaseAsset) (relea
 	return parseReleaseVersion(release.TagName)
 }
 
+// releasesWithAsset keeps the releases that publish at least one asset ending in suffix.
+func releasesWithAsset(releases []githubRelease, suffix string) []githubRelease {
+	var kept []githubRelease
+	for _, release := range releases {
+		for _, asset := range release.Assets {
+			if strings.HasSuffix(asset.Name, suffix) {
+				kept = append(kept, release)
+				break
+			}
+		}
+	}
+	return kept
+}
+
 func matchingReleaseAsset(releases []githubRelease, currentVersion string, suffixes []string, includePrerelease bool) (*githubRelease, *githubReleaseAsset, updateSelection) {
 	currentParsed, hasCurrentVersion := parseSemVerVersion(currentVersion)
 	var bestRelease *githubRelease
@@ -348,7 +388,7 @@ func downloadDestination(downloadDir, assetName string) (string, error) {
 		return "", fmt.Errorf("download directory %q is not usable: %w", downloadDir, err)
 	}
 	if !info.IsDir() {
-		return "", fmt.Errorf("download directory %q is not a directory", downloadDir)
+		return "", fmt.Errorf("download directory \"%s\" is not a directory", downloadDir)
 	}
 
 	probe, err := os.CreateTemp(downloadDir, ".proxor-update-write-check-*")
@@ -430,17 +470,22 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 
 	switch in.Action {
 	case gen.UpdateAction_Check:
+		// A new check never shows the previous download's state or error.
+		dlProgressMu.Lock()
+		dlProgress = downloadProgress{}
+		dlProgressMu.Unlock()
+
 		checkCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 
-		suffixes, err := suffixesForChannel(in.Channel, runtime.GOOS, runtime.GOARCH)
+		suffixes, err := suffixesForChannel(in.Channel, updateGOOS, updateGOARCH)
 		if err != nil {
 			ret.Error = err.Error()
 			return ret, nil
 		}
 
 		req, err := http.NewRequestWithContext(checkCtx, http.MethodGet,
-			fmt.Sprintf("https://api.github.com/repos/%s/%s/releases", updateRepoOwner, updateRepoName), nil)
+			updateAPIBaseURL+"/repos/"+updateRepoOwner+"/"+updateRepoName+"/releases", nil)
 		if err != nil {
 			ret.Error = err.Error()
 			return ret, nil
@@ -469,6 +514,11 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 			return ret, nil
 		}
 
+		if in.Channel == "arch" {
+			// The source tarball is attached to every release, including a Windows-only one that
+			// carries no AUR recipe update, so Arch only counts releases that also ship the Linux build.
+			releases = releasesWithAsset(releases, "linux64.AppImage")
+		}
 		release, asset, selection := matchingReleaseAsset(releases, proxor_common.Version_proxor, suffixes, in.CheckPreRelease)
 		if selection == updateSelectionCurrent {
 			updateDownloadURL = ""
@@ -477,7 +527,7 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 			return ret, nil
 		}
 		if selection == updateSelectionNoCompatible || release == nil || asset == nil {
-			ret.Error = fmt.Sprintf("No compatible update package was found for %s/%s in %s/%s.", runtime.GOOS, runtime.GOARCH, updateRepoOwner, updateRepoName)
+			ret.Error = fmt.Sprintf("No compatible update package was found for %s/%s in %s/%s.", updateGOOS, updateGOARCH, updateRepoOwner, updateRepoName)
 			return ret, nil
 		}
 
@@ -507,61 +557,75 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 		return ret, nil
 
 	case gen.UpdateAction_Download:
-		if updateDownloadURL == "" || updateAssetName == "" {
-			ret.Error = "No update package is queued for download."
+		if msg := selfUpdateRefusal(updateGOOS); msg != "" {
+			ret.Error = msg
 			return ret, nil
 		}
 
-		destination, err := downloadDestination(in.DownloadDir, updateAssetName)
-		if err != nil {
-			ret.Error = err.Error()
-			return ret, nil
-		}
-		// Write under a .part name and only rename into the final name once the
-		// content is verified: a half-written file must never be visible under a
-		// name the GUI will treat as a finished update.
-		partPath := destination + ".part"
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, updateDownloadURL, nil)
-		if err != nil {
-			ret.Error = err.Error()
-			return ret, nil
-		}
-		req.Header.Set("User-Agent", updateUserAgentPrefix+proxor_common.Version_proxor)
-
-		resp, err := client.Do(req)
-		if err != nil {
-			ret.Error = err.Error()
-			return ret, nil
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			ret.Error = fmt.Sprintf("Update download failed with status %d", resp.StatusCode)
-			return ret, nil
-		}
-
-		file, err := os.OpenFile(partPath, os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0644)
-		if err != nil {
-			ret.Error = err.Error()
-			return ret, nil
-		}
-		defer file.Close()
-
+		// A new attempt never shows the previous one.
 		dlProgressMu.Lock()
-		dlProgress = downloadProgress{totalBytes: resp.ContentLength}
+		dlProgress = downloadProgress{}
 		dlProgressMu.Unlock()
 
 		// fail records the error on both the polled progress and the immediate
 		// response, then removes the partial file: an unverifiable or incomplete
 		// download is a failed download, never a kept one.
+		var tempPath string
 		fail := func(err error) (*gen.UpdateResp, error) {
 			dlProgressMu.Lock()
 			dlProgress.err = err.Error()
 			dlProgressMu.Unlock()
 			ret.Error = err.Error()
-			os.Remove(partPath)
+			if tempPath != "" {
+				os.Remove(tempPath)
+			}
 			return ret, nil
 		}
+
+		if updateDownloadURL == "" || updateAssetName == "" {
+			return fail(errors.New("No update package is queued for download."))
+		}
+
+		destination, err := downloadDestination(in.DownloadDir, updateAssetName)
+		if err != nil {
+			return fail(err)
+		}
+		removeStaleDownloads(destination)
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, updateDownloadURL, nil)
+		if err != nil {
+			return fail(fmt.Errorf("could not download %s: %w", updateAssetName, err))
+		}
+		req.Header.Set("User-Agent", updateUserAgentPrefix+proxor_common.Version_proxor)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return fail(fmt.Errorf("could not download %s: %w", updateAssetName, err))
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return fail(fmt.Errorf("Update download failed with status %d", resp.StatusCode))
+		}
+
+		// Write under a unique <destination>.<random>.part name and only move it into the
+		// final name once the content is verified: a half-written file must never be visible
+		// under a name the GUI will treat as a finished update, and a stale or still-locked
+		// part from an earlier attempt can never block this one.
+		file, err := os.CreateTemp(filepath.Dir(destination), filepath.Base(destination)+".*.part")
+		if err != nil {
+			absDir, absErr := filepath.Abs(filepath.Dir(destination))
+			if absErr != nil {
+				absDir = filepath.Dir(destination)
+			}
+			return fail(fmt.Errorf("could not create the download file in %s: %w", absDir, err))
+		}
+		tempPath = file.Name()
+		_ = file.Chmod(0o644) // CreateTemp uses 0600; keep the mode the AppImage path always had
+		defer file.Close()
+
+		dlProgressMu.Lock()
+		dlProgress.totalBytes = resp.ContentLength
+		dlProgressMu.Unlock()
 
 		// The digest is computed while streaming rather than by re-reading the file,
 		// so progress reporting (progressWriter) is untouched by verification.
@@ -571,6 +635,12 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 			return fail(err)
 		}
 		if err = file.Sync(); err != nil {
+			return fail(err)
+		}
+		// Close before the move below: Windows refuses to rename a file that still has
+		// an open handle ("The process cannot access the file because it is being used by
+		// another process"). The deferred Close stays as the safety net for early returns.
+		if err = file.Close(); err != nil {
 			return fail(err)
 		}
 
@@ -601,7 +671,11 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 			return fail(err)
 		}
 
-		if err = os.Rename(partPath, destination); err != nil {
+		want, err := checksumForAsset(string(sumsBody), updateAssetName)
+		if err != nil {
+			return fail(err)
+		}
+		if err = moveVerifiedDownload(tempPath, destination, want); err != nil {
 			return fail(err)
 		}
 
@@ -627,4 +701,122 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 		ret.Error = "Unknown update action."
 		return ret, nil
 	}
+}
+
+// renameFile is os.Rename; the tests replace it.
+var renameFile = os.Rename
+
+// renameRetryDelay is the wait after failed attempt n (0-based): 100 ms, 200 ms, 400 ms, 800 ms, 1.6 s, then 2 s.
+func renameRetryDelay(n int) time.Duration {
+	if n < 0 {
+		n = 0
+	}
+	if n >= 5 {
+		return renameMaxDelay
+	}
+	d := renameFirstDelay << uint(n)
+	if d > renameMaxDelay {
+		return renameMaxDelay
+	}
+	return d
+}
+
+// renameWithRetry renames a finished download into place. On Windows a virus scanner or the
+// search indexer can hold the new file open for a while right after it is written, which makes
+// the rename fail with a sharing violation, so the rename is retried with a growing delay (about
+// 15 s in total, never waiting after the last attempt) before the last error is returned
+// unchanged. Other platforms succeed on the first try. The copy fallback lives in
+// moveVerifiedDownload.
+func renameWithRetry(from, to string) error {
+	var err error
+	for attempt := 0; attempt < renameAttempts; attempt++ {
+		if err = renameFile(from, to); err == nil {
+			return nil
+		}
+		if attempt < renameAttempts-1 {
+			retrySleep(renameRetryDelay(attempt))
+		}
+	}
+	return err
+}
+
+// removeStaleDownloads removes destination+".part" (the name used up to 1.6.13) and every
+// "<base>.*.part" left by earlier attempts. It lists the directory and matches names as plain
+// strings, never filepath.Glob, whose pattern would misread [, * and ? in the install path.
+// Errors are ignored: a held file is skipped and removed on the next attempt.
+func removeStaleDownloads(destination string) {
+	dir, base := filepath.Dir(destination), filepath.Base(destination)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if name == base+".part" || (strings.HasPrefix(name, base+".") && strings.HasSuffix(name, ".part")) {
+			_ = os.Remove(filepath.Join(dir, name))
+		}
+	}
+}
+
+// copyVerified copies src over destination and requires the written bytes to hash to wantDigestHex.
+// On any failure the partial destination is removed.
+func copyVerified(src, destination, wantDigestHex string) (err error) {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(destination, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			out.Close()
+			os.Remove(destination)
+		}
+	}()
+	hasher := sha256.New()
+	if _, err = io.Copy(io.MultiWriter(out, hasher), in); err != nil {
+		return err
+	}
+	if err = out.Sync(); err != nil {
+		return err
+	}
+	if err = out.Close(); err != nil {
+		return err
+	}
+	if !strings.EqualFold(hex.EncodeToString(hasher.Sum(nil)), wantDigestHex) {
+		return fmt.Errorf("the copied update does not match its published SHA-256")
+	}
+	return nil
+}
+
+// moveVerifiedDownload puts the verified temp file under its final name: renameWithRetry first;
+// if that keeps failing, tempPath is copied over destination, the copy must hash to
+// wantDigestHex, and tempPath is removed best-effort. It never removes tempPath on failure
+// (the caller does).
+func moveVerifiedDownload(tempPath, destination, wantDigestHex string) error {
+	renameErr := renameWithRetry(tempPath, destination)
+	if renameErr == nil {
+		return nil
+	}
+	copyErr := copyVerified(tempPath, destination, wantDigestHex)
+	if copyErr == nil {
+		_ = os.Remove(tempPath)
+		return nil
+	}
+	absTemp, err := filepath.Abs(tempPath)
+	if err != nil {
+		absTemp = tempPath
+	}
+	absDest, err := filepath.Abs(destination)
+	if err != nil {
+		absDest = destination
+	}
+	return fmt.Errorf("could not move the verified update from %s to %s after %d attempts: %v; copying it there instead also failed: %v. If an antivirus program is scanning the file, wait a minute and try again.",
+		absTemp, absDest, renameAttempts, renameErr, copyErr)
 }

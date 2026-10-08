@@ -1,0 +1,63 @@
+cask "proxor" do
+  arch arm: "arm64", intel: "x86_64"
+
+  version "@VERSION@"
+  sha256 arm:   "@SHA256@",
+         intel: "@SHA256_INTEL@"
+
+  # Apple Silicon needs macOS 15 (Homebrew Qt); Intel needs macOS 12 (official Qt).
+  on_arm do
+    depends_on macos: :sequoia
+  end
+  on_intel do
+    depends_on macos: :monterey
+  end
+
+  url "https://github.com/Ogstra/proxor/releases/download/v#{version}/proxor-#{version}-macos-#{arch}.zip"
+  name "Proxor"
+  desc "Proxy client with a Qt GUI, built on the sing-box core"
+  homepage "https://github.com/Ogstra/proxor"
+
+  # Tracks prereleases too: every Proxor release is currently a prerelease.
+  livecheck do
+    url :url
+    regex(/^v?(\d+(?:\.\d+)+)$/i)
+    strategy :github_releases do |json, regex|
+      json.filter_map do |release|
+        next if release["draft"]
+
+        match = release["tag_name"]&.match(regex)
+        match[1] if match
+      end
+    end
+  end
+
+  auto_updates false
+
+  app "Proxor.app"
+
+  # Ad-hoc signed, not notarized: Homebrew quarantines the download, so clear the flag or
+  # Gatekeeper refuses to open it. (--no-quarantine no longer exists in Homebrew 7.)
+  postflight_steps do
+    run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{appdir}}/Proxor.app"]
+  end
+
+  # The Tun/System Proxy service installed from the app (Settings > Tun) lives outside the app bundle.
+  # Owner decision: plain `brew uninstall` removes it too. Homebrew also runs this on `brew upgrade`,
+  # so upgrading removes the service (the app offers to reinstall it) and asks for the admin password.
+  uninstall launchctl: "io.github.Ogstra.Proxor.helper",
+            quit:      "io.github.Ogstra.Proxor",
+            delete:    [
+              "/Library/Application Support/Proxor",
+              "/Library/LaunchDaemons/io.github.Ogstra.Proxor.helper.plist",
+              "/Library/PrivilegedHelperTools/io.github.Ogstra.Proxor.helper",
+            ]
+
+  # The Start-with-system agent stays across brew upgrade (uninstall runs on upgrade); only --zap removes it.
+  zap delete: "/var/log/proxor-helper.log",
+      trash:  [
+        "~/Library/LaunchAgents/io.github.Ogstra.Proxor.autostart.plist",
+        "~/Library/Preferences/io.github.Ogstra.Proxor.plist",
+        "~/Library/Preferences/proxor",
+      ]
+end

@@ -28,7 +28,8 @@ func TestUpdateArchiveSuffixes(t *testing.T) {
 		{goos: "windows", goarch: "arm64", expected: []string{"windows-arm64.zip"}},
 		{goos: "linux", goarch: "amd64", expected: []string{"linux64.AppImage"}},
 		{goos: "linux", goarch: "arm64", wantErr: true},
-		{goos: "darwin", goarch: "amd64", wantErr: true},
+		{goos: "darwin", goarch: "amd64", expected: []string{"-macos-x86_64.zip"}},
+		{goos: "darwin", goarch: "arm64", expected: []string{"-macos-arm64.zip"}},
 	}
 
 	for _, tt := range tests {
@@ -479,5 +480,128 @@ func TestUpdateUserAgent(t *testing.T) {
 	const want = "Proxor-Updater/"
 	if updateUserAgentPrefix != want {
 		t.Fatalf("updateUserAgentPrefix = %q, want %q", updateUserAgentPrefix, want)
+	}
+}
+
+func TestDarwinChannelsResolveMacZip(t *testing.T) {
+	for _, channel := range []string{"homebrew", "macos-app", "", "portable"} {
+		got, err := suffixesForChannel(channel, "darwin", "arm64")
+		if err != nil {
+			t.Fatalf("channel %q: unexpected error: %v", channel, err)
+		}
+		if len(got) != 1 || got[0] != "-macos-arm64.zip" {
+			t.Fatalf("channel %q: expected [-macos-arm64.zip], got %v", channel, got)
+		}
+	}
+	for _, channel := range []string{"homebrew", "macos-app", "", "portable"} {
+		got, err := suffixesForChannel(channel, "darwin", "amd64")
+		if err != nil || len(got) != 1 || got[0] != "-macos-x86_64.zip" {
+			t.Fatalf("darwin/amd64 channel %q: expected [-macos-x86_64.zip], got %v (err %v)", channel, got, err)
+		}
+	}
+}
+
+func TestDarwinIntelResolvesX8664Zip(t *testing.T) {
+	got, err := updateArchiveSuffixes("darwin", "amd64")
+	if err != nil || len(got) != 1 || got[0] != "-macos-x86_64.zip" {
+		t.Fatalf("darwin/amd64: expected [-macos-x86_64.zip], got %v (err %v)", got, err)
+	}
+	got, err = updateArchiveSuffixes("darwin", "arm64")
+	if err != nil || len(got) != 1 || got[0] != "-macos-arm64.zip" {
+		t.Fatalf("darwin/arm64: expected [-macos-arm64.zip], got %v (err %v)", got, err)
+	}
+	for _, arch := range []string{"386", "ppc64", "riscv64"} {
+		_, err := updateArchiveSuffixes("darwin", arch)
+		if err == nil {
+			t.Fatalf("darwin/%s: expected an error", arch)
+		}
+		if strings.Contains(err.Error(), "Apple silicon") || !strings.Contains(err.Error(), "darwin/"+arch) {
+			t.Fatalf("darwin/%s: unexpected error text %q", arch, err.Error())
+		}
+	}
+	for _, channel := range []string{"homebrew", "macos-app", "portable", ""} {
+		got, err := suffixesForChannel(channel, "darwin", "amd64")
+		if err != nil || len(got) != 1 || got[0] != "-macos-x86_64.zip" {
+			t.Fatalf("channel %q: expected [-macos-x86_64.zip], got %v (err %v)", channel, got, err)
+		}
+	}
+	if msg := selfUpdateRefusal("darwin"); !strings.Contains(msg, "brew upgrade --cask proxor") {
+		t.Fatalf("darwin refusal must still name the brew command, got %q", msg)
+	}
+}
+
+func TestIntelSelectionSkipsArmOnlyReleases(t *testing.T) {
+	mk := func(v string, intel bool) githubRelease {
+		assets := []githubReleaseAsset{
+			{Name: "proxor-" + v + "-macos-arm64.zip", BrowserDownloadURL: "https://example.com/" + v + "-arm.zip"},
+			{Name: "SHA256SUMS"},
+		}
+		if intel {
+			assets = append(assets, githubReleaseAsset{Name: "proxor-" + v + "-macos-x86_64.zip", BrowserDownloadURL: "https://example.com/" + v + "-intel.zip"})
+		}
+		return githubRelease{TagName: "proxor-" + v, Prerelease: true, Assets: assets}
+	}
+	suffixes := []string{"-macos-x86_64.zip"}
+
+	releases := []githubRelease{mk("1.6.11", true), mk("1.6.12", true), mk("1.6.10", true)}
+	_, asset, selection := matchingReleaseAsset(releases, "1.6.10", suffixes, true)
+	if asset == nil || selection != updateSelectionAvailable || asset.Name != "proxor-1.6.12-macos-x86_64.zip" {
+		t.Fatalf("expected the newest x86_64 zip, got asset=%v selection=%v", asset, selection)
+	}
+
+	// The newest release has only the arm64 zip: it must be skipped.
+	releases = []githubRelease{mk("1.6.11", true), mk("1.6.12", false)}
+	_, asset, selection = matchingReleaseAsset(releases, "1.6.10", suffixes, true)
+	if asset == nil || selection != updateSelectionAvailable || asset.Name != "proxor-1.6.11-macos-x86_64.zip" {
+		t.Fatalf("expected fallback to 1.6.11 x86_64 zip, got asset=%v selection=%v", asset, selection)
+	}
+
+	// No release carries the Intel zip.
+	releases = []githubRelease{mk("1.6.11", false), mk("1.6.12", false)}
+	_, asset, selection = matchingReleaseAsset(releases, "1.6.10", suffixes, true)
+	if asset != nil || selection != updateSelectionNoCompatible {
+		t.Fatalf("expected no compatible package, got asset=%v selection=%v", asset, selection)
+	}
+}
+
+// Every Proxor release is a prerelease, so the macOS check only finds anything when
+// prereleases are included (the GUI forces that on macOS).
+func TestMacReleasesNeedPrereleases(t *testing.T) {
+	mk := func(v string) githubRelease {
+		return githubRelease{
+			TagName:    "proxor-" + v,
+			Prerelease: true,
+			Assets: []githubReleaseAsset{
+				{Name: "proxor-" + v + "-macos-arm64.zip", BrowserDownloadURL: "https://example.com/" + v + "-mac.zip"},
+				{Name: "proxor-" + v + "-windows64.zip"},
+				{Name: "SHA256SUMS"},
+			},
+		}
+	}
+	releases := []githubRelease{mk("1.6.11"), mk("1.6.12"), mk("1.6.10")}
+	suffixes := []string{"-macos-arm64.zip"}
+
+	release, asset, selection := matchingReleaseAsset(releases, "1.6.10", suffixes, true)
+	if release == nil || asset == nil || selection != updateSelectionAvailable {
+		t.Fatalf("expected an update with prereleases, got release=%v asset=%v selection=%v", release, asset, selection)
+	}
+	if asset.Name != "proxor-1.6.12-macos-arm64.zip" {
+		t.Fatalf("expected the newest macOS zip, got %s", asset.Name)
+	}
+
+	_, _, selection = matchingReleaseAsset(releases, "1.6.10", suffixes, false)
+	if selection != updateSelectionNoCompatible {
+		t.Fatalf("expected no compatible package without prereleases, got %v", selection)
+	}
+}
+
+func TestSelfUpdateRefusal(t *testing.T) {
+	if msg := selfUpdateRefusal("darwin"); !strings.Contains(msg, "brew upgrade --cask proxor") {
+		t.Fatalf("darwin refusal must name the brew command, got %q", msg)
+	}
+	for _, goos := range []string{"windows", "linux"} {
+		if msg := selfUpdateRefusal(goos); msg != "" {
+			t.Fatalf("%s must not refuse, got %q", goos, msg)
+		}
 	}
 }

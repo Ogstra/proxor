@@ -111,6 +111,13 @@ for name in geoip.dat geosite.dat geoip.db geosite.db; do
   ln -sf "../Resources/$name" "$APP/Contents/MacOS/$name"
 done
 
+# Tun/System Proxy service scripts, run once as root through the admin prompt (plan 50-07).
+mkdir -p "$APP/Contents/Resources/helper"
+for name in helper-install.sh helper-uninstall.sh; do
+  cp "$SRC_ROOT/packaging/macos/$name" "$APP/Contents/Resources/helper/$name"
+  chmod 0755 "$APP/Contents/Resources/helper/$name"
+done
+
 #### Qt deployment ####
 MACDEPLOYQT="${MACDEPLOYQT:-}"
 if [ -z "$MACDEPLOYQT" ]; then
@@ -202,10 +209,15 @@ codesign --verify --deep --strict --verbose=2 "$APP"
 
 #### checks ####
 test -x "$APP/Contents/MacOS/Proxor"
+/usr/bin/plutil -extract NSLocationWhenInUseUsageDescription raw "$APP/Contents/Info.plist" >/dev/null
+/usr/bin/plutil -extract NSLocationUsageDescription raw "$APP/Contents/Info.plist" >/dev/null
+/usr/bin/plutil -extract NSLocalNetworkUsageDescription raw "$APP/Contents/Info.plist" >/dev/null
 test -x "$APP/Contents/MacOS/proxor_core"
 test -f "$APP/Contents/MacOS/geosite.db"
 test -L "$APP/Contents/MacOS/geosite.db"
 test -f "$APP/Contents/Resources/geosite.db"
+test -x "$APP/Contents/Resources/helper/helper-install.sh"
+test -x "$APP/Contents/Resources/helper/helper-uninstall.sh"
 
 if [ "$USED_PLUGIN_FALLBACK" != "1" ]; then
   BAD_REFS=$(otool -L "$APP/Contents/MacOS/Proxor" | grep -E "/opt/homebrew|$BREW_PREFIX" || true)

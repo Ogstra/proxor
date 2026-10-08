@@ -1,0 +1,48 @@
+{
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "address": [
+        "172.19.0.1/28"
+      ],
+      "auto_route": true,
+      "stack": "gvisor"
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "socks",
+      "tag": "proxor-socks",
+      "server": "127.0.0.1",
+      "server_port": 2080
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "route": {
+    "final": "proxor-socks"
+  },
+  "endpoints": [
+    {
+      "type": "wireguard",
+      "tag": "wg",
+      "address": [
+        "10.0.0.2/32"
+      ],
+      "private_key": "AAAA",
+      "peers": [
+        {
+          "address": "1.2.3.4",
+          "port": 51820,
+          "public_key": "BBBB",
+          "allowed_ips": [
+            "0.0.0.0/0"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -25,7 +25,9 @@
 #include <QWidget>
 #include <QImage>
 #include <QMenu>
+#include <QMetaObject>
 #include <QObject>
+#include <QPointer>
 #include <QPixmap>
 #include <QString>
 #include <QTimer>
@@ -36,12 +38,14 @@ struct StatusItem::Impl {
     NSStatusItem *item = nil;
     QIcon icon;
     bool colored = true;
+    bool active = true;
+    QString speedText; // two lines; empty = icon only
 
     // Template variant of a colored icon: only the alpha channel matters to AppKit, so the
     // result is black. Saturated pixels (the colored arcs) stay fully opaque; unsaturated ones
     // (the white arc of the idle icon) keep 38% of their alpha as a "ghost", which is what
     // separates the idle glyph from the running one (both arcs solid).
-    static QImage monochrome(const QImage &src) {
+    static QImage monochrome(const QImage &src, bool active) {
         QImage img = src.convertToFormat(QImage::Format_ARGB32);
         for (int y = 0; y < img.height(); ++y) {
             auto *line = reinterpret_cast<QRgb *>(img.scanLine(y));
@@ -51,7 +55,9 @@ struct StatusItem::Impl {
                 if (a == 0) continue;
                 const int mx = qMax(qRed(px), qMax(qGreen(px), qBlue(px)));
                 const int mn = qMin(qRed(px), qMin(qGreen(px), qBlue(px)));
-                const int outA = (mx - mn) > 60 ? a : (a * 38) / 100;
+                int outA = (mx - mn) > 60 ? a : (a * 38) / 100;
+                // Disconnected: the whole glyph at 65% (the system "disabled" look was too dark to read).
+                if (!active) outA = (outA * 65) / 100;
                 line[x] = qRgba(0, 0, 0, outA);
             }
         }
@@ -67,7 +73,7 @@ struct StatusItem::Impl {
         if (pm.isNull()) return;
 
         QImage image = pm.toImage();
-        if (!colored) image = monochrome(image);
+        if (!colored) image = monochrome(image, active);
         CGImageRef cg = image.toCGImage();
         if (!cg) return;
 
@@ -76,10 +82,49 @@ struct StatusItem::Impl {
         NSImage *nsImage = [[NSImage alloc] initWithCGImage:cg size:size];
         CGImageRelease(cg);
 
+        NSImage *finalImage = nsImage;
+        if (!speedText.isEmpty()) {
+            // One composite image: icon, fixed gap and a fixed-width, right-aligned two-line speed text.
+            // Drawing it ourselves keeps the item width constant (it does not move as the numbers
+            // change) and the gap exact; the handler is re-run per appearance, so the text color follows
+            // the light/dark menu bar even when the icon itself is colored.
+            NSMutableParagraphStyle *style = [[NSMutableParagraphStyle alloc] init];
+            style.alignment = NSTextAlignmentRight;
+            style.maximumLineHeight = 10.0;
+            style.minimumLineHeight = 10.0;
+            NSFont *font = [NSFont monospacedDigitSystemFontOfSize:9.0 weight:NSFontWeightRegular];
+            NSDictionary *attributes = @{NSFontAttributeName : font, NSParagraphStyleAttributeName : style,
+                                         NSForegroundColorAttributeName : NSColor.controlTextColor};
+            // Widest text the formatter can produce ("999.9K/s" plus an arrow); fixes the width.
+            const CGFloat textW = ceil([@"999.9K/s↑" sizeWithAttributes:attributes].width);
+            const CGFloat textH = 20.0;
+            const CGFloat gap = 3.0;
+            const CGFloat margin = 2.0;
+            const CGFloat totalW = size.width + gap + textW + margin;
+            const CGFloat totalH = thickness;
+            NSString *speed = speedText.toNSString();
+            NSImage *composite = [NSImage imageWithSize:NSMakeSize(totalW, totalH)
+                                                flipped:NO
+                                         drawingHandler:^BOOL(NSRect) {
+                                             [nsImage drawInRect:NSMakeRect(0, (totalH - size.height) / 2.0, size.width, size.height)];
+                                             [speed drawInRect:NSMakeRect(size.width + gap, (totalH - textH) / 2.0, textW, textH)
+                                                withAttributes:attributes];
+                                             return YES;
+                                         }];
+            [style release];
+            finalImage = composite;
+            item.length = totalW + 2.0;
+        } else {
+            item.length = NSSquareStatusItemLength;
+        }
         // `template` is a C++ keyword, so the AppKit property is set with bracket syntax.
         // Colored: the color is Proxor's running/idle indicator, so it must not be tinted.
-        [nsImage setTemplate:colored ? NO : YES];
-        item.button.image = nsImage;
+        [finalImage setTemplate:colored ? NO : YES];
+        item.button.image = finalImage;
+        item.button.title = @"";
+        item.button.imagePosition = NSImageOnly;
+        // The disconnected look is drawn into the image (alpha), not through appearsDisabled.
+        item.button.appearsDisabled = NO;
         item.button.imageScaling = NSImageScaleProportionallyDown;
         [nsImage release];
     }
@@ -112,6 +157,18 @@ void StatusItem::setIcon(const QIcon &icon) {
 void StatusItem::setColored(bool colored) {
     if (d->colored == colored) return;
     d->colored = colored;
+    d->render();
+}
+
+void StatusItem::setActive(bool active) {
+    if (d->active == active) return;
+    d->active = active;
+    d->render();
+}
+
+void StatusItem::setSpeedText(const QString &text) {
+    if (d->speedText == text) return;
+    d->speedText = text;
     d->render();
 }
 
@@ -161,6 +218,58 @@ void AllowQuit() {
     g_allowQuit = true;
 }
 
+// Dock reopen. Qt's own QCocoaApplicationDelegate applicationShouldHandleReopen only re-sends
+// ApplicationActive, which cannot be told apart from a plain activation and never shows a hidden
+// window (53-RESEARCH Q1). The explicit kAEReopenApplication Apple event fires on every Dock click /
+// `open -a` of the running app and never at launch (Q2-Q4). This file is compiled WITHOUT ARC, so the
+// handler object is retained manually for the app lifetime.
+struct ReopenState {
+    QPointer<QObject> owner;
+    std::function<void()> onReopen;
+};
+
+}
+
+@interface ProxorReopenHandler : NSObject {
+    ProxorMac::ReopenState *m_state;
+}
+- (instancetype)initWithState:(ProxorMac::ReopenState *)state;
+- (void)handleReopen:(NSAppleEventDescriptor *)event withReplyEvent:(NSAppleEventDescriptor *)reply;
+@end
+
+@implementation ProxorReopenHandler
+- (instancetype)initWithState:(ProxorMac::ReopenState *)state {
+    self = [super init];
+    if (self) m_state = state;
+    return self;
+}
+- (void)dealloc {
+    delete m_state;
+    [super dealloc];
+}
+- (void)handleReopen:(NSAppleEventDescriptor *)event withReplyEvent:(NSAppleEventDescriptor *)reply {
+    Q_UNUSED(event);
+    Q_UNUSED(reply);
+    if (!m_state || m_state->owner.isNull() || !m_state->onReopen) return;
+    QMetaObject::invokeMethod(m_state->owner.data(), m_state->onReopen, Qt::QueuedConnection);
+}
+@end
+
+namespace ProxorMac {
+
+void InstallReopenHandler(QObject *owner, std::function<void()> onReopen) {
+    if (!owner || !onReopen) return;
+    // After NSApplication finished launching: an earlier registration is overwritten by AppKit.
+    QTimer::singleShot(0, owner, [owner, onReopen = std::move(onReopen)]() mutable {
+        auto *state = new ReopenState{QPointer<QObject>(owner), std::move(onReopen)};
+        ProxorReopenHandler *h = [[ProxorReopenHandler alloc] initWithState:state]; // kept for the app lifetime
+        [[NSAppleEventManager sharedAppleEventManager] setEventHandler:h
+                                                           andSelector:@selector(handleReopen:withReplyEvent:)
+                                                         forEventClass:kCoreEventClass
+                                                            andEventID:kAEReopenApplication];
+    });
+}
+
 void PopupMenuAt(QMenu *menu, QWidget *anchor, const QPoint &posInAnchor) {
     if (!menu || !anchor || !anchor->window()) return;
     NSMenu *nsMenu = menu->toNSMenu();
@@ -174,6 +283,16 @@ void PopupMenuAt(QMenu *menu, QWidget *anchor, const QPoint &posInAnchor) {
 void PopupMenu(QMenu *menu, QWidget *anchor) {
     if (!anchor) return;
     PopupMenuAt(menu, anchor, QPoint(0, anchor->height() + 2));
+}
+
+
+void SetDockIconVisible(bool visible) {
+    const NSApplicationActivationPolicy wanted =
+        visible ? NSApplicationActivationPolicyRegular : NSApplicationActivationPolicyAccessory;
+    if (NSApp.activationPolicy == wanted) return;
+    [NSApp setActivationPolicy:wanted];
+    // A regular app that just appeared in the Dock must also come to the front.
+    if (visible) [NSApp activateIgnoringOtherApps:YES];
 }
 
 }

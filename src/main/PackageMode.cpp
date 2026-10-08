@@ -56,6 +56,33 @@ PackageMode DetectPackageMode(const QString &packageRoot,
     return PackageMode::NativeOrPortable;
 }
 
+PackageMode DetectMacPackageMode(const QString &appBundlePath,
+                                 const QString &homeDir,
+                                 const QStringList &caskroomDirs) {
+    // Pure string handling: QFileInfo::absolutePath() would prepend a drive letter on Windows runners.
+    const QString bundle = QDir::cleanPath(appBundlePath);
+    if (bundle.mid(bundle.lastIndexOf(QLatin1Char('/')) + 1) != QStringLiteral("Proxor.app")) {
+        return PackageMode::MacApp;
+    }
+    const QString parent = QDir::cleanPath(bundle + QStringLiteral("/.."));
+    const bool inApplications =
+        parent == QStringLiteral("/Applications") ||
+        (!homeDir.isEmpty() && parent == QDir::cleanPath(QDir(homeDir).filePath(QStringLiteral("Applications"))));
+    if (!inApplications) {
+        return PackageMode::MacApp;
+    }
+    for (const auto &dir : caskroomDirs) {
+        // Hidden means a leading dot here; QDir::Hidden is a file attribute on Windows, not the name.
+        const QStringList entries = QDir(dir).entryList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden);
+        for (const QString &entry : entries) {
+            if (!entry.startsWith(QLatin1Char('.'))) {
+                return PackageMode::Homebrew;
+            }
+        }
+    }
+    return PackageMode::MacApp;
+}
+
 bool IsPackageManagerManaged(PackageMode mode) {
     switch (mode) {
         case PackageMode::Winget:
@@ -64,9 +91,11 @@ bool IsPackageManagerManaged(PackageMode mode) {
         case PackageMode::Rpm:
         case PackageMode::Arch:
         case PackageMode::NativeUnknownManager:
+        case PackageMode::Homebrew:
             return true;
         case PackageMode::AppImage:
         case PackageMode::NativeOrPortable:
+        case PackageMode::MacApp:
             return false;
     }
     return false;
@@ -106,6 +135,8 @@ QString PackageModeName(PackageMode mode) {
         case PackageMode::Rpm: return QStringLiteral("rpm");
         case PackageMode::Arch: return QStringLiteral("arch");
         case PackageMode::NativeUnknownManager: return QStringLiteral("unknown-package-manager");
+        case PackageMode::Homebrew: return QStringLiteral("homebrew");
+        case PackageMode::MacApp: return QStringLiteral("macos-app");
     }
     return QStringLiteral("portable");
 }

@@ -119,8 +119,9 @@ namespace ProxorGui {
         QString splitter_state = "";
 #ifdef Q_OS_MACOS
         // Menu-bar icon: true = the status-colored icon, false = monochrome template glyph that
-        // macOS tints for light/dark menu bars.
-        bool tray_icon_colored = true;
+        // macOS tints for light/dark menu bars. Monochrome by default, like other menu-bar apps.
+        bool tray_icon_colored = false;
+        bool tray_speed_view = false; // macOS: live upload/download speed next to the menu bar icon
 #endif
 
         // Subscription
@@ -143,10 +144,17 @@ namespace ProxorGui {
         // Remember
         QStringList remember_spmode = {"vpn"};
         int remember_id = -1919;
+#ifdef Q_OS_MACOS
+        // Reopening Proxor after quitting from the menu bar brings the connection back, like other VPN apps.
+        bool remember_enable = true;
+#else
         bool remember_enable = false;
+#endif
 
         // On-demand WiFi SSID
         bool ssid_on_demand_enabled = false;
+        bool local_network_prompted = false; // macOS: the native Local Network prompt was triggered at first start
+        bool wifi_permission_prompted = false; // macOS: the one-time Location explanation shown at first start
         QStringList ssid_trigger_list = {};
         int ssid_on_demand_profile_id = -1919;
         QString ssid_on_demand_profile_name = "";
@@ -174,10 +182,20 @@ namespace ProxorGui {
         bool vpn_internal_tun = true;
         int vpn_implementation = 0;
         int vpn_mtu = 9000;
+#ifdef Q_OS_MACOS
+        // Capture IPv6 too: with only an IPv4 TUN address, IPv6 traffic bypasses the tunnel on macOS.
+        bool vpn_ipv6 = true;
+#elif defined(Q_OS_LINUX)
+        // Same leak on Linux (auto_route adds no IPv6 routes without an IPv6 TUN address). ConfigBuilder
+        // drops the IPv6 address when the kernel has IPv6 disabled (ProxorPlatform::EffectiveTunIpv6).
+        bool vpn_ipv6 = true;
+#else
         bool vpn_ipv6 = false;
+#endif
         bool vpn_hide_console = true;
         bool vpn_strict_route = false;
         bool vpn_rule_white = false;
+        bool vpn_bypass_vpn_clients = true; // Tun: WireGuard, OpenVPN and Tailscale processes go direct; off sends them through the proxy
         QString vpn_rule_process = "";
         QString vpn_rule_cidr = "";
 

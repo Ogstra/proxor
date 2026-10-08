@@ -1,3 +1,4 @@
+#include "sys/LogFile.hpp"
 #include "./ui_mainwindow.h"
 #include "mainwindow.h"
 
@@ -6,7 +7,13 @@
 #include "db/traffic/TrafficLooper.hpp"
 #include "rpc/gRPC.h"
 #include "main/PackagePolicy.hpp"
+#include "platform/PingPolicy.hpp"
+#ifdef Q_OS_LINUX
+#include "platform/ResolvConf.hpp"
+#endif
 #include "ui/widget/MessageBoxTimer.h"
+
+#include <atomic>
 
 #include <QTimer>
 #include <QThread>
@@ -58,7 +65,13 @@ void MainWindow::setup_grpc() {
 
 // 测速
 
+#ifndef NKR_NO_GRPC
+static_assert(libcore::TcpPing == ProxorPlatform::kTcpPingMode && libcore::IcmpPing == ProxorPlatform::kIcmpPingMode, "PingPolicy mode constants must match libcore::TestMode");
+#endif
+
 inline bool speedtesting = false;
+inline std::atomic_bool icmp_unavailable_this_session{false};
+inline std::atomic_bool icmp_fallback_notice_shown{false};
 inline QList<QThread *> speedtesting_threads = {};
 
 void MainWindow::speedtest_current_group(int mode, bool test_group) {
@@ -165,8 +178,9 @@ void MainWindow::speedtest_profiles(const QList<std::shared_ptr<ProxorGui::Proxy
                     lock_write.unlock();
 
                     //
+                    const int effectiveMode = ProxorPlatform::EffectivePingMode(mode, icmp_unavailable_this_session.load());
                     libcore::TestReq req;
-                    req.set_mode((libcore::TestMode) mode);
+                    req.set_mode((libcore::TestMode) effectiveMode);
                     req.set_timeout(10 * 1000);
                     req.set_url(ProxorGui::dataStore->test_latency_url.toStdString());
 
@@ -219,14 +233,14 @@ void MainWindow::speedtest_profiles(const QList<std::shared_ptr<ProxorGui::Proxy
 
                         req.set_full_speed_url(ProxorGui::dataStore->test_download_url.toStdString());
                         req.set_full_speed_timeout(ProxorGui::dataStore->test_download_timeout);
-                    } else if (mode == libcore::TcpPing) {
+                    } else if (effectiveMode == libcore::TcpPing) {
                         if (!profile->EnsureHydrated()) {
                             profile->full_test_report = tr("Profile is not hydrated");
                             ProxorGui::profileManager->SaveProfile(profile);
                             continue;
                         }
                         req.set_address(profile->bean->DisplayAddress().toStdString());
-                    } else if (mode == libcore::IcmpPing) {
+                    } else if (effectiveMode == libcore::IcmpPing) {
                         if (!profile->EnsureHydrated()) {
                             profile->full_test_report = tr("Profile is not hydrated");
                             ProxorGui::profileManager->SaveProfile(profile);
@@ -257,6 +271,27 @@ void MainWindow::speedtest_profiles(const QList<std::shared_ptr<ProxorGui::Proxy
                             lock_results.unlock();
                         }
                         return;
+                    }
+
+                    if (ProxorPlatform::ClassifyPingResult(effectiveMode, QString::fromStdString(result.error())) == ProxorPlatform::PingOutcome::RetryWithTcp) {
+                        icmp_unavailable_this_session = true;
+                        if (!icmp_fallback_notice_shown.exchange(true)) {
+                            MW_show_log(ProxorPlatform::IcmpFallbackNotice(QString::fromStdString(result.error()))); // shown even for silent runs: never silent
+                        }
+                        libcore::TestReq tcpReq;
+                        tcpReq.set_mode(libcore::TcpPing);
+                        tcpReq.set_timeout(10 * 1000);
+                        tcpReq.set_address(profile->bean->DisplayAddress().toStdString());
+                        bool tcpOK;
+                        result = defaultClient->Test(&tcpOK, tcpReq);
+                        if (!tcpOK) {
+                            if (groupedLogs && !silent) {
+                                lock_results.lock();
+                                final_logs[profile_log_index.value(profile->id)] = tr("[%1] test error: RPC failed").arg(profile->bean->DisplayTypeAndName());
+                                lock_results.unlock();
+                            }
+                            return;
+                        }
                     }
 
                     if (result.error().empty()) {
@@ -349,7 +384,12 @@ void MainWindow::stop_core_daemon() {
 void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
     if (ProxorGui::dataStore->prepare_exit) return;
     if ((startup_tun_pending && !startup_tun_authorized) || startup_tun_failed) {
+#ifdef Q_OS_MACOS
+        if (startup_tun_failed) MW_show_log(MacTunFailureText(mac_tun_failure_reason));
+        else ProxorGui_log::WriteDiagnostic(tr("Waiting for Tun to come up; the profile starts when it is ready."));
+#else
         MW_show_log(tr("Profile start is deferred until Tun authorization succeeds."));
+#endif
         return;
     }
 
@@ -435,10 +475,14 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
             start_pending = false;
             refresh_status();
             refresh_proxy_list(ent->id);
+#ifdef Q_OS_MACOS
+            mac_modes->profileStarted();
+#else
             if (ProxorGui::dataStore->spmode_vpn && !ProxorGui::UseInternalTun() && vpn_pid == 0) {
                 MW_show_log(tr("Proxy profile ready; starting Tun."));
                 StartVPNProcess();
             }
+#endif
         });
 
         return true;
@@ -456,6 +500,7 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
     }
     mu_stopping.unlock();
     start_pending = true;
+    start_cancel = false;
     refresh_status();
 
     // check core state
@@ -477,6 +522,9 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
     connect(restartMsgbox, &QMessageBox::accepted, this, [=] { MW_dialog_message("", "RestartProgram"); });
     auto restartMsgboxTimer = new MessageBoxTimer(this, restartMsgbox, 5000);
 
+#ifdef Q_OS_MACOS
+    mac_modes->profileStarting();
+#endif
     runOnNewThread([=] {
         // validate config before stopping the current connection or marking anything active
 #ifndef NKR_NO_GRPC
@@ -489,6 +537,9 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
             runOnUiThread([=] { MessageBoxWarning("Validate return error", validateError); });
             start_pending = false;
             mu_starting.unlock();
+#ifdef Q_OS_MACOS
+            runOnUiThread([=] { mac_modes->profileStartFailed(); });
+#endif
             runOnUiThread([=] {
                 refresh_status();
                 restartMsgboxTimer->cancel();
@@ -500,6 +551,9 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
             MW_show_log("<<<<<<<< " + tr("Config validation RPC failed for %1").arg(ent->bean->DisplayTypeAndName()));
             start_pending = false;
             mu_starting.unlock();
+#ifdef Q_OS_MACOS
+            runOnUiThread([=] { mac_modes->profileStartFailed(); });
+#endif
             runOnUiThread([=] {
                 refresh_status();
                 restartMsgboxTimer->cancel();
@@ -509,6 +563,23 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
             return;
         }
 #endif
+
+        // Stop was pressed while this start was still in flight: nothing is running yet, so just give up.
+        if (start_cancel) {
+            MW_show_log("<<<<<<<< " + tr("Start cancelled"));
+            start_pending = false;
+            mu_starting.unlock();
+#ifdef Q_OS_MACOS
+            runOnUiThread([=] { mac_modes->profileStartFailed(); });
+#endif
+            runOnUiThread([=] {
+                refresh_status();
+                restartMsgboxTimer->cancel();
+                restartMsgboxTimer->deleteLater();
+                restartMsgbox->deleteLater();
+            });
+            return;
+        }
 
         // stop current running
         if (ProxorGui::dataStore->started_id >= 0) {
@@ -520,8 +591,16 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
         if (!proxor_start_stage2()) {
             start_pending = false;
             MW_show_log("<<<<<<<< " + tr("Failed to start profile %1").arg(ent->bean->DisplayTypeAndName()));
+#ifdef Q_OS_MACOS
+            runOnUiThread([=] { mac_modes->profileStartFailed(); });
+#endif
         }
         mu_starting.unlock();
+        if (start_cancel && ProxorGui::dataStore->started_id >= 0) {
+            // Stop was pressed while the core was loading the config: undo the start so nothing stays half-started.
+            MW_show_log("<<<<<<<< " + tr("Start cancelled"));
+            runOnUiThread([=] { proxor_stop(); });
+        }
         // cancel timeout
         runOnUiThread([=] {
             refresh_status();
@@ -529,9 +608,13 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
             restartMsgboxTimer->deleteLater();
             restartMsgbox->deleteLater();
 #ifdef Q_OS_LINUX
-            // Check systemd-resolved
-            if (ProxorGui::dataStore->spmode_vpn && ProxorGui::dataStore->routing->direct_dns.startsWith("local") && ReadFileText("/etc/resolv.conf").contains("systemd-resolved")) {
-                MW_show_log("[Warning] The default Direct DNS may not works with systemd-resolved, you may consider change your DNS settings.");
+            // systemd-resolved: sing-box's "local" DNS asks resolved over D-Bus only when /etc/resolv.conf is
+            // resolved's own file; a bare 127.0.0.53 stub line is the setup that breaks under Tun.
+            if (ProxorGui::dataStore->spmode_vpn && ProxorGui::dataStore->routing->direct_dns.startsWith("local")) {
+                const auto kind = ProxorPlatform::ClassifyResolvConf(ReadFileText("/etc/resolv.conf"));
+                const auto notice = ProxorPlatform::DirectDnsResolvedNotice(kind);
+                if (ProxorPlatform::DirectDnsNoticeIsWarning(kind)) MW_show_log(notice);
+                else if (!notice.isEmpty()) ProxorGui_log::WriteDiagnostic(notice);
             }
 #endif
         });
@@ -541,9 +624,33 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
 void MainWindow::proxor_stop(bool crash, bool sem) {
     auto id = ProxorGui::dataStore->started_id;
     if (id < 0) {
+        if (start_pending) {
+            // Stop during a pending start aborts it (the start thread checks start_cancel between its steps).
+            start_cancel = true;
+            if (mu_starting.tryLock()) {
+                // no start thread is running: the start is only waiting for the core to come up
+                core_process->start_profile_when_core_is_up = -1;
+                start_pending = false;
+                mu_starting.unlock();
+                MW_show_log("<<<<<<<< " + tr("Start cancelled"));
+#ifdef Q_OS_MACOS
+                mac_modes->profileStartFailed();
+#endif
+                refresh_status();
+            } else {
+                MW_show_log(tr("Stopping: cancelling the profile start in progress..."));
+            }
+        }
         if (sem) sem_stopped.release();
         return;
     }
+#ifdef Q_OS_MACOS
+    // User stop: System Proxy and Tun are paused after a grace period (restore the snapshot / tun_stop)
+    // while both switches stay on and remembered; proxor_start resumes them. Restart Proxy / profile
+    // switch and exit (sem=true) never pause, and a start within the grace period cancels the pause
+    // (owner log 18:39:18.909 -> .940), so no helper call is made at all.
+    mac_modes->profileStopping(sem, ProxorGui::dataStore->prepare_exit);
+#endif
 
     auto proxor_stop_stage2 = [=] {
         runOnUiThread(
@@ -580,7 +687,18 @@ void MainWindow::proxor_stop(bool crash, bool sem) {
         }
 #endif
 
+#ifdef Q_OS_MACOS
+        if (mac_stop_keeps_remembered_profile) {
+            // Stop enforcing the startup Tun block: keep remember_id (never persist -1919) so the
+            // remembered profile is restored after a quit or crash while blocked.
+            mac_stop_keeps_remembered_profile = false;
+            ProxorGui::dataStore->started_id = -1919;
+        } else {
+            ProxorGui::dataStore->UpdateStartedId(-1919);
+        }
+#else
         ProxorGui::dataStore->UpdateStartedId(-1919);
+#endif
         started_via_ssid_trigger = false;
         ProxorGui::dataStore->need_keep_vpn_off = false;
         running = nullptr;
@@ -616,6 +734,9 @@ void MainWindow::proxor_stop(bool crash, bool sem) {
         if (sem) sem_stopped.release();
         // cancel timeout
         runOnUiThread([=] {
+#ifdef Q_OS_MACOS
+            mac_modes->profileStopped();
+#endif
             restartMsgboxTimer->cancel();
             restartMsgboxTimer->deleteLater();
             restartMsgbox->deleteLater();
@@ -654,7 +775,12 @@ void MainWindow::CheckUpdate(bool silent) {
     bool ok;
     libcore::UpdateReq request;
     request.set_action(libcore::UpdateAction::Check);
+#ifdef Q_OS_MACOS
+    // Every Proxor release is a prerelease: without this macOS would never see an update.
+    request.set_check_pre_release(UpdateIncludesPrereleases(mode, ProxorGui::dataStore->check_include_pre));
+#else
     request.set_check_pre_release(ProxorGui::dataStore->check_include_pre);
+#endif
     request.set_channel(PackageModeName(mode).toStdString());
     auto response = ProxorGui_rpc::defaultClient->Update(&ok, request);
     if (!ok) return;
@@ -663,7 +789,11 @@ void MainWindow::CheckUpdate(bool silent) {
     if (!err.empty()) {
         if (silent) return;
         runOnUiThread([=] {
+#ifdef Q_OS_WIN
+            ShowUpdateFailedDialog(this, UpdateFailureStage::Check, QString::fromStdString(err), QStringLiteral(NKR_VERSION), {});
+#else
             MessageBoxWarning(QObject::tr("Update"), err.c_str());
+#endif
         });
         return;
     }
@@ -687,6 +817,11 @@ void MainWindow::CheckUpdate(bool silent) {
         QString releaseNote = response.release_note().c_str();
         const auto assetName = QString::fromUtf8(response.assets_name().c_str());
         const auto guidance = UpdateGuidanceText(mode, assetName);
+#ifdef Q_OS_MACOS
+        // brew only refreshes its taps once a day, so a fresh release may not be visible yet.
+        if (mode == PackageMode::Homebrew)
+            releaseNote += QObject::tr("\n\n*If Homebrew says Proxor is already up to date, run `brew update` and then the command again.*");
+#endif
         if (!allowSelfUpdate && guidance.isEmpty()) {
             releaseNote += QObject::tr("\n\n*Automatic installation is disabled in appdata mode.*");
         }
@@ -705,6 +840,9 @@ void MainWindow::CheckUpdate(bool silent) {
                 // Remembered here, not re-derived in onUpdateStaged(), so the AppImage
                 // completion handler can name the exact staged path without a second RPC.
                 staged_asset_name = QFileInfo(assetName).fileName();
+#ifdef Q_OS_WIN
+                update_release_url = releasePageUrl.toString();
+#endif
                 updateProgressDialog = new UpdateProgressDialog(response.assets_name().c_str(), this);
                 connect(updateProgressDialog, &UpdateProgressDialog::downloadComplete, this, &MainWindow::onUpdateStaged);
                 updateProgressDialog->show();
@@ -724,11 +862,27 @@ void MainWindow::CheckUpdate(bool silent) {
                         request2.set_download_dir(appImageInfo.absolutePath().toStdString());
                     }
                     auto response2 = ProxorGui_rpc::defaultClient->Update(&ok2, request2);
+#ifdef Q_OS_WIN
+                    if (!ok2) {
+                        runOnUiThread([=] {
+                            if (updateProgressDialog) updateProgressDialog->close();
+                            ShowUpdateFailedDialog(this, UpdateFailureStage::Download,
+                                                   QObject::tr("the Proxor core stopped responding during the download."),
+                                                   QStringLiteral(NKR_VERSION), releasePageUrl.toString());
+                        });
+                        return;
+                    }
+#endif
                     if (!ok2) return;
 
                     if (!response2.error().empty()) {
                         runOnUiThread([=] {
+#ifdef Q_OS_WIN
+                            ShowUpdateFailedDialog(this, UpdateFailureStage::Download, QString::fromStdString(response2.error()),
+                                                   QStringLiteral(NKR_VERSION), releasePageUrl.toString());
+#else
                             MessageBoxWarning(QObject::tr("Update"), response2.error().c_str());
+#endif
                         });
                     }
                 });

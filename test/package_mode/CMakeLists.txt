@@ -41,3 +41,73 @@ target_link_libraries(dialog_update_available_test PRIVATE
 add_test(NAME dialog_update_available_test COMMAND dialog_update_available_test)
 set_tests_properties(dialog_update_available_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+add_executable(message_box_timer_test message_box_timer_test.cpp)
+target_include_directories(message_box_timer_test PRIVATE ${CMAKE_CURRENT_LIST_DIR}/../../src)
+target_link_libraries(message_box_timer_test PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
+add_test(NAME message_box_timer_test COMMAND message_box_timer_test)
+set_tests_properties(message_box_timer_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# Pure macOS helper lifecycle policy (Qt Core only, no macOS APIs), so it is compiled and run
+# on every CI runner even though production only links it on APPLE.
+add_executable(mac_helper_policy_test
+    mac_helper_policy_test.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos/MacHelperPolicy.cpp)
+target_include_directories(mac_helper_policy_test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos)
+target_link_libraries(mac_helper_policy_test PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME mac_helper_policy_test COMMAND mac_helper_policy_test)
+
+# Helper protocol client (Qt Core + Network only): tested against a fake QLocalServer that runs in
+# its own thread, on every CI runner, even though production only links it on APPLE.
+find_package(Qt6 REQUIRED COMPONENTS Network)
+add_executable(mac_helper_client_test
+    mac_helper_client_test.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos/MacHelperClient.h
+    ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos/MacHelperClient.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos/MacHelperPolicy.cpp)
+target_include_directories(mac_helper_client_test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos)
+target_link_libraries(mac_helper_client_test PRIVATE Qt6::Core Qt6::Network Qt6::Test)
+add_test(NAME mac_helper_client_test COMMAND mac_helper_client_test)
+
+# Asynchronous facade over the helper client: the client runs on a worker thread, results come back
+# through callbacks. Tested against the same kind of fake server, on every CI runner.
+add_executable(mac_helper_service_test
+    mac_helper_service_test.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos/MacHelperService.h
+    ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos/MacHelperService.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos/MacHelperClient.h
+    ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos/MacHelperClient.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos/MacHelperPolicy.cpp)
+target_include_directories(mac_helper_service_test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos)
+target_link_libraries(mac_helper_service_test PRIVATE Qt6::Core Qt6::Network Qt6::Test)
+add_test(NAME mac_helper_service_test COMMAND mac_helper_service_test)
+
+# Grace-period pause/resume coordinator for Tun and System Proxy (Qt Core only, QTimer): behavior
+# test with fake hooks, on every CI runner, even though production only links it on APPLE.
+add_executable(mac_mode_coordinator_test
+    mac_mode_coordinator_test.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos/MacModeCoordinator.h
+    ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos/MacModeCoordinator.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos/MacHelperPolicy.cpp)
+target_include_directories(mac_mode_coordinator_test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/../../src/sys/macos)
+target_link_libraries(mac_mode_coordinator_test PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME mac_mode_coordinator_test COMMAND mac_mode_coordinator_test)
+
+# Feature tests, one fragment per feature (phase 54+). PROXOR_TEST_ONLY=<name> (set by run-tests.sh
+# from PACKAGE_MODE_ONLY) builds only tests.d/<name>.cmake, so parallel executors do not break each other.
+set(PROXOR_SRC "${CMAKE_CURRENT_LIST_DIR}/../../src")
+set(PROXOR_TEST_ONLY "" CACHE STRING "Only include test/package_mode/tests.d/<name>.cmake")
+if (PROXOR_TEST_ONLY)
+    set(_proxor_fragments "${CMAKE_CURRENT_LIST_DIR}/tests.d/${PROXOR_TEST_ONLY}.cmake")
+else ()
+    file(GLOB _proxor_fragments CONFIGURE_DEPENDS "${CMAKE_CURRENT_LIST_DIR}/tests.d/*.cmake")
+    list(SORT _proxor_fragments)
+endif ()
+foreach (_proxor_fragment IN LISTS _proxor_fragments)
+    include("${_proxor_fragment}")
+endforeach ()

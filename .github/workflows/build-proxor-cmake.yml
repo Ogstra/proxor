@@ -19,6 +19,10 @@ on:
         description: "Publish as a prerelease: set to n for a stable release"
         required: false
         default: "y"
+      windows_only:
+        description: "Publish only the Windows assets (Windows-only stable release): set to y; requires publish=y and a tag"
+        required: false
+        default: "n"
 
 env:
   # Keep in step with qtsdk/Qt used locally and with libs/download_proxor_qtsdk_win.sh
@@ -28,8 +32,22 @@ env:
   LINUXDEPLOY_SHA256: "c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d"
   LINUXDEPLOY_QT_VERSION: "1-alpha-20250213-1"
   LINUXDEPLOY_QT_SHA256: "15106be885c1c48a021198e7e1e9a48ce9d02a86dd0a1848f00bdbf3c1c92724"
+  # The Intel macOS zip is optional until this is y: then a release without it is refused
+  # (prepare-release-assets.sh --require-macos-intel). The only switch. With y, a failed Intel job leaves a
+  # source-only release (the release and its source tarball are created before the assets are checked).
+  MACOS_INTEL_REQUIRED: "n"
 
 jobs:
+  refuse-odd-windows-only:
+    name: Refuse windows_only without a publishing dispatch
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.windows_only == 'y' && (github.event.inputs.publish != 'y' || github.event.inputs.tag == '')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail with the reason
+        run: |
+          echo "windows_only=y is only valid together with publish=y and a non-empty tag; refusing this run." >&2
+          exit 1
+
   stage-package-source:
     name: Stage verified package source
     runs-on: ubuntu-latest
@@ -114,9 +132,90 @@ jobs:
         shell: bash
         run: |
           go test ./go/grpc_server/...
+          # Update path end to end (host-built updater, fake release server): PASS lines for the log.
+          go test ./go/grpc_server/ -run 'TestUpdateE2E' -count=1 -v
           go test ./go/proxorlib/...
+          # Linux ICMP: show which path the runner took (ping_group_range / root) in the log.
+          go test ./go/proxorlib/speedtest/ -count=1 -v -run 'Icmp'
           go test ./go/cmd/proxor_core/...
           go test ./go/cmd/updater/...
+          # macOS privileged helper: prove it cross-compiles and vets for the shipped target.
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go vet ./go/cmd/proxor_core/machelper/...
+          (cd go/cmd/proxor_core && GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -o /dev/null -trimpath \
+            -tags "with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_conntrack,with_grpc" .)
+          # Same for the Intel Mac build (darwin/amd64).
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go vet ./go/cmd/proxor_core/machelper/...
+          (cd go/cmd/proxor_core && GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -o /dev/null -trimpath \
+            -tags "with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_conntrack,with_grpc" .)
+          # ICMP ping is split per OS: prove every implementation file vets.
+          GOOS=windows go vet ./go/proxorlib/speedtest/
+          GOOS=darwin go vet ./go/proxorlib/speedtest/
+          GOOS=freebsd go vet ./go/proxorlib/speedtest/
+
+  test-go-platforms:
+    name: Go ICMP tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-15]
+    steps:
+      - name: Checking out sources
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          submodules: "recursive"
+      - name: Install Golang
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - name: Run ICMP tests
+        shell: bash
+        run: go test ./go/proxorlib/speedtest/... -count=1 -v
+
+  update-e2e-windows:
+    name: Windows update E2E
+    # Gates every Windows release (package-windows needs it): the candidate's own update path, check ->
+    # download -> SHA256SUMS -> rename while a scanner holds the file -> apply with the candidate updater.exe,
+    # against a local fake release server. No `if:` on purpose: it runs on every push, pull request and
+    # dispatch, so a non-publishing dispatch shows it before anyone publishes.
+    needs: [build-go]
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checking out sources
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          submodules: "recursive"
+      - name: Install Golang
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - name: Download the candidate Windows Go build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: Proxor-${{ github.sha }}-Common-windows-amd64
+          path: e2e-artifact
+      - name: Run the update end-to-end tests with the candidate updater
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar xzf e2e-artifact/artifacts.tgz -C e2e-artifact
+          updater="$PWD/e2e-artifact/deployment/windows64/updater.exe"
+          test -s "$updater"
+          export PROXOR_UPDATE_E2E_UPDATER="$(cygpath -w "$updater")"
+          export PROXOR_UPDATE_E2E_REQUIRE=1
+          # The whole package, not only the E2E: the 57-01 rename/copy/cleanup tests matter most where
+          # Windows enforces file locks.
+          go test ./go/grpc_server/... -count=1 -v -timeout 20m
+          go test ./go/cmd/updater/... -count=1 -v
 
   build-cpp:
     strategy:
@@ -276,6 +375,7 @@ jobs:
           "$appimage" --appimage-extract >/dev/null
           test -x squashfs-root/usr/bin/proxor
           test -x squashfs-root/usr/bin/proxor_core
+          ls squashfs-root/usr/lib/libQt6DBus.so.6* >/dev/null
           test -s squashfs-root/usr/share/proxor/geosite.db
           desktop-file-validate squashfs-root/usr/share/applications/proxor.desktop
           set +e
@@ -337,10 +437,9 @@ jobs:
       - name: Verify package provenance
         shell: bash
         run: bash packaging/source/tests/test-stage-recursive-source.sh
-      - name: Verify dependency pins against the flatpak manifest
-        # No Linux-only guard, unlike its neighbors below: the pins and the
-        # flatpak manifest's copies are two records of the same fact, and this
-        # is the only thing that notices when one moves without the other.
+      - name: Verify dependency pins
+        # No Linux-only guard, unlike its neighbors below: it proves fetch_verified
+        # rejects a wrong hash and that build_deps_all.sh keeps its pinned archives.
         # Running it on windows-latest also proves shasum -a 256 exists in Git
         # Bash before build_deps_all.sh depends on it on that same runner.
         shell: bash
@@ -353,6 +452,14 @@ jobs:
       - name: Verify artifact uploads declare hidden files
         shell: bash
         run: bash .github/tests/test-artifact-hidden-files.sh
+      - name: Verify the Windows update E2E gate
+        # No OS guard: the release gate must hold for whatever reads the workflow.
+        shell: bash
+        run: bash .github/tests/test-update-e2e-gate.sh
+      - name: Verify the macOS Intel release gate
+        # No OS guard, same reason as the E2E gate: ruby YAML only.
+        shell: bash
+        run: bash .github/tests/test-macos-intel-gate.sh
       - name: Install Qt Core and Test
         uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
         with:
@@ -375,14 +482,55 @@ jobs:
         run: |
           bash packaging/homebrew/tests/test-render-cask.sh
           bash packaging/homebrew/tests/test-bump-tap.sh
+          bash test/macos-helper/test-static.sh
+          bash test/macos-helper/test-protocol-version.sh
       - name: Verify native root staging
         # Guards the shared deb/rpm/arch staging helper; needs POSIX tools.
         if: runner.os == 'Linux'
         shell: bash
         run: bash packaging/linux/tests/test-stage-native-root.sh
+      - name: Install dbus-run-session for the NetworkManager reader test
+        if: runner.os == 'Linux'
+        shell: bash
+        run: command -v dbus-run-session || { sudo apt-get update && sudo apt-get install -y --no-install-recommends dbus; }
       - name: Run package policy fixture
         shell: bash
+        env:
+          # One compiler per test target at the same time ran the Linux runner out of memory and the
+          # runner was shut down mid-build; a fixed job count keeps the build within its memory.
+          PACKAGE_MODE_JOBS: "3"
         run: test/package_mode/run-tests.sh
+
+  unit-tests-macos:
+    name: Package policy tests (macos-15)
+    runs-on: macos-15
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+      HOMEBREW_NO_ANALYTICS: "1"
+    steps:
+      - name: Check out the exact source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+      - name: Install Qt and zxing-cpp
+        run: brew install qtbase zxing-cpp
+      - name: Run package policy fixture natively on macOS
+        # A hung test must end this step with its log, not cancel the whole job at the job limit.
+        timeout-minutes: 30
+        shell: bash
+        env:
+          # An unbounded --parallel starts one clang per test target and thrashes the runner.
+          PACKAGE_MODE_JOBS: "3"
+        run: |
+          # Show what is running if the step is still busy after 9 minutes (diagnostic only).
+          ( for m in 4 9 12; do sleep $([ $m = 4 ] && echo 240 || echo 300); echo "== still running after $m min"; ps -axo pid,etime,pcpu,command | grep -E 'clang|c\+\+|ld |cmake|ctest|_test' | grep -v grep | cut -c1-260 | head -30; done ) &
+          watchdog=$!
+          trap 'kill $watchdog 2>/dev/null || true' EXIT
+          CMAKE_PREFIX_PATH="$(brew --prefix)" bash test/package_mode/run-tests.sh
 
   package-windows:
     name: Package Windows release assets
@@ -390,7 +538,7 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: read
-    needs: [stage-package-source, build-cpp, build-go, test-go, appimage, package-policy-tests]
+    needs: [stage-package-source, build-cpp, build-go, test-go, appimage, package-policy-tests, update-e2e-windows]
     steps:
       - name: Checking out sources
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -561,6 +709,13 @@ jobs:
           name: release-assets-deb
           path: ${{ runner.temp }}/deb-work/proxor_*.deb
           if-no-files-found: error
+      - name: Upload preview Debian package for manual testing
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag == ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Proxor-${{ github.sha }}-deb-preview
+          path: ${{ runner.temp }}/deb-work/proxor_*.deb
+          if-no-files-found: error
 
   package-rpm:
     name: Build and smoke native Fedora RPM
@@ -594,6 +749,13 @@ jobs:
         with:
           name: release-assets-rpm
           path: ${{ runner.temp }}/rpm-work/rpmbuild/RPMS/x86_64/*.rpm
+          if-no-files-found: error
+      - name: Upload preview Fedora package for manual testing
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag == ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Proxor-${{ github.sha }}-rpm-preview
+          path: ${{ runner.temp }}/rpm-work/rpmbuild/RPMS/x86_64/proxor-*.rpm
           if-no-files-found: error
 
   package-arch:
@@ -653,64 +815,6 @@ jobs:
           # upload-artifact skips dotfiles unless told otherwise, and since PKGBUILD
           # still matches, if-no-files-found never notices .SRCINFO went missing.
           include-hidden-files: true
-          if-no-files-found: error
-
-  package-flatpak:
-    name: Build and smoke restricted Flatpak package
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
-    needs: [stage-package-source, build-go]
-    runs-on: ubuntu-latest
-    permissions: {contents: read}
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          ref: ${{ github.sha }}
-          submodules: recursive
-      - name: Install release Go toolchain
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: release-assets-source
-          path: source-input
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: Proxor-${{ github.sha }}-Common-public_res-public_res
-          path: public-res-input
-      - name: Install Flatpak build tools and runtime
-        shell: bash
-        run: |
-          sudo apt-get update
-          # flatpak-builder splits debug info with eu-strip from elfutils.
-          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder xvfb elfutils
-          flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-          flatpak install --user --noninteractive flathub org.kde.Sdk//6.8 org.kde.Platform//6.8
-      - name: Prepare immutable Flatpak build inputs
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="$(tr -d '\n' < VERSION.txt)"
-          test "${{ github.event.inputs.tag }}" = "v$version"
-          tar -xzf public-res-input/artifacts.tgz
-          bash packaging/flatpak/prepare-build-inputs.sh \
-            --source-archive "source-input/proxor-$version.tar.gz" \
-            --source-manifest "source-input/proxor-$version.source-manifest" \
-            --geodata deployment/public_res \
-            --output packaging/flatpak/.flatpak-input
-      - name: Validate restricted source contract
-        shell: bash
-        run: |
-          bash packaging/flatpak/generate-go-sources.sh --check
-          bash packaging/flatpak/tests/test-source-closure.sh
-          PROXOR_FLATPAK_FULL_TEST=1 \
-          PROXOR_FLATPAK_BUNDLE_OUTPUT="$RUNNER_TEMP/proxor-$(tr -d '\n' < VERSION.txt).flatpak" \
-            bash packaging/flatpak/tests/test-flatpak-package.sh
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: release-assets-flatpak
-          path: ${{ runner.temp }}/proxor-*.flatpak
           if-no-files-found: error
 
   package-macos:
@@ -785,6 +889,78 @@ jobs:
           fi
           kill "$pid" || true
           pkill -f 'Proxor.app/Contents/MacOS/proxor_core' || true
+      # Informational: package-macos gates publish-release, and a hosted runner without a usable GUI
+      # session must not block a tagged build. Every failure path is a warning followed by exit 0.
+      - name: Dock reopen check (informational, never blocks a release)
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          app="$PWD/deployment/macos-arm64/Proxor.app"
+          smoke="$RUNNER_TEMP/proxor-reopen"
+          mkdir -p "$smoke"
+          # App log path: ProxorGui_log (src/sys/LogFile.cpp) writes logs/proxor-YYYY-MM-DD.log under
+          # QDir::current(), i.e. the process working directory. Start in $smoke and also search fallbacks.
+          cd "$smoke"
+          "$app/Contents/MacOS/Proxor" -many -appdata "$smoke" -tray >"$RUNNER_TEMP/reopen.log" 2>&1 &
+          pid=$!
+          sleep 10
+          dirs=("$smoke" "$PWD" "$app/Contents/MacOS")
+          logfile() { find "${dirs[@]}" -name 'proxor-*.log' -type f 2>/dev/null | head -n1; }
+          warn() {
+            echo "::warning title=Dock reopen::$1"
+            echo "searched for proxor-*.log under: ${dirs[*]}"; echo "log file found: $(logfile)"
+            tail -n 40 "$(logfile)" 2>/dev/null || true; tail -n 20 "$RUNNER_TEMP/reopen.log" 2>/dev/null || true
+            pkill -f "$app/Contents/MacOS/Proxor" || true; pkill -f 'Proxor.app/Contents/MacOS/proxor_core' || true
+            exit 0
+          }
+          kill -0 "$pid" 2>/dev/null || warn "Proxor exited before the reopen check"
+          if grep -q "Dock: reopen" "$(logfile)" 2>/dev/null; then warn "reopen line logged before any reopen"; fi
+          open -a "$app" || warn "open -a failed (no usable GUI session on this runner?)"
+          sleep 5
+          if [ "$(pgrep -f "$app/Contents/MacOS/Proxor" | wc -l)" -gt 1 ]; then warn "open -a started a second instance"; fi
+          if grep -q "Dock: reopen, showing the main window" "$(logfile)" 2>/dev/null; then
+            echo "Dock reopen: OK"
+          else
+            warn "open -a did not log the reopen (hidden window not shown, or exec'd instance not reachable, see 53-RESEARCH Q3)"
+          fi
+          kill "$pid" 2>/dev/null || true
+          pkill -f 'Proxor.app/Contents/MacOS/proxor_core' || true
+      # Informational: same reason as the Dock reopen check. Failures are warnings followed by exit 0.
+      - name: Start with system through launchd (informational, never blocks a release)
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          label="io.github.Ogstra.Proxor.autostart-ci"
+          agent="$HOME/Library/LaunchAgents/$label.plist"
+          trap 'launchctl bootout "gui/$(id -u)/$label" 2>/dev/null; rm -f "$agent"' EXIT
+          app="$PWD/deployment/macos-arm64/Proxor.app"
+          mkdir -p "$HOME/Library/LaunchAgents"
+          # The committed fixture with only three CI changes: label, app path, and an isolated config (-many -appdata).
+          sed -e "s#<string>io.github.Ogstra.Proxor.autostart</string>#<string>$label</string>#" \
+              -e "s#<string>/Applications/Proxor.app</string>#<string>$app</string>#" \
+              test/package_mode/fixtures/macos-launch-agent.plist > "$agent"
+          n="$(/usr/libexec/PlistBuddy -c "Print :ProgramArguments" "$agent" | grep -c '^    ')"
+          /usr/libexec/PlistBuddy -c "Add :ProgramArguments:$n string -many" -c "Add :ProgramArguments:$((n+1)) string -appdata" -c "Add :ProgramArguments:$((n+2)) string $RUNNER_TEMP/proxor-launchd" "$agent"
+          plutil -lint "$agent"
+          if ! launchctl bootstrap "gui/$(id -u)" "$agent"; then
+            echo "::warning title=launchd autostart check skipped::gui/$(id -u) bootstrap was refused on this runner; the LaunchAgent text is covered by mac_login_item_policy_test"
+            exit 0
+          fi
+          ok=0
+          for i in $(seq 1 20); do
+            if pgrep -f "$app/Contents/MacOS/Proxor.*-tray" >/dev/null; then ok=1; break; fi
+            sleep 1
+          done
+          ps -axo pid,args | grep -F "$app/Contents/MacOS/Proxor" | grep -v grep || true
+          launchctl bootout "gui/$(id -u)/$label" || true
+          rm -f "$agent"
+          pkill -f "$app/Contents/MacOS/Proxor" || true
+          pkill -f 'Proxor.app/Contents/MacOS/proxor_core' || true
+          if [ "$ok" = 1 ]; then echo "launchd autostart: OK"
+          else echo "::warning title=launchd autostart::launchd ran the agent but Proxor did not start with -tray within 20 seconds"; fi
+          exit 0
       - name: Upload immutable macOS release asset
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -803,10 +979,185 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  macos-helper-integration:
+    name: macOS helper integration (root, TEST-NET route only)
+    # Informational: publish-release does not need this job, so a flaky hosted runner cannot block a release.
+    if: (github.event_name == 'workflow_dispatch' && github.event.inputs.tag == '') || github.event_name == 'pull_request'
+    needs: [package-macos]
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the test scripts
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+      - name: Download the macOS preview build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: Proxor-${{ github.sha }}-macos-arm64-preview
+          path: p50-zip
+      - name: Unpack like Homebrew
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p p50-app
+          /usr/bin/unzip -q p50-zip/proxor-*-macos-arm64.zip -d p50-app
+          codesign --verify --deep --strict p50-app/Proxor.app
+      - name: Privileged helper integration
+        shell: bash
+        run: |
+          set -uo pipefail
+          bash test/macos-helper/test-static.sh
+          sudo bash test/macos-helper/ci-integration.sh "$PWD/p50-app/Proxor.app"
+          rc=$?
+          if [ "$rc" = 78 ]; then
+            echo "::warning title=macOS helper integration skipped::launchctl bootstrap was refused on this runner (see SKIP root-daemon above); root paths are covered by owner UAT (plan 50-13)"
+            exit 0
+          fi
+          exit "$rc"
+      - name: Remove the helper from the runner
+        if: always()
+        shell: bash
+        run: sudo sh p50-app/Proxor.app/Contents/Resources/helper/helper-uninstall.sh || true
+
+  package-macos-intel:
+    name: Build macOS x86_64 app
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
+    # Only for the geodata artifact, same as package-macos; libs/build_macos_intel.sh builds its own darwin/amd64 core.
+    needs: [build-go]
+    # macos-15-intel is the last Intel image GitHub offers (retired in Fall 2027). When it goes, switch to
+    # runs-on: macos-15 (arm64): libs/build_macos_intel.sh always passes CMAKE_OSX_ARCHITECTURES=x86_64, and the
+    # smoke launch below would then need Rosetta (arch -x86_64).
+    runs-on: macos-15-intel
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    env:
+      # macOS 12 is the floor of this build. Official Qt 6.7.2 is built for 11.0, so 12.0 is allowed.
+      MACOSX_DEPLOYMENT_TARGET: "12.0"
+      PROXOR_MACOS_ARCH: x86_64
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+      HOMEBREW_NO_ANALYTICS: "1"
+    steps:
+      - name: Check out the exact recursive source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          submodules: recursive
+      - name: Install release Go toolchain
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      # Official Qt, not Homebrew: Homebrew bottles target the OS they were built on, official Qt targets 11.0.
+      # No `modules:` -- Qt Svg ships in the base install (see the build-cpp job).
+      - name: Install Qt ${{ env.QT_VERSION }} (official, x86_64 + arm64)
+        uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: mac
+          target: desktop
+          arch: clang_64
+          cache: true
+      - name: Cache native dependencies (x86_64, macOS 12)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: libs/deps/macos-x86_64
+          key: DepsCache-macos-x86_64-${{ env.MACOSX_DEPLOYMENT_TARGET }}-${{ hashFiles('libs/build_deps_*.sh') }}
+      - name: Download the release geodata
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: Proxor-${{ github.sha }}-Common-public_res-public_res
+          path: public-res-input
+      - name: Build Proxor.app (x86_64)
+        shell: bash
+        env:
+          TAG: ${{ github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\n' < VERSION.txt)"
+          if [ -n "$TAG" ]; then test "${TAG#v}" = "$version"; fi
+          tar -xzf public-res-input/artifacts.tgz
+          test -s deployment/public_res/geosite.db
+          # The Intel image keeps its default Xcode (16.x): Xcode 26 SDKs have no AGL.framework and the
+          # build script only works around that when the SDK lacks it.
+          xcrun --show-sdk-version
+          PROXOR_QT_DIR="$QT_ROOT_DIR" ./libs/build_macos_intel.sh
+      - name: Package and verify the release zip (x86_64)
+        shell: bash
+        run: ./libs/package_macos.sh
+      - name: Verify architecture and minimum macOS
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="deployment/macos-x86_64/Proxor.app"
+          check="$RUNNER_TEMP/intel-check"
+          rm -rf "$check"; mkdir -p "$check"
+          zip="$(ls deployment/proxor-*-macos-x86_64.zip)"
+          /usr/bin/unzip -q "$zip" -d "$check"
+          n=0; bad=""
+          for root in "$app" "$check/Proxor.app"; do
+            test -d "$root"
+            while IFS= read -r f; do
+              case "$(file -b "$f")" in Mach-O*) ;; *) continue;; esac
+              n=$((n + 1))
+              archs="$(lipo -archs "$f")"
+              if [ "$archs" != "x86_64" ]; then bad="$bad$f ($archs)"$'\n'; fi
+            done < <(find "$root" -type f)
+          done
+          if [ -n "$bad" ]; then printf 'Mach-O files that are not x86_64 only:\n%s' "$bad" >&2; exit 1; fi
+          for root in "$app" "$check/Proxor.app"; do
+            minos="$(vtool -arch x86_64 -show-build "$root/Contents/MacOS/Proxor" | awk '/minos/ {print $2; exit}')"
+            test "$minos" = "12.0" || { echo "Proxor minos is '$minos', expected 12.0" >&2; exit 1; }
+            core="$(vtool -arch x86_64 -show-build "$root/Contents/MacOS/proxor_core" | awk '/minos/ {print $2; exit}')"
+            [ -n "$core" ] && [ "$(printf '%s\n12.0\n' "$core" | sort -t. -k1,1n -k2,2n | tail -n1)" = "12.0" ] || { echo "proxor_core minos is '$core', expected <= 12.0" >&2; exit 1; }
+            lsmin="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$root/Contents/Info.plist")"
+            test "$lsmin" = "12.0" || { echo "LSMinimumSystemVersion is '$lsmin', expected 12.0" >&2; exit 1; }
+            codesign --verify --deep --strict "$root"
+          done
+          echo "INTEL-ARCH-OK: $n Mach-O files x86_64, minos 12.0"
+      # Native smoke: this runner is Intel, no Rosetta involved.
+      - name: Smoke launch (x86_64)
+        shell: bash
+        run: |
+          app="deployment/macos-x86_64/Proxor.app/Contents/MacOS/Proxor"
+          "$app" -many -appdata "$RUNNER_TEMP/proxor-smoke" >"$RUNNER_TEMP/smoke.log" 2>&1 &
+          pid=$!
+          sleep 10
+          if ! kill -0 "$pid" 2>/dev/null; then
+            cat "$RUNNER_TEMP/smoke.log"
+            echo "Proxor exited within 10 seconds of starting" >&2
+            exit 1
+          fi
+          echo "SMOKE-OK pid $pid"
+          kill "$pid" || true
+          pkill -f 'Proxor.app/Contents/MacOS/proxor_core' || true
+      - name: Upload immutable macOS Intel release asset
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-assets-macos-intel
+          path: deployment/proxor-*-macos-x86_64.zip
+          if-no-files-found: error
+      # Untagged runs never reach publish-release, so this copy cannot collide with the release asset above.
+      - name: Upload macOS Intel preview build
+        if: github.event.inputs.tag == ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Proxor-${{ github.sha }}-macos-x86_64-preview
+          path: deployment/proxor-*-macos-x86_64.zip
+          if-no-files-found: error
+          retention-days: 7
+
   publish-release:
     name: Publish verified release assets
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'y' && github.event.inputs.tag != ''
-    needs: [stage-package-source, appimage, package-windows, package-deb, package-rpm, package-arch, package-flatpak, package-macos]
+    # !cancelled() plus explicit results: the optional Intel job is waited for (needs) but never required, so a
+    # failed or skipped Intel build cannot skip the release. MACOS_INTEL_REQUIRED (top-level env) is the switch.
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'y' && github.event.inputs.tag != '' && needs.stage-package-source.result == 'success' && needs.appimage.result == 'success' && needs.package-windows.result == 'success' && needs.package-deb.result == 'success' && needs.package-rpm.result == 'success' && needs.package-arch.result == 'success' && needs.package-macos.result == 'success' }}
+    needs: [stage-package-source, appimage, package-windows, package-deb, package-rpm, package-arch, package-macos, package-macos-intel]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -824,6 +1175,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.inputs.tag }}
           PRERELEASE: ${{ github.event.inputs.prerelease }}
+          WINDOWS_ONLY: ${{ github.event.inputs.windows_only }}
+          MACOS_INTEL_REQUIRED: ${{ env.MACOS_INTEL_REQUIRED }}
         run: |
           set -euo pipefail
           version="$(tr -d '\n' < VERSION.txt)"
@@ -851,9 +1204,19 @@ jobs:
           fi
           source_url="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/$TAG" --jq '.assets[] | select(.name == "proxor-'"$version"'.tar.gz") | .browser_download_url')"
           test -n "$source_url"
-          packaging/release/prepare-release-assets.sh prepare-final-assets --input release-input --version "$version" --output release-stage --public-source-url "$source_url"
-          (cd release-stage && shasum -a 256 -c SHA256SUMS)
-          gh release upload "$TAG" release-stage/*.zip release-stage/*.AppImage release-stage/*.deb release-stage/*.rpm release-stage/*.flatpak release-stage/SHA256SUMS --clobber
+          if [ "$WINDOWS_ONLY" = y ]; then
+            # A Windows-only stable release: the other platforms stay on prereleases, so only
+            # the Windows downloads and a SHA256SUMS that lists exactly them are attached.
+            packaging/release/prepare-release-assets.sh prepare-final-assets --input release-input --version "$version" --output release-stage --public-source-url "$source_url" --windows-only
+            (cd release-stage && shasum -a 256 -c SHA256SUMS)
+            gh release upload "$TAG" release-stage/*-windows64.zip release-stage/*-winget-x64.zip release-stage/SHA256SUMS --clobber
+          else
+            intel_args=()
+            if [ "$MACOS_INTEL_REQUIRED" = y ]; then intel_args+=(--require-macos-intel); fi
+            packaging/release/prepare-release-assets.sh prepare-final-assets --input release-input --version "$version" --output release-stage --public-source-url "$source_url" ${intel_args[@]+"${intel_args[@]}"}
+            (cd release-stage && shasum -a 256 -c SHA256SUMS)
+            gh release upload "$TAG" release-stage/*.zip release-stage/*.AppImage release-stage/*.deb release-stage/*.rpm release-stage/SHA256SUMS --clobber
+          fi
       - name: Keep the AUR and winget recipes for their package repositories
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -864,7 +1227,9 @@ jobs:
 
   bump-homebrew-tap:
     name: Bump the Homebrew tap
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'y' && github.event.inputs.tag != ''
+    # A Windows-only release has no macOS zip, so the cask must never point at it.
+    # !cancelled() and the explicit result keep the bump independent of the optional Intel job two levels up.
+    if: ${{ !cancelled() && needs.publish-release.result == 'success' && github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'y' && github.event.inputs.tag != '' && github.event.inputs.windows_only != 'y' }}
     needs: [publish-release]
     runs-on: ubuntu-latest
     # The only publishing credential this workflow touches, confined to this job and its

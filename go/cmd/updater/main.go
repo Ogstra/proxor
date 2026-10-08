@@ -27,9 +27,10 @@ func main() {
 			if strings.HasPrefix(strings.ToLower(exe), "updater.old") {
 				// 2. "updater.old" update files
 				time.Sleep(time.Second)
-				Updater()
-				// 3. start
-				exec.Command("./proxor.exe").Start()
+				if runUpdate() {
+					// 3. start
+					exec.Command("./proxor.exe").Start()
+				}
 			} else {
 				// 1. main prog quit and run "updater.exe"
 				Copy("./updater.exe", "./updater.old")

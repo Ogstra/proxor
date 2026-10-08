@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os/exec"
 	"syscall"
 	"unsafe"
 )
@@ -12,6 +13,22 @@ func MessageBoxPlain(title, caption string) int {
 		MB_OK = 0
 	)
 	return MessageBox(NULL, caption, title, MB_OK)
+}
+
+// MessageBoxYesNo shows a warning with Yes/No buttons and reports whether Yes was chosen.
+func MessageBoxYesNo(title, caption string) bool {
+	const (
+		NULL           = 0
+		MB_YESNO       = 0x4
+		MB_ICONWARNING = 0x30
+		IDYES          = 6
+	)
+	return MessageBox(NULL, caption, title, MB_YESNO|MB_ICONWARNING) == IDYES
+}
+
+// openURL opens a URL in the default browser.
+func openURL(url string) {
+	_ = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
 }
 
 // MessageBox of Win32 API.

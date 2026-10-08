@@ -2,6 +2,10 @@
 #include "db/Database.hpp"
 #include "fmt/includes.h"
 #include "fmt/Preset.hpp"
+#include "platform/AutoBypass.hpp"
+#include "platform/LocalNetworksApp.hpp"
+#include "platform/TunAddress.hpp"
+#include "sys/LogFile.hpp"
 #include "sys/WifiMonitor.hpp"
 
 #include <QApplication>
@@ -16,16 +20,17 @@
 
 namespace ProxorGui {
 
-    QStringList getAutoBypassExternalProcessPaths(const std::shared_ptr<BuildConfigResult> &result) {
-        QStringList paths;
+    QStringList externalCorePrograms(const std::shared_ptr<BuildConfigResult> &result) {
+        QStringList programs;
         for (const auto &extR: result->extRs) {
-            auto path = extR->program;
-            if (path.trimmed().isEmpty()) continue;
-            paths << path.replace("\\", "/");
+            auto p = extR->program.trimmed();
+            if (p.isEmpty()) continue;
+            if (QFileInfo(p).isRelative() && (p.contains('/') || p.contains('\\'))) {
+                p = QFileInfo(p).absoluteFilePath();
+            }
+            programs << p;
         }
-        // Auto-bypass known VPN clients to prevent VPN-over-VPN routing
-        paths << "wireguard.exe" << "openvpn.exe" << "tailscaled.exe";
-        return paths;
+        return programs;
     }
 
     QString genTunName() {
@@ -76,9 +81,20 @@ namespace ProxorGui {
     }
 
     QJsonArray BuildTunAddressArray(bool includeIPv6) {
-        QJsonArray addresses{"172.19.0.1/28"};
-        if (includeIPv6) addresses += "fdfe:dcba:9876::1/126";
+        QJsonArray addresses;
+        for (const auto &address : ProxorPlatform::TunAddresses(includeIPv6)) addresses += address;
         return addresses;
+    }
+
+    // The user's IPv6 setting, minus the case where the Linux kernel cannot give the Tun interface an IPv6
+    // address (sing-tun aborts Tun start on that error). Other OSes: the setting unchanged.
+    bool TunIncludesIpv6() {
+        const auto os = ProxorPlatform::CompiledHostOs();
+        const auto state = os == ProxorPlatform::HostOs::Linux ? ProxorPlatform::ReadIpv6KernelState(QStringLiteral("/"))
+                                                               : ProxorPlatform::Ipv6KernelState::Unknown;
+        const bool effective = ProxorPlatform::EffectiveTunIpv6(os, dataStore->vpn_ipv6, state);
+        if (dataStore->vpn_ipv6 && !effective) ProxorGui_log::WriteDiagnostic(ProxorPlatform::TunIpv6DroppedNotice());
+        return effective;
     }
 
     QJsonArray BuildSshRouteExclusions() {
@@ -95,14 +111,17 @@ namespace ProxorGui {
 
     QJsonArray BuildTunRouteExclusions() {
         QJsonArray exclusions{
-            "10.0.0.0/8",      // RFC 1918
-            "172.16.0.0/12",   // RFC 1918
-            "192.168.0.0/16",  // RFC 1918
             "100.64.0.0/10",   // carrier-grade NAT, commonly used by Tailscale/WireGuard
             "169.254.0.0/16",  // IPv4 link-local
             "fc00::/7",        // IPv6 unique local
             "fe80::/10",       // IPv6 link-local
         };
+        // Only the private networks this machine is attached to stay local. Other private ranges, for
+        // example 10.10.10.0/24 behind the proxy server, go through the tunnel.
+        const auto attached = ProxorPlatform::CurrentPrivateNetworks();
+        for (const auto &cidr : attached) exclusions += cidr;
+        ProxorGui_log::WriteDiagnostic(QStringLiteral("Tun: local networks kept out of the tunnel: %1")
+                                           .arg(attached.isEmpty() ? QStringLiteral("(none)") : attached.join(QStringLiteral(", "))));
         for (const auto &route : BuildSshRouteExclusions()) exclusions += route;
         return exclusions;
     }
@@ -530,6 +549,12 @@ namespace ProxorGui {
     // SingBox
 
     void BuildConfigSingBox(const std::shared_ptr<BuildConfigStatus> &status) {
+        // One decision (and at most one diagnostic line) per config build, shared by tun-in and the reject rule.
+        int tunIpv6Cache = -1;
+        const auto tunIpv6 = [&tunIpv6Cache]() {
+            if (tunIpv6Cache < 0) tunIpv6Cache = TunIncludesIpv6() ? 1 : 0;
+            return tunIpv6Cache == 1;
+        };
         // Log
         status->result->coreConfig["log"] = QJsonObject{{"level", dataStore->log_level}};
 
@@ -564,7 +589,7 @@ namespace ProxorGui {
             inboundObj["mtu"] = dataStore->vpn_mtu;
             inboundObj["stack"] = Preset::SingBox::VpnImplementation.value(dataStore->vpn_implementation);
             inboundObj["strict_route"] = dataStore->vpn_strict_route;
-            inboundObj["address"] = BuildTunAddressArray(dataStore->vpn_ipv6);
+            inboundObj["address"] = BuildTunAddressArray(tunIpv6());
             auto routeExclusions = BuildTunRouteExclusions();
 #ifdef Q_OS_WIN
             // Exclude Windows NCSI/NLA probe destinations from the TUN default route so they
@@ -875,7 +900,7 @@ namespace ProxorGui {
         // addresses must not reach the proxy outbound (would crash it); covers all configured
         // TUN addresses including IPv6, regardless of process or port
         status->routingRules += QJsonObject{
-            {"ip_cidr", BuildTunAddressArray(dataStore->vpn_ipv6)},
+            {"ip_cidr", BuildTunAddressArray(tunIpv6())},
             {"action", "reject"},
         };
 
@@ -899,11 +924,12 @@ namespace ProxorGui {
                 status->routingRules += rule;
             }
 
-            auto autoBypassExternalProcessPaths = getAutoBypassExternalProcessPaths(status->result);
-            if (!autoBypassExternalProcessPaths.isEmpty()) {
-                QJsonObject rule{{"outbound", "bypass"},
-                                 {"process_name", QList2QJsonArray(autoBypassExternalProcessPaths)}};
-                status->routingRules += rule;
+            const auto autoBypass = ProxorPlatform::BuildAutoBypassProcesses(externalCorePrograms(status->result), ProxorPlatform::CompiledHostOs(), dataStore->vpn_bypass_vpn_clients);
+            if (!autoBypass.processPaths.isEmpty()) {
+                status->routingRules += QJsonObject{{"outbound", "bypass"}, {"process_path", QList2QJsonArray(autoBypass.processPaths)}};
+            }
+            if (!autoBypass.processNames.isEmpty()) {
+                status->routingRules += QJsonObject{{"outbound", "bypass"}, {"process_name", QList2QJsonArray(autoBypass.processNames)}};
             }
         }
 
@@ -991,7 +1017,13 @@ namespace ProxorGui {
             cidr_rule = "," + QJsonObject2QString(rule, false);
         }
 
-        // TODO bypass ext core process path?
+        const auto vpnClients = ProxorPlatform::KnownVpnClientProcessNames(ProxorPlatform::CompiledHostOs());
+        if (!vpnClients.isEmpty()) {
+            QJsonObject rule{{"outbound", "direct"}, {"process_name", QList2QJsonArray(vpnClients)}};
+            process_name_rule += "," + QJsonObject2QString(rule, false);
+        }
+        // External cores are not excluded here: this Tun process outlives profile switches, so it cannot know
+        // the current profile's external cores. Single-core Tun excludes them (see the internal Tun rules).
 
         // auth
         QString socks_user_pass;
@@ -1000,7 +1032,7 @@ namespace ProxorGui {
             socks_user_pass = socks_user_pass.arg(dataStore->inbound_auth->username, dataStore->inbound_auth->password);
         }
 
-        const auto tunAddresses = QJsonArray2QStringCompact(BuildTunAddressArray(dataStore->vpn_ipv6));
+        const auto tunAddresses = QJsonArray2QStringCompact(BuildTunAddressArray(TunIncludesIpv6()));
         const auto dnsRemote = QJsonObject2QString(BuildTypedDnsServer("dns-remote", dataStore->routing->remote_dns, "proxor-socks", dataStore->routing->remote_dns_strategy), true);
         const auto dnsDirect = QJsonObject2QString(BuildTypedDnsServer("dns-direct", "local", {}, dataStore->routing->direct_dns_strategy), true);
         const auto dnsLocal = QJsonObject2QString(BuildTypedDnsServer("dns-local", BOX_UNDERLYING_DNS), true);

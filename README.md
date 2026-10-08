@@ -1,83 +1,101 @@
 # Proxor
 
-Qt-based proxy client for managing sing-box profiles, subscriptions, routing, and system proxy integration.
+[![Latest release](https://img.shields.io/github/v/release/Ogstra/proxor?include_prereleases&label=release)](https://github.com/Ogstra/proxor/releases)
+[![License](https://img.shields.io/github/license/Ogstra/proxor)](LICENSE)
 
-Current version: `1.6.11`
+Qt client for sing-box: profiles, subscriptions, routing, Tun mode and system proxy.
 
 <img width="717" height="559" alt="image" src="https://github.com/user-attachments/assets/d9b86402-7301-4e4e-971b-fef3ff2db247" />
 
-## Supported Proxy Types
+## Install
 
-- SOCKS (4/4a/5)
-- HTTP(S)
-- Shadowsocks
-- VMess
-- VLESS
-- Trojan
-- TUIC
-- NaiveProxy
-- Hysteria2
-- Custom outbound
-- Custom config
-- Custom core
-
-## Documentation
-
-- [Build Windows](docs/Build_Windows.md)
-- [Build Linux](docs/Build_Linux.md)
-- [Build Core](docs/Build_Core.md)
-- [Linux Runtime Guide](docs/Run_Linux.md)
-- [Run Flags](docs/RunFlags.md)
-
-## Repository Layout
-
-- `src/` contains the Qt/C++ product source tree.
-- `assets/` contains Qt resources and release-owned assets.
-- `go/` remains the dedicated Go core and updater workspace root.
-- `3rdparty/` and `libs/` remain the dedicated vendored-code and dependency helper roots.
-- `scripts/` and `cmake/` remain the dedicated build and tooling roots.
-- `build/` remains the default GUI build root.
-- `.tmp/` and `.cache/` are the default generated-output roots for local deployment bundles and transient artifacts; `qtsdk/` remains the local toolchain root.
-- `deployment/` remains a legacy local output location still accepted when passed explicitly to the scripts.
-
-## Runtime Notes
+Download from the [releases page](https://github.com/Ogstra/proxor/releases). The stable release
+may only carry Windows files; macOS and Linux files are in the latest **prerelease**.
 
 ### Windows
 
-If the application reports missing runtime DLLs, install the [Microsoft Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe).
+1. Download `proxor-<version>-windows64.zip` and extract it.
+2. Run `proxor.exe`.
 
-### macOS
+If it reports missing DLLs, install the
+[Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe).
 
-Apple Silicon Macs running macOS 15 or later install Proxor with Homebrew: `brew install --cask ogstra/tap/proxor`, and update it with `brew upgrade --cask proxor`. The app is ad-hoc signed and not notarized; the cask clears the quarantine flag. See [Build on macOS](docs/Build_macOS.md).
+### macOS (Apple Silicon and Intel)
 
-### Linux
+```bash
+brew install --cask ogstra/tap/proxor
+```
 
-Linux releases provide the retained x86_64 AppImage plus native Debian/Ubuntu `.deb`, Fedora
-RPM, source AUR `proxor`, and a restricted GitHub Flatpak bundle. Use the package manager that
-installed Proxor for upgrades; Flatpak cannot provide TUN or host system-proxy changes. See the
-[Linux runtime guide](docs/Run_Linux.md) and [publication handoff](packaging/PUBLISHING.md).
+Update:
 
-## Dependencies
+```bash
+brew upgrade --cask proxor
+```
 
-### GUI and Native Build
+Tun and System Proxy ask for your administrator password once, to install a small background
+service. Details: [Build macOS](docs/Build_macOS.md#tun-and-system-proxy).
 
-- Qt 5.15 or Qt 6 Widgets/Network/Svg
-- protobuf C++ (`v21.4` in `libs/build_deps_all.sh`)
-- yaml-cpp (`0.7.0`)
-- zxing-cpp (`2.0.0`)
-- QHotkey
+### Linux (x86_64)
 
-### Core and Go Toolchain
+AppImage:
 
-- Go `1.26.x`
-- sing-box from the local git submodule (`3rdparty/sing-box`, base `v1.13.13`, fork `Ogstra/sing-box`)
-- proxorlib from the local workspace
-- gRPC `v1.79.3`
-- protobuf-go `v1.36.11`
+```bash
+chmod +x proxor-<version>-linux64.AppImage
+./proxor-<version>-linux64.AppImage
+```
+
+Debian and Ubuntu:
+
+```bash
+sudo apt install ./proxor_<version>-1_amd64.deb
+```
+
+Fedora:
+
+```bash
+sudo dnf install ./proxor-<version>-1.fc44.x86_64.rpm
+```
+
+Arch and CachyOS, without the AUR:
+
+```bash
+git clone --depth 1 https://github.com/Ogstra/proxor
+cd proxor
+./packaging/arch/build-from-release.sh v<version>
+```
+
+More options, checksums and Tun permissions: [Install on Linux](docs/Install_Linux.md).
+
+## Requirements
+
+| System | Requirement |
+|---|---|
+| Windows | Windows 10 (1809 or later) or Windows 11, 64-bit |
+| macOS | Apple Silicon: macOS 15 or later. Intel: macOS 12 or later |
+| Linux | x86_64 |
+
+## Supported proxy types
+
+SOCKS (4/4a/5), HTTP(S), Shadowsocks, VMess, VLESS, Trojan, TUIC, NaiveProxy, Hysteria2,
+custom outbound, custom config, custom core.
+
+## Documentation
+
+- [Install on Linux](docs/Install_Linux.md)
+- [Linux runtime guide](docs/Run_Linux.md)
+- [Build Windows](docs/Build_Windows.md)
+- [Build macOS](docs/Build_macOS.md)
+- [Build Linux](docs/Build_Linux.md)
+- [Build Core](docs/Build_Core.md)
+- [Run flags](docs/RunFlags.md)
+
+## License
+
+GPL-3.0. See [LICENSE](LICENSE).
 
 ## Credits
 
-- Original desktop project lineage: [MatsuriDayo/nekoray](https://github.com/MatsuriDayo/nekoray)
-- Current backend foundation: `sing-box`, `sing`, and `proxorlib`
-- UI/editor components adapted from [Qv2ray](https://github.com/Qv2ray/Qv2ray)
-- Native libraries: Qt, protobuf, yaml-cpp, zxing-cpp, QHotkey
+- Original desktop project: [MatsuriDayo/nekoray](https://github.com/MatsuriDayo/nekoray)
+- Backend: [sing-box](https://github.com/SagerNet/sing-box), `sing` and `proxorlib`
+- UI components adapted from [Qv2ray](https://github.com/Qv2ray/Qv2ray)
+- Libraries: Qt, protobuf, yaml-cpp, zxing-cpp, QHotkey

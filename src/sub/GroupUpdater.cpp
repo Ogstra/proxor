@@ -1076,3 +1076,10 @@ bool UI_has_scheduled_subscription_updates() {
 bool UI_subscription_updates_running() {
     return UI_update_all_groups_Updating;
 }
+
+bool UI_has_due_subscription_updates() {
+    for (const auto groupId: ProxorGui::profileManager->groupsTabOrder) {
+        if (ProxorGui_sub::detail::ShouldAutoUpdateGroupOnTimer(ProxorGui::profileManager->GetGroup(groupId))) return true;
+    }
+    return false;
+}

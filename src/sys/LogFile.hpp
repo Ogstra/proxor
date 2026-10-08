@@ -27,6 +27,8 @@ namespace ProxorGui_log {
 
     // Appends one timestamped, levelled line. Thread-safe.
     void Write(Level level, const QString &line);
+    // Diagnostic line for the log file only; not shown in the window log.
+    inline void WriteDiagnostic(const QString &line) { Write(InferLevel(line), line); }
 
     // The most recent lines, oldest first, for attaching to a crash dump.
     //

@@ -44,6 +44,9 @@ private:
     DialogHotkey *m_hotkeyPage = nullptr;
     QScrollArea *m_settingsScroll = nullptr;
     QListWidget *m_settingsNav = nullptr;
+#ifdef Q_OS_MACOS
+    bool mac_autostart_loaded = false;
+#endif
 
     void relayoutSettingsScroll();
 

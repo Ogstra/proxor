@@ -5,14 +5,27 @@ This runbook covers the AUR, winget and Homebrew tap channels. It starts only af
 approved. Review the release report and every entry in
 `SHA256SUMS`; corrections require a new reviewed version, never asset replacement.
 
+## Before publishing: in-app update gate
+
+- [ ] The `Windows update E2E` job (`update-e2e-windows`) is green for the release commit on a non-publishing
+      dispatch (`gh workflow run build-proxor-cmake.yml --ref <branch>`, no inputs). It runs the candidate's own
+      update path (check, download, SHA256SUMS verification, rename while a scanner holds the file, apply with the
+      candidate `updater.exe`) against a local fake release server; `package-windows`, and through it
+      `publish-release`, need it, so a red job blocks the release.
+
+Windows installs of Proxor 1.6.11 or older cannot finish an in-app update (rename of `update-package.zip.part`
+fails with "being used by another process"): their users close Proxor, download `proxor-<version>-windows64.zip`
+from the release page and extract its `proxor` folder over the install folder (`config` keeps their settings).
+
 ## Review gates
 
 1. Confirm the public release assets, provenance report, and checksums.
 2. Run the protected actual-asset install/upgrade validation
    (`.github/workflows/validate-winget-release.yml`) and check the identifier collision.
 3. Review the rendered AUR `PKGBUILD` and `.SRCINFO` from the `release-recipes` artifact.
-4. Verify the GitHub Flatpak bundle. A Flathub submission is optional and needs separate manual
-   review; it is not CI automation.
+
+The Flatpak bundle is deprecated and no longer built or published: the Flatpak sandbox cannot run
+Tun mode, so it was a proxy-only format.
 
 ## Publishing
 
@@ -30,12 +43,27 @@ The AUR and winget jobs run in protected environments (`aur-publication`,
 `winget-publication`), so the review gates above stay in front of the credentials. `both` means
 AUR plus winget; `all` adds the Homebrew tap.
 
+### Windows-only stable release
+
+The `windows_only` dispatch input (default `n`) publishes a stable release that carries only the
+source tarball, `proxor-<version>-windows64.zip`, `proxor-<version>-winget-x64.zip` and a
+`SHA256SUMS` listing exactly those files, while the other platforms stay on prereleases. It is
+refused unless `publish=y` and a tag are set. All build jobs still run and gate the release;
+`bump-homebrew-tap` is skipped, and the AUR and Homebrew channels of `publish-packages.yml`
+must not be used for such a release (use `channels=winget`).
+
+```bash
+gh workflow run build-proxor-cmake.yml --ref main -f tag=vX.Y.Z -f publish=y -f prerelease=n -f windows_only=y
+```
+
 ### Homebrew tap
 
 `bump-homebrew-tap` in `.github/workflows/build-proxor-cmake.yml` runs right after
 `publish-release` on every publishing dispatch. It downloads
-`proxor-<version>-macos-arm64.zip` and `SHA256SUMS` from the published release, verifies the
-hash, renders `packaging/homebrew/proxor.rb.in` into `Casks/proxor.rb` of `Ogstra/homebrew-tap`
+`proxor-<version>-macos-arm64.zip`, `SHA256SUMS` and, when `SHA256SUMS` lists it,
+`proxor-<version>-macos-x86_64.zip` from the published release, verifies each hash, renders
+`packaging/homebrew/proxor.rb.in` (Apple Silicon only) or `packaging/homebrew/proxor-two-arch.rb.in`
+(Apple Silicon and Intel) into `Casks/proxor.rb` of `Ogstra/homebrew-tap`
 and pushes `proxor <version>` to `main`. It refuses to move the cask to an older version and
 does nothing when the tap already has this version. To re-run it (for example after rotating
 the token) or to preview it:
@@ -51,7 +79,18 @@ currently prereleases); the tap allows this through
 `proxor@beta`-style split later, not a change to this one. Changes to the cask are commits to
 `packaging/homebrew/proxor.rb.in`, never edits in the tap.
 
-There is still no automatic publish path to COPR/Fedora, Flathub, or any other store. The
+#### Intel macOS zip
+
+`proxor-<version>-macos-x86_64.zip` is built by the `Build macOS x86_64 app` job
+(`package-macos-intel`). It is optional for publishing while `MACOS_INTEL_REQUIRED` is `"n"` in
+`.github/workflows/build-proxor-cmake.yml`: a release without it is published as before and the
+cask stays Apple Silicon only. Setting it to `"y"` makes publish refuse a release without the
+Intel zip. With `y`, a failed Intel job leaves a source-only release: publish-release creates the
+release and uploads the source tarball first, then `prepare-final-assets --require-macos-intel`
+fails, so the release has no other downloads and no `SHA256SUMS`, and the tap bump does not run.
+Re-run the failed jobs or delete the release before retrying.
+
+There is still no automatic publish path to COPR/Fedora or any other store. The
 release workflow holds exactly one publishing credential, `HOMEBREW_TAP_TOKEN`, confined to the
 `bump-homebrew-tap` job and the `homebrew-publication` environment.
 

@@ -6,7 +6,7 @@ if (POLICY CMP0077)
     cmake_policy(SET CMP0077 NEW)
 endif ()
 
-project(proxor VERSION 1.6.11 LANGUAGES CXX)
+project(proxor VERSION 1.6.14 LANGUAGES CXX)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(PROXOR_SRC_DIR "${CMAKE_SOURCE_DIR}/src")
@@ -168,8 +168,14 @@ if (DBG_CMAKE)
 endif ()
 
 # Sources
+# Cross-platform capability and policy modules (phase 54+). One directory, globbed, so parallel work
+# adds files without editing this list.
+file(GLOB PROXOR_PLATFORM_SOURCES CONFIGURE_DEPENDS
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/platform/*.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/platform/*.hpp)
 set(PROJECT_SOURCES
         ${PLATFORM_SOURCES}
+        ${PROXOR_PLATFORM_SOURCES}
 
         src/main/main.cpp
         src/main/ProxorGui.cpp
@@ -305,6 +311,11 @@ set(PROJECT_SOURCES
         ${QV2RAY_RC}
   )
 
+# A platform list (cmake/<os>/<os>.cmake) may replace a shared source with its own implementation.
+if (PLATFORM_REPLACED_SOURCES)
+    list(REMOVE_ITEM PROJECT_SOURCES ${PLATFORM_REPLACED_SOURCES})
+endif ()
+
 set(PROXOR_GUI_TARGET proxor)
 
 # Qt exe
@@ -371,6 +382,18 @@ if (APPLE)
             MACOSX_BUNDLE_BUNDLE_VERSION "${NKR_VERSION}"
             MACOSX_BUNDLE_ICON_FILE "proxor.icns"
     )
+    # Location usage strings: macOS hides the Wi-Fi network name unless the app is authorized for
+    # Location Services (phase 51, On-Demand). Idempotent, re-applied after every link.
+    set(PROXOR_LOCATION_USAGE "Proxor reads the name of the Wi-Fi network you are connected to so On-Demand and per-network host rules can work. The name never leaves this Mac.")
+    set(PROXOR_LOCAL_NETWORK_USAGE "Proxor connects to servers and local proxy tools on your network, and can reach devices on your local network when your rules need it.")
+    # The template-generated Info.plist can be read-only (copied from a read-only source), so make it writable first.
+    add_custom_command(TARGET ${PROXOR_GUI_TARGET} POST_BUILD
+            COMMAND /bin/chmod u+w "$<TARGET_BUNDLE_CONTENT_DIR:${PROXOR_GUI_TARGET}>/Info.plist"
+            COMMAND /usr/bin/plutil -replace NSLocationWhenInUseUsageDescription -string "${PROXOR_LOCATION_USAGE}" "$<TARGET_BUNDLE_CONTENT_DIR:${PROXOR_GUI_TARGET}>/Info.plist"
+            COMMAND /usr/bin/plutil -replace NSLocationUsageDescription -string "${PROXOR_LOCATION_USAGE}" "$<TARGET_BUNDLE_CONTENT_DIR:${PROXOR_GUI_TARGET}>/Info.plist"
+            COMMAND /usr/bin/plutil -replace NSLocalNetworkUsageDescription -string "${PROXOR_LOCAL_NETWORK_USAGE}" "$<TARGET_BUNDLE_CONTENT_DIR:${PROXOR_GUI_TARGET}>/Info.plist"
+            COMMAND /usr/bin/plutil -replace NSBonjourServices -json "[\"_proxor-probe._tcp\"]" "$<TARGET_BUNDLE_CONTENT_DIR:${PROXOR_GUI_TARGET}>/Info.plist"
+            VERBATIM)
 endif ()
 
 # Target Link

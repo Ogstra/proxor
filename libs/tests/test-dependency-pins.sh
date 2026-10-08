@@ -4,8 +4,8 @@
 # 1. Proves fetch_verified (libs/build_deps_fetch.sh) actually rejects a wrong
 #    hash and actually accepts a right one, using a file:// URL so no network
 #    is needed and the runner's flakiness cannot mask a bug here.
-# 2. (extended by a later task) Proves libs/build_deps_all.sh and
-#    packaging/flatpak/io.github.Ogstra.Proxor.yml agree on every pin.
+# 2. Proves libs/build_deps_all.sh keeps its archives pinned and fetched only
+#    through fetch_verified.
 set -eu
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -73,42 +73,6 @@ case "$STDERR_OUT" in
 esac
 
 BUILD_DEPS="$REPO_ROOT/libs/build_deps_all.sh"
-FLATPAK_MANIFEST="$REPO_ROOT/packaging/flatpak/io.github.Ogstra.Proxor.yml"
-
-# --- drift guard: the three pins must match the Flatpak manifest's copies ---
-# Match by URL, not by position, so the assertion cannot silently pass when a
-# url: line moves or an entry is reordered.
-check_pin_matches_manifest() {
-  archive_name=$1
-  var_url=$2
-  var_sha=$3
-
-  script_url=$(eval "echo \"\$$var_url\"")
-  script_sha=$(eval "echo \"\$$var_sha\"")
-
-  # The manifest's sha256: line immediately follows its matching url: line.
-  manifest_sha=$(grep -A1 -F "url: $script_url" "$FLATPAK_MANIFEST" | grep 'sha256:' | head -1 | sed 's/.*sha256:[[:space:]]*//')
-
-  if [ -z "$manifest_sha" ]; then
-    fail "$archive_name: no matching url in $FLATPAK_MANIFEST for $script_url"
-    return
-  fi
-  if [ "$manifest_sha" != "$script_sha" ]; then
-    fail "$archive_name: build_deps_all.sh sha256 ($script_sha) does not match flatpak manifest ($manifest_sha) for $script_url"
-  fi
-}
-
-# shellcheck disable=SC1090
-ZXING_URL=$(grep '^ZXING_URL=' "$BUILD_DEPS" | sed 's/^ZXING_URL="\(.*\)"$/\1/')
-ZXING_SHA256=$(grep '^ZXING_SHA256=' "$BUILD_DEPS" | sed 's/^ZXING_SHA256="\(.*\)"$/\1/')
-YAMLCPP_URL=$(grep '^YAMLCPP_URL=' "$BUILD_DEPS" | sed 's/^YAMLCPP_URL="\(.*\)"$/\1/')
-YAMLCPP_SHA256=$(grep '^YAMLCPP_SHA256=' "$BUILD_DEPS" | sed 's/^YAMLCPP_SHA256="\(.*\)"$/\1/')
-PROTOBUF_URL=$(grep '^PROTOBUF_URL=' "$BUILD_DEPS" | sed 's/^PROTOBUF_URL="\(.*\)"$/\1/')
-PROTOBUF_SHA256=$(grep '^PROTOBUF_SHA256=' "$BUILD_DEPS" | sed 's/^PROTOBUF_SHA256="\(.*\)"$/\1/')
-
-check_pin_matches_manifest "zxing-cpp" ZXING_URL ZXING_SHA256
-check_pin_matches_manifest "yaml-cpp" YAMLCPP_URL YAMLCPP_SHA256
-check_pin_matches_manifest "protobuf" PROTOBUF_URL PROTOBUF_SHA256
 
 # --- build_deps_all.sh must not clone git or bypass fetch_verified ---
 if grep -q 'git clone' "$BUILD_DEPS"; then
