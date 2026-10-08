@@ -22,4 +22,11 @@ in_macos_range 'PrereleaseSettingNote(' "$repo_root/src/ui/dialog_basic_settings
 # The non-macOS path keeps the original line.
 grep -qF 'request.set_check_pre_release(ProxorGui::dataStore->check_include_pre);' "$repo_root/src/ui/mainwindow_grpc.cpp" \
   || fail "mainwindow_grpc.cpp lost the original set_check_pre_release line"
+# Intel: the core and the two-architecture cask agree on the x86_64 asset; render and bump know about it.
+two="$repo_root/packaging/homebrew/proxor-two-arch.rb.in"
+grep -qF '"-macos-x86_64.zip"' "$go_file" || fail "update.go must resolve the -macos-x86_64.zip asset"
+grep -E '^[[:space:]]*url ' "$two" | grep -qF -- '-macos-#{arch}.zip"' || fail "the two-architecture cask url must end with -macos-#{arch}.zip"
+grep -qF 'intel: "x86_64"' "$two" || fail "the two-architecture cask must map intel to x86_64"
+grep -qF -- '--sha256-intel' "$repo_root/packaging/homebrew/render-cask.sh" || fail "render-cask.sh must accept --sha256-intel"
+grep -qF 'macos-x86_64.zip' "$repo_root/packaging/homebrew/bump-tap.sh" || fail "bump-tap.sh must look for the macos-x86_64.zip asset"
 echo "mac_update: OK"

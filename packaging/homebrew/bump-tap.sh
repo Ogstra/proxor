@@ -59,6 +59,29 @@ if [ "$expected" != "$actual" ]; then
   exit 1
 fi
 
+# The Intel zip is optional: only a release whose SHA256SUMS lists it gets a two-architecture cask.
+intel_zip="proxor-$version-macos-x86_64.zip"
+intel_expected="$(awk -v f="$intel_zip" '$2 == f || $2 == "./" f || $2 == "*" f {print $1}' "$work/assets/SHA256SUMS")"
+intel_args=()
+if [ -n "$intel_expected" ]; then
+  if [ "$(printf '%s\n' "$intel_expected" | wc -l | tr -d ' ')" != 1 ]; then
+    echo "SHA256SUMS has more than one entry for $intel_zip" >&2
+    exit 1
+  fi
+  if [ -n "$assets_dir" ]; then
+    cp "$assets_dir/$intel_zip" "$work/assets/"
+  else
+    gh release download "$tag" --repo "${GITHUB_REPOSITORY:-Ogstra/proxor}" \
+      --pattern "$intel_zip" --dir "$work/assets" --clobber
+  fi
+  intel_actual="$(shasum -a 256 "$work/assets/$intel_zip" | awk '{print $1}')"
+  if [ "$intel_expected" != "$intel_actual" ]; then
+    echo "checksum mismatch for $intel_zip: SHA256SUMS says $intel_expected, the asset is $intel_actual" >&2
+    exit 1
+  fi
+  intel_args=(--sha256-intel "$intel_actual")
+fi
+
 # The tap is public: an anonymous clone works and keeps the token off the command line.
 rm -rf "$work/tap"
 git clone -q "$tap_url" "$work/tap"
@@ -72,7 +95,8 @@ if [ -f "$work/tap/Casks/proxor.rb" ]; then
   fi
 fi
 
-"$here/render-cask.sh" --version "$version" --sha256 "$actual" --output "$work/tap/Casks"
+# bash 3.2 + set -u: an empty array must not be expanded bare.
+"$here/render-cask.sh" --version "$version" --sha256 "$actual" ${intel_args[@]+"${intel_args[@]}"} --output "$work/tap/Casks"
 
 cd "$work/tap"
 if [ -z "$(git status --porcelain)" ]; then
