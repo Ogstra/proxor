@@ -119,6 +119,7 @@ WakeStep WakeCoordinator::step(const WakeObservation &o) {
 
 bool WakeCoordinator::active() const { return active_; }
 void WakeCoordinator::cancel() { active_ = false; }
+void WakeCoordinator::dropRestore() { snapshot_ = WakeSnapshot{}; }
 WakeSnapshot WakeCoordinator::snapshot() const { return snapshot_; }
 WakeSource WakeCoordinator::source() const { return source_; }
 

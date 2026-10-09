@@ -163,6 +163,8 @@ private slots:
 
     void on_menu_scan_qr_triggered();
 
+    void on_menu_scan_qr_camera_triggered();
+
     void on_menu_scan_qr_image_triggered();
 
     void on_menu_scan_qr_clipboard_triggered();
@@ -207,8 +209,7 @@ private:
     QMenu *mac_tray_menu = nullptr;
     QString mac_tun_failure_reason;
     bool mac_spmode_restoring = false;
-    bool mac_screen_capture_requested = false;
-    bool macScreenCaptureReadyOrExplain();
+    bool macScreenCaptureReady();
     QTimer *mac_tun_ready_timer = nullptr;
     bool mac_stop_keeps_remembered_profile = false;
     void macInstallHelperThen(const QString &feature, MacHelperEnableAction action, std::function<void()> onReady);
@@ -295,11 +296,14 @@ private:
     void wakeOnSleepEvent(bool sleeping);
     void wakeDetected(ProxorPlatform::WakeSource source);
     void wakeResetCoreNetwork();
+    void wakeDropRestore() { wake_coord.dropRestore(); } // a deliberate Stop must survive a wake that is still running
     void wakeRunStep();
     void wakeSubsStep();
     bool wakeOwnsSubscriptions() const;
     bool wakeBlocked() const;
     ProxorPlatform::WakeSnapshot wakeSnapshotNow() const;
+#else
+    void wakeDropRestore() {} // Windows has no wake coordinator
 #endif
     QString auto_start_consumed_ssid;
     QString traffic_update_cache;

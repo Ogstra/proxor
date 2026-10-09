@@ -6,7 +6,7 @@ mm="$repo_root/src/sys/macos/MacScreenCapture.mm"
 pol="$repo_root/src/platform/QrScanPolicy.cpp"
 fail() { echo "mac_qr.sh: $1" >&2; exit 1; }
 # Both macOS calls must sit inside #ifdef Q_OS_MACOS ranges of mainwindow.cpp.
-for pat in 'macScreenCaptureReadyOrExplain()' 'DecideMacScreenScan('; do
+for pat in 'macScreenCaptureReady()' 'DecideMacScreenScan('; do
   n=$(awk '/^#ifdef Q_OS_MACOS/{m=1} m&&index($0,p){c++} /^#(else|endif)/{m=0} END{print c+0}' p="$pat" "$mw")
   [ "$n" -ge 1 ] || fail "mainwindow.cpp: $pat not inside an #ifdef Q_OS_MACOS range"
 done

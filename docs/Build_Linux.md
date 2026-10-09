@@ -19,6 +19,7 @@ built or published, because the Flatpak sandbox cannot run Tun mode.
 - Ninja
 - A C++17 compiler
 - Qt 5.12, Qt 5.15, or a compatible Qt 6 setup
+- Optional: Qt 6 Multimedia (`qt6-multimedia-dev`, `qt6-qtmultimedia-devel`, `qt6-multimedia`). With it, Proxor can add profiles from a QR code shown to the camera; without it the menu entry is hidden.
 - Bash
 
 Optional in-tree native dependencies can be built from `libs/build_deps_all.sh` if your distribution packages are missing or unsuitable.

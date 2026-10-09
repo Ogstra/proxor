@@ -24,6 +24,10 @@ set(PLATFORM_SOURCES
     src/sys/macos/MacLoginItem.mm
     src/sys/macos/MacScreenCapture.h
     src/sys/macos/MacScreenCapture.mm
+    src/sys/macos/MacCamera.h
+    src/sys/macos/MacCamera.mm
+    src/ui/dialog_scan_camera.h
+    src/ui/dialog_scan_camera.cpp
     src/sys/wifi/WifiBackendMac.mm
     src/sys/wifi/WifiPermissionMac.mm
     src/sys/macos/MacLocalNetwork.h
@@ -47,8 +51,11 @@ find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
 find_library(NETWORK_FRAMEWORK Network REQUIRED)
 find_library(SERVICE_MANAGEMENT_FRAMEWORK ServiceManagement REQUIRED)
 find_library(CORE_GRAPHICS_FRAMEWORK CoreGraphics REQUIRED)
-set_source_files_properties(src/sys/wifi/WifiBackendMac.mm src/sys/wifi/WifiPermissionMac.mm src/sys/macos/MacLoginItem.mm src/sys/macos/MacScreenCapture.mm src/sys/macos/MacSleepWake.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
-set(PLATFORM_LIBRARIES ${CORE_FOUNDATION_FRAMEWORK} ${CORE_SERVICES_FRAMEWORK} ${APPKIT_FRAMEWORK} ${COREWLAN_FRAMEWORK} ${CORELOCATION_FRAMEWORK} ${FOUNDATION_FRAMEWORK} ${SERVICE_MANAGEMENT_FRAMEWORK} ${CORE_GRAPHICS_FRAMEWORK} ${NETWORK_FRAMEWORK})
+find_library(AV_FOUNDATION_FRAMEWORK AVFoundation REQUIRED)
+find_library(CORE_MEDIA_FRAMEWORK CoreMedia REQUIRED)
+find_library(CORE_VIDEO_FRAMEWORK CoreVideo REQUIRED)
+set_source_files_properties(src/sys/wifi/WifiBackendMac.mm src/sys/wifi/WifiPermissionMac.mm src/sys/macos/MacLoginItem.mm src/sys/macos/MacScreenCapture.mm src/sys/macos/MacCamera.mm src/sys/macos/MacSleepWake.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+set(PLATFORM_LIBRARIES ${CORE_FOUNDATION_FRAMEWORK} ${CORE_SERVICES_FRAMEWORK} ${APPKIT_FRAMEWORK} ${COREWLAN_FRAMEWORK} ${CORELOCATION_FRAMEWORK} ${FOUNDATION_FRAMEWORK} ${SERVICE_MANAGEMENT_FRAMEWORK} ${CORE_GRAPHICS_FRAMEWORK} ${NETWORK_FRAMEWORK} ${AV_FOUNDATION_FRAMEWORK} ${CORE_MEDIA_FRAMEWORK} ${CORE_VIDEO_FRAMEWORK})
 # Keep user config out of the signed bundle (Throne: NKR_PACKAGE_MACOS -> NKR_CPP_USE_APPDATA).
 add_compile_definitions(NKR_CPP_USE_APPDATA)
 add_link_options(-Wl,-dead_strip)

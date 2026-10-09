@@ -55,7 +55,7 @@ jobs:
           # building it from the published archive exactly as a user's helper would.
           cat > "$work/publish.sh" <<EOF
           set -eu
-          pacman -Syu --noconfirm --needed base-devel cmake ninja go namcap git openssh protobuf qt6-base qt6-svg yaml-cpp zxing-cpp hicolor-icon-theme
+          pacman -Syu --noconfirm --needed base-devel cmake ninja go namcap git openssh protobuf qt6-base qt6-svg qt6-multimedia qt6-multimedia-ffmpeg yaml-cpp zxing-cpp hicolor-icon-theme
           useradd -m builder
           cp -a /checkout/packaging /work/packaging
           mkdir -p /work/recipe

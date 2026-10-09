@@ -33,6 +33,10 @@
 #include "platform/PlatformCapabilitiesApp.hpp"
 #include "platform/HotkeyReport.hpp"
 #include "platform/QrScanPolicy.hpp"
+#if (defined(Q_OS_MACOS) || defined(NKR_QT_CAMERA)) && !defined(NKR_NO_ZXING)
+#define NKR_CAMERA_SCAN
+#include "ui/dialog_scan_camera.h"
+#endif
 #include "platform/QrImageDecode.hpp"
 #include "platform/LinuxSystemProxyPlan.hpp"
 #include "platform/TrayPolicy.hpp"
@@ -534,7 +538,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 #endif
     //
     connect(ui->menu_start, &QAction::triggered, this, [=]() { proxor_start(); });
-    connect(ui->menu_stop, &QAction::triggered, this, [=]() { proxor_stop(); });
+    connect(ui->menu_stop, &QAction::triggered, this, [=]() { wakeDropRestore(); proxor_stop(); });
     ui->tabWidget->tabBar()->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(ui->tabWidget->tabBar(), &QTabBar::customContextMenuRequested, this, [=](const QPoint &pos) {
         auto *tabBar = ui->tabWidget->tabBar();
@@ -1172,6 +1176,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         proxor_set_spmode_vpn(false);
     });
     connect(ui->menu_qr, &QAction::triggered, this, [=]() { display_qr_link(false); });
+#ifndef NKR_CAMERA_SCAN
+    ui->menu_scan_qr_camera->setVisible(false); // this build has no camera support
+#endif
 #ifdef NKR_NO_ZXING
     // on_menu_scan_qr_triggered needs the barcode reader this build does not link.
     ui->menu_scan_qr->setVisible(false);
@@ -1750,6 +1757,7 @@ bool MainWindow::applyOnDemandForSsid(const QString &ssid) {
     } else {
         auto_start_consumed_ssid.clear();
         if (started_via_ssid_trigger && ProxorGui::dataStore->started_id >= 0) {
+            wakeDropRestore();
             MW_show_log(tr("[On-Demand] Non-trigger SSID \"%1\" — stopping proxy").arg(ssid));
             proxor_stop(false, false);
             return true;
@@ -3386,6 +3394,18 @@ void MainWindow::importQrFromImage(const QImage &image, ProxorPlatform::QrSource
     ProxorGui_sub::groupUpdater->AsyncUpdate(text);
 }
 
+void MainWindow::on_menu_scan_qr_camera_triggered() {
+#ifdef NKR_CAMERA_SCAN
+    DialogScanCamera dialog(this);
+    if (dialog.exec() != QDialog::Accepted) {
+        if (!dialog.failure().isEmpty()) show_log_impl(tr("Scan QR code with camera: %1.").arg(dialog.failure()));
+        return;
+    }
+    show_log_impl("QR Code Result:\n" + dialog.text());
+    ProxorGui_sub::groupUpdater->AsyncUpdate(dialog.text());
+#endif
+}
+
 void MainWindow::on_menu_scan_qr_image_triggered() {
     const auto path = QFileDialog::getOpenFileName(this, tr("Select an image with a QR code"), QString(),
                                                    tr("Images (*.png *.jpg *.jpeg *.bmp *.gif *.webp)"));
@@ -3404,29 +3424,13 @@ void MainWindow::on_menu_scan_qr_clipboard_triggered() {
 
 #ifdef Q_OS_MACOS
 // Screen Recording is checked before any capture: without it macOS returns only the wallpaper (phase 53, MAC-QR).
-bool MainWindow::macScreenCaptureReadyOrExplain() {
+// macOS shows its own prompt, so Proxor adds no dialog of its own; the request is repeated on every attempt.
+bool MainWindow::macScreenCaptureReady() {
     using namespace ProxorPlatform;
-    const bool granted = ProxorMac::ScreenCapturePreflight();
-    const auto d = DecideMacScreenScan(granted, mac_screen_capture_requested);
+    const auto d = DecideMacScreenScan(ProxorMac::ScreenCapturePreflight(), false);
     if (d.capture) return true;
-    show_log_impl(tr("Scan QR code from screen: the Screen Recording permission is missing (preflight=false)."));
-    if (d.requestAccess) {
-        mac_screen_capture_requested = true;
-        ProxorMac::ScreenCaptureRequest(); // macOS shows its own prompt the first time
-    }
-    QMessageBox box(QMessageBox::Information, software_name, MacScreenRecordingMessage(), QMessageBox::Close, this);
-    auto *settingsBtn = box.addButton(tr("Open System Settings"), QMessageBox::ActionRole);
-    auto *fileBtn = box.addButton(tr("Choose Image File..."), QMessageBox::ActionRole);
-    auto *clipBtn = box.addButton(tr("Use Clipboard Image"), QMessageBox::ActionRole);
-    box.exec();
-    if (box.clickedButton() == settingsBtn) {
-        if (!ProxorMac::OpenScreenRecordingSettings())
-            MessageBoxWarning(software_name, tr("Open System Settings > Privacy & Security > Screen & System Audio Recording and allow Proxor."));
-    } else if (box.clickedButton() == fileBtn) {
-        on_menu_scan_qr_image_triggered();
-    } else if (box.clickedButton() == clipBtn) {
-        on_menu_scan_qr_clipboard_triggered();
-    }
+    show_log_impl(tr("Scan QR code from screen: the Screen Recording permission is missing."));
+    ProxorMac::ScreenCaptureRequest();
     return false;
 }
 
@@ -3435,7 +3439,7 @@ void MainWindow::on_menu_scan_qr_triggered() {
 #ifndef NKR_NO_ZXING
     using namespace ProxorPlatform;
 #ifdef Q_OS_MACOS
-    if (!macScreenCaptureReadyOrExplain()) return;
+    if (!macScreenCaptureReady()) return;
     const CapabilityStatus cap{}; // permission granted: a miss is a real "not found"
 #else
     const auto cap = CurrentCapability(Capability::ScreenQrCapture);
@@ -3508,7 +3512,7 @@ void MainWindow::on_menu_scan_qr_triggered() {
 
 #ifdef Q_OS_MACOS
     if (!anyImage) { // preflight said granted but the grab is empty: still the permission, not "not found"
-        MessageBoxInfo(software_name, MacScreenRecordingMessage());
+        show_log_impl(tr("Scan QR code from screen: the Screen Recording permission is missing."));
         return;
     }
 #endif
@@ -3710,6 +3714,7 @@ void MainWindow::on_toolButton_toggle_proxy_clicked() {
     // The button shows "Stop" while a start is pending, so it must cancel that start instead of
     // asking for another one.
     if (ProxorGui::dataStore->started_id >= 0 || start_pending) {
+        wakeDropRestore();
         proxor_stop();
         return;
     }

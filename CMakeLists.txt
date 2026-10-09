@@ -6,7 +6,7 @@ if (POLICY CMP0077)
     cmake_policy(SET CMP0077 NEW)
 endif ()
 
-project(proxor VERSION 1.6.15 LANGUAGES CXX)
+project(proxor VERSION 1.6.16 LANGUAGES CXX)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(PROXOR_SRC_DIR "${CMAKE_SOURCE_DIR}/src")
@@ -165,6 +165,22 @@ if (DBG_CMAKE)
     print_target_properties(ZXing::ZXing)
     set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CMAKE_COMMAND} -E time")
     set_property(GLOBAL PROPERTY RULE_LAUNCH_LINK "${CMAKE_COMMAND} -E time")
+endif ()
+
+# Camera QR scan: AVFoundation on macOS (listed in macos.cmake); Qt Multimedia elsewhere, only when the
+# build has it. Without Qt Multimedia the menu entry is hidden and nothing else changes.
+if (NOT APPLE)
+    find_package(Qt${QT_VERSION_MAJOR} QUIET COMPONENTS Multimedia)
+    if (Qt${QT_VERSION_MAJOR}Multimedia_FOUND)
+        list(APPEND PLATFORM_SOURCES
+                src/sys/camera/QtCameraCapture.h src/sys/camera/QtCameraCapture.cpp
+                src/ui/dialog_scan_camera.h src/ui/dialog_scan_camera.cpp)
+        list(APPEND PLATFORM_LIBRARIES Qt${QT_VERSION_MAJOR}::Multimedia)
+        nkr_add_compile_definitions(NKR_QT_CAMERA)
+        message(STATUS "Camera QR scan: Qt Multimedia")
+    else ()
+        message(STATUS "Camera QR scan: off (Qt Multimedia not found)")
+    endif ()
 endif ()
 
 # Sources
@@ -385,6 +401,7 @@ if (APPLE)
     # Location usage strings: macOS hides the Wi-Fi network name unless the app is authorized for
     # Location Services (phase 51, On-Demand). Idempotent, re-applied after every link.
     set(PROXOR_LOCATION_USAGE "Proxor reads the name of the Wi-Fi network you are connected to so On-Demand and per-network host rules can work. The name never leaves this Mac.")
+    set(PROXOR_CAMERA_USAGE "Proxor reads QR codes shown to the camera to add profiles and subscriptions. Nothing is recorded or kept.")
     set(PROXOR_LOCAL_NETWORK_USAGE "Proxor connects to servers and local proxy tools on your network, and can reach devices on your local network when your rules need it.")
     # The template-generated Info.plist can be read-only (copied from a read-only source), so make it writable first.
     add_custom_command(TARGET ${PROXOR_GUI_TARGET} POST_BUILD
@@ -392,6 +409,7 @@ if (APPLE)
             COMMAND /usr/bin/plutil -replace NSLocationWhenInUseUsageDescription -string "${PROXOR_LOCATION_USAGE}" "$<TARGET_BUNDLE_CONTENT_DIR:${PROXOR_GUI_TARGET}>/Info.plist"
             COMMAND /usr/bin/plutil -replace NSLocationUsageDescription -string "${PROXOR_LOCATION_USAGE}" "$<TARGET_BUNDLE_CONTENT_DIR:${PROXOR_GUI_TARGET}>/Info.plist"
             COMMAND /usr/bin/plutil -replace NSLocalNetworkUsageDescription -string "${PROXOR_LOCAL_NETWORK_USAGE}" "$<TARGET_BUNDLE_CONTENT_DIR:${PROXOR_GUI_TARGET}>/Info.plist"
+            COMMAND /usr/bin/plutil -replace NSCameraUsageDescription -string "${PROXOR_CAMERA_USAGE}" "$<TARGET_BUNDLE_CONTENT_DIR:${PROXOR_GUI_TARGET}>/Info.plist"
             COMMAND /usr/bin/plutil -replace NSBonjourServices -json "[\"_proxor-probe._tcp\"]" "$<TARGET_BUNDLE_CONTENT_DIR:${PROXOR_GUI_TARGET}>/Info.plist"
             VERBATIM)
 endif ()

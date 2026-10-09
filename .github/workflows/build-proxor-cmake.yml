@@ -261,8 +261,9 @@ jobs:
           host: ${{ matrix.qt_host }}
           target: desktop
           arch: ${{ matrix.qt_arch }}
-          # No `modules:` -- Qt Svg is an essential module in Qt 6 and ships in the base
-          # install. Asking aqt for it fails with "packages ['qtsvg'] were not found".
+          # Qt Svg is an essential module in Qt 6 and ships in the base install; asking aqt for it
+          # fails with "packages ['qtsvg'] were not found". Qt Multimedia is an add-on module (camera QR scan).
+          modules: qtmultimedia
           # tools_opensslv3_x64 is Windows-only; Linux links the system OpenSSL.
           tools: ${{ matrix.qt_tools }}
           cache: true
@@ -331,6 +332,7 @@ jobs:
           host: linux
           target: desktop
           arch: linux_gcc_64
+          modules: qtmultimedia
           cache: true
       - name: Install AppImage tooling
         run: |
@@ -360,7 +362,7 @@ jobs:
         shell: bash
         env:
           QMAKE: ${{ env.QT_ROOT_DIR }}/bin/qmake
-          EXTRA_QT_PLUGINS: svg
+          EXTRA_QT_PLUGINS: svg;multimedia
         run: |
           export PATH="$PWD:$PATH"
           source libs/env_deploy.sh
@@ -556,6 +558,7 @@ jobs:
           host: windows
           target: desktop
           arch: win64_msvc2019_64
+          modules: qtmultimedia
           tools: tools_opensslv3_x64
           cache: true
       - name: Install MSVC compiler
@@ -698,7 +701,7 @@ jobs:
               export PATH="/opt/proxor-go/bin:$PATH"
               apt-get update
               apt-get install -y --no-install-recommends build-essential cmake ninja-build git unzip \
-                debhelper devscripts qt6-base-dev libqt6svg6-dev libqt6widgets6 libgl1-mesa-dev libyaml-cpp-dev \
+                debhelper devscripts qt6-base-dev libqt6svg6-dev qt6-multimedia-dev libqt6widgets6 libgl1-mesa-dev libyaml-cpp-dev \
                 libprotobuf-dev protobuf-compiler pkg-config curl ca-certificates
               go version
               /work/proxor-*/packaging/debian/build-deb.sh --source-root /work/proxor-*
@@ -742,7 +745,7 @@ jobs:
           set -euo pipefail; mkdir -p "$RUNNER_TEMP/rpm-work"
           cp source-input/proxor-*.tar.gz "$RUNNER_TEMP/rpm-work/"
           docker run --rm -v "$PWD:/driver:ro" -v "$RUNNER_TEMP/rpm-work:/work" -w /work fedora@sha256:43b29f65a41eb9c35e1cd5323e3bdf3b655c2357a9f4f1ff2f9c2798e5045d80 bash -ceu '
-            dnf -y install rpm-build cmake ninja-build gcc-c++ golang qt6-qtbase-devel qt6-qtsvg-devel yaml-cpp-devel zxing-cpp-devel protobuf-devel curl
+            dnf -y install rpm-build cmake ninja-build gcc-c++ golang qt6-qtbase-devel qt6-qtsvg-devel qt6-qtmultimedia-devel yaml-cpp-devel zxing-cpp-devel protobuf-devel curl
             cp -a /driver/packaging /work/packaging; /work/packaging/rpm/build-rpm.sh --source-archive /work/proxor-*.tar.gz
           '
       - name: Smoke installed Fedora RPM
@@ -797,7 +800,7 @@ jobs:
           cat > "$RUNNER_TEMP/render-recipe.sh" <<EOF
           set -eu
           export PATH="/opt/proxor-go/bin:\$PATH"
-          pacman -Syu --noconfirm --needed base-devel cmake ninja go namcap git protobuf qt6-base qt6-svg yaml-cpp zxing-cpp
+          pacman -Syu --noconfirm --needed base-devel cmake ninja go namcap git protobuf qt6-base qt6-svg qt6-multimedia qt6-multimedia-ffmpeg yaml-cpp zxing-cpp
           useradd -m builder
           cp -a /checkout/packaging /work/packaging
           mkdir /work/aur /work/aur-release
