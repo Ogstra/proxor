@@ -302,6 +302,8 @@ private:
     bool wakeOwnsSubscriptions() const;
     bool wakeBlocked() const;
     ProxorPlatform::WakeSnapshot wakeSnapshotNow() const;
+#else
+    void wakeDropRestore() {} // Windows has no wake coordinator
 #endif
     QString auto_start_consumed_ssid;
     QString traffic_update_cache;
