@@ -26,6 +26,10 @@
 #ifdef Q_OS_WIN
 #include "ui/dialog_update_available.h"
 #endif
+#ifdef Q_OS_MACOS
+#include "ui/dialog_update_available.h"
+#include <QSaveFile>
+#endif
 #include "platform/PlatformCapabilitiesApp.hpp"
 #include "platform/HotkeyReport.hpp"
 #include "platform/QrScanPolicy.hpp"
@@ -1114,6 +1118,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         ProxorGui_log::Write(ProxorGui_log::Level::Info, ProxorPlatform::ReopenLogLine());
         ActivateWindow(this);
     });
+    // Result of an in-place update that ran while Proxor was closed (phase 60).
+    QTimer::singleShot(0, this, [this] { macAppUpdateShowResult(); });
 #else
     tray->setIcon(Icon::GetTrayIcon(Icon::NONE));
     tray->setContextMenu(buildTrayMenu()); // dedicated tray menu (not the toolbar App menu)
@@ -2189,6 +2195,82 @@ void MainWindow::on_commitDataRequest() {
     qDebug() << "End of data save";
 }
 
+#ifdef Q_OS_MACOS
+ProxorPlatform::MacAppUpdateRoute MainWindow::macAppUpdateRoute(PackageMode mode) const {
+    const auto bundle = QDir::cleanPath(QCoreApplication::applicationDirPath() + QStringLiteral("/../.."));
+    const auto script = QDir::cleanPath(QDir(QCoreApplication::applicationDirPath())
+                                            .filePath(QString::fromLatin1(ProxorPlatform::kMacAppUpdateScriptFromMacOSDir)));
+    ProxorPlatform::MacAppUpdateProbe probe;
+    probe.macApp = mode == PackageMode::MacApp;
+    probe.bundlePath = bundle;
+    probe.parentWritable = QFileInfo(QFileInfo(bundle).absolutePath()).isWritable();
+    probe.bundleOwnedByUser = QFileInfo(bundle).ownerId() == ::getuid();
+    probe.scriptPresent = QFileInfo(script).isFile();
+    const auto route = ProxorPlatform::DecideMacAppUpdate(probe, ProxorPlatform::MacAppUpdateBuildCapabilities());
+    MW_show_log(QStringLiteral("macOS app update route: %1")
+                    .arg(route == ProxorPlatform::MacAppUpdateRoute::InPlace ? QStringLiteral("in place")
+                                                                              : QStringLiteral("manual")));
+    return route;
+}
+
+void MainWindow::macAppUpdateFailed(bool duringDownload, const QString &error, const QString &releaseUrl) {
+    MW_show_log(tr("Update failed: %1").arg(error));
+    ShowUpdateFailedDialog(this, duringDownload ? UpdateFailureStage::Download : UpdateFailureStage::Install, error,
+                           QStringLiteral(NKR_VERSION), releaseUrl);
+}
+
+void MainWindow::macAppUpdateStaged() {
+    const auto url = mac_app_update_release_url;
+    const auto zip = QDir(mac_app_update_zip_dir).filePath(staged_asset_name);
+    if (mac_app_update_route != ProxorPlatform::MacAppUpdateRoute::InPlace || !QFileInfo(zip).isFile()) {
+        macAppUpdateFailed(false, tr("the downloaded update is missing."), url);
+        return;
+    }
+    const auto bundle = QDir::cleanPath(QCoreApplication::applicationDirPath() + QStringLiteral("/../.."));
+    const auto script = QDir::cleanPath(QDir(QCoreApplication::applicationDirPath())
+                                            .filePath(QString::fromLatin1(ProxorPlatform::kMacAppUpdateScriptFromMacOSDir)));
+    const auto pid = QCoreApplication::applicationPid();
+    // The relauncher runs from a copy outside the bundle that it is about to replace.
+    const auto tempScript = QDir::temp().filePath(QStringLiteral("proxor-app-update-%1.sh").arg(pid));
+    QFile::remove(tempScript);
+    if (!QFile::copy(script, tempScript)) {
+        macAppUpdateFailed(false, tr("could not prepare the update installer."), url);
+        return;
+    }
+    const auto result = QDir::current().absoluteFilePath(QString::fromLatin1(ProxorPlatform::kMacAppUpdateResultFileName));
+    QFile::remove(result);
+    mac_app_update_args = ProxorPlatform::MacAppUpdateInstallArgs(
+        tempScript, pid, zip, bundle, result,
+        ProxorPlatform::MacAppUpdateRelaunchArgs(QCoreApplication::arguments()));
+    update_staged = true;
+    exit_reason = 4;
+    MW_show_log(tr("Update downloaded; Proxor restarts to install it."));
+    on_menu_exit_triggered();
+}
+
+void MainWindow::macAppUpdateShowResult() {
+    // Leftover copy of the relauncher from an earlier run.
+    const auto stale = QDir::temp().entryList({QStringLiteral("proxor-app-update-*.sh")}, QDir::Files);
+    for (const auto &name : stale) QFile::remove(QDir::temp().filePath(name));
+
+    const auto file = QDir::current().absoluteFilePath(QString::fromLatin1(ProxorPlatform::kMacAppUpdateResultFileName));
+    QFile f(file);
+    if (!f.exists()) return;
+    QString text;
+    if (f.open(QIODevice::ReadOnly)) {
+        text = QString::fromUtf8(f.readAll()).trimmed();
+        f.close();
+    }
+    QFile::remove(file);
+    const auto parsed = ProxorPlatform::ParseMacAppUpdateResult(text);
+    if (!parsed.present) return;
+    if (parsed.ok) {
+        MW_show_log(tr("Updated to %1.").arg(parsed.version));
+        return;
+    }
+    macAppUpdateFailed(false, parsed.message, QString());
+}
+#endif
 void MainWindow::onUpdateStaged() {
 #ifdef Q_OS_LINUX
     // The AppImage owns its own file and replaces it directly -- it must never reach
@@ -2236,6 +2318,12 @@ void MainWindow::onUpdateStaged() {
     // The updater is deliberately absent from the native Linux packages, and
     // the package tests assert its absence, so its presence is a runtime
     // fact and not an invariant: check before promising a restart into it.
+#ifdef Q_OS_MACOS
+    if (mac_app_update_route != ProxorPlatform::MacAppUpdateRoute::Guidance) {
+        macAppUpdateStaged();
+        return;
+    }
+#endif
     const auto launch = DecideUpdaterLaunch(ProxorGui::ProbeUpdaterLaunch());
     if (!launch.canLaunch) {
 #ifdef Q_OS_WIN
@@ -2298,6 +2386,20 @@ void MainWindow::on_menu_exit_triggered() {
     }
     //
     MF_release_runguard();
+#ifdef Q_OS_MACOS
+    if (exit_reason == 4) {
+        if (mac_app_update_args.isEmpty() || !QProcess::startDetached(QStringLiteral("/bin/bash"), mac_app_update_args)) {
+            // The installer could not be started: restart this untouched app and let it
+            // show the failure from the result file.
+            QSaveFile out(QDir::current().absoluteFilePath(QString::fromLatin1(ProxorPlatform::kMacAppUpdateResultFileName)));
+            if (out.open(QIODevice::WriteOnly)) {
+                out.write("failed start: could not start the update installer.\n");
+                out.commit();
+            }
+            exit_reason = 2;
+        }
+    }
+#endif
     if (exit_reason == 1) {
         // Final check before spawning: the updater is a runtime fact, not an
         // invariant, so don't quit on a promise of a restart that won't happen.

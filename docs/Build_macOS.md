@@ -116,7 +116,28 @@ service. macOS releases are prereleases, so expect rough edges and report them.
   (`/Applications/Proxor.app` or `~/Applications/Proxor.app` with the cask present in Caskroom)
   shows `brew upgrade --cask proxor` with a Copy button, and the hint to run `brew update` first if
   Homebrew says Proxor is already up to date. Any other copy shows the zip name and the release
-  page, and says to quit Proxor and replace Proxor.app. There is no in-app download on macOS.
+  page, and says to quit Proxor and replace Proxor.app.
+- **In-app update.** A Proxor.app installed from the zip (not Homebrew) in a folder you can write
+  to, such as `~/Applications`, updates itself. The update dialog then shows
+  `Download and Restart`. Proxor downloads the zip into a hidden `.proxor-update` folder beside Proxor.app and
+  checks it against the release's `SHA256SUMS` (this proves it is the file the release published,
+  the same as the Windows in-app update). Proxor quits and
+  `Proxor.app/Contents/Resources/update/proxor-app-update.sh`, run from a temporary copy, waits for
+  it, extracts the new app with `ditto` beside the old one, checks the bundle id, the ad-hoc
+  signature, the architecture and the minimum macOS, clears the quarantine flag if present, swaps
+  the two apps with renames, starts the new one with the same arguments, and deletes the old copy
+  only once the new one is still running after a few seconds. Otherwise it puts the old app back
+  and starts it. If the Mac stops during the swap, the previous version stays beside the app as the
+  hidden `.Proxor.app.previous.<n>` folder; rename it back to Proxor.app.
+  If an update fails, the next start shows "Update failed" with the reason and a
+  `Download manually` button, and the installed version keeps working. If macOS blocks the swap of an app in
+  `/Applications`, this is the same failure dialog.
+  Still updated by hand: Homebrew (`brew upgrade --cask proxor`), a read-only folder (for example
+  `/Applications` for a standard user), a translocated copy, and every copy of Proxor 1.6.14 or
+  older (once). macOS ties permissions such as Screen Recording, Location and Local Network to the
+  ad-hoc signature, so grant them again after an update (as after `brew upgrade`). The Tun and
+  System Proxy service keeps working after an update; if the new version needs a newer service,
+  Proxor asks to update it (administrator password) the next time Tun or System Proxy is turned on.
 - **Scan QR code from screen.** Needs the Screen Recording permission. The first scan makes macOS
   ask for it; if it is not granted Proxor says so and offers a button that opens System Settings >
   Privacy & Security > Screen & System Audio Recording (plus the image file and clipboard
@@ -133,9 +154,6 @@ service. macOS releases are prereleases, so expect rough edges and report them.
 
 Does NOT work yet on macOS:
 
-- macOS in-app self-update does NOT work yet: Proxor is ad-hoc signed and not notarized, and a
-  running app cannot replace its own signed bundle; the dialog gives the
-  `brew upgrade --cask proxor` or zip instructions instead.
 - The System (native macOS) theme is not available yet; it is hidden and Fusion is used.
 - A DMG installer does not exist yet.
 
@@ -270,8 +288,8 @@ confirmed at runtime in the app log as `Install channel: homebrew` for the Homeb
 - The bundle is ad-hoc signed (`codesign --sign -`) and not notarized.
 - If the bundle is ever copied through a download, AirDrop, or a zip, clear the quarantine
   attribute first: `xattr -dr com.apple.quarantine Proxor.app`, or right-click and choose Open.
-- Not supported on macOS yet: a DMG installer and in-app self-update (updates go through
-  Homebrew, see [Updates](#desktop-integration)). The app icon exists (`proxor.icns`). Start with
+- Not supported on macOS yet: a DMG installer (see [Updates](#desktop-integration) for how
+  updates work). The app icon exists (`proxor.icns`). Start with
   system, Tun Mode and System Proxy are supported; see [Desktop integration](#desktop-integration)
   and [Tun and System Proxy](#tun-and-system-proxy).
 - The menu-bar icon is an app-owned `NSStatusItem`, not `QSystemTrayIcon`: Qt 6.11's tray icon

@@ -912,7 +912,7 @@ const file_libcore_proto_rawDesc = "" +
 	"\fUpdateAction\x12\t\n" +
 	"\x05Check\x10\x00\x12\f\n" +
 	"\bDownload\x10\x01\x12\x11\n" +
-	"\rQueryProgress\x10\x022\xce\x03\n" +
+	"\rQueryProgress\x10\x022\x87\x04\n" +
 	"\x0eLibcoreService\x12/\n" +
 	"\x04Exit\x12\x11.libcore.EmptyReq\x1a\x12.libcore.EmptyResp\"\x00\x123\n" +
 	"\x06Update\x12\x12.libcore.UpdateReq\x1a\x13.libcore.UpdateResp\"\x00\x128\n" +
@@ -922,7 +922,8 @@ const file_libcore_proto_rawDesc = "" +
 	"\x04Test\x12\x10.libcore.TestReq\x1a\x11.libcore.TestResp\"\x00\x12?\n" +
 	"\n" +
 	"QueryStats\x12\x16.libcore.QueryStatsReq\x1a\x17.libcore.QueryStatsResp\"\x00\x12D\n" +
-	"\x0fListConnections\x12\x11.libcore.EmptyReq\x1a\x1c.libcore.ListConnectionsResp\"\x00B\x11Z\x0fgrpc_server/genb\x06proto3"
+	"\x0fListConnections\x12\x11.libcore.EmptyReq\x1a\x1c.libcore.ListConnectionsResp\"\x00\x127\n" +
+	"\fResetNetwork\x12\x11.libcore.EmptyReq\x1a\x12.libcore.EmptyResp\"\x00B\x11Z\x0fgrpc_server/genb\x06proto3"
 
 var (
 	file_libcore_proto_rawDescOnce sync.Once
@@ -965,16 +966,18 @@ var file_libcore_proto_depIdxs = []int32{
 	6,  // 8: libcore.LibcoreService.Test:input_type -> libcore.TestReq
 	8,  // 9: libcore.LibcoreService.QueryStats:input_type -> libcore.QueryStatsReq
 	2,  // 10: libcore.LibcoreService.ListConnections:input_type -> libcore.EmptyReq
-	3,  // 11: libcore.LibcoreService.Exit:output_type -> libcore.EmptyResp
-	11, // 12: libcore.LibcoreService.Update:output_type -> libcore.UpdateResp
-	4,  // 13: libcore.LibcoreService.Validate:output_type -> libcore.ErrorResp
-	4,  // 14: libcore.LibcoreService.Start:output_type -> libcore.ErrorResp
-	4,  // 15: libcore.LibcoreService.Stop:output_type -> libcore.ErrorResp
-	7,  // 16: libcore.LibcoreService.Test:output_type -> libcore.TestResp
-	9,  // 17: libcore.LibcoreService.QueryStats:output_type -> libcore.QueryStatsResp
-	12, // 18: libcore.LibcoreService.ListConnections:output_type -> libcore.ListConnectionsResp
-	11, // [11:19] is the sub-list for method output_type
-	3,  // [3:11] is the sub-list for method input_type
+	2,  // 11: libcore.LibcoreService.ResetNetwork:input_type -> libcore.EmptyReq
+	3,  // 12: libcore.LibcoreService.Exit:output_type -> libcore.EmptyResp
+	11, // 13: libcore.LibcoreService.Update:output_type -> libcore.UpdateResp
+	4,  // 14: libcore.LibcoreService.Validate:output_type -> libcore.ErrorResp
+	4,  // 15: libcore.LibcoreService.Start:output_type -> libcore.ErrorResp
+	4,  // 16: libcore.LibcoreService.Stop:output_type -> libcore.ErrorResp
+	7,  // 17: libcore.LibcoreService.Test:output_type -> libcore.TestResp
+	9,  // 18: libcore.LibcoreService.QueryStats:output_type -> libcore.QueryStatsResp
+	12, // 19: libcore.LibcoreService.ListConnections:output_type -> libcore.ListConnectionsResp
+	3,  // 20: libcore.LibcoreService.ResetNetwork:output_type -> libcore.EmptyResp
+	12, // [12:21] is the sub-list for method output_type
+	3,  // [3:12] is the sub-list for method input_type
 	3,  // [3:3] is the sub-list for extension type_name
 	3,  // [3:3] is the sub-list for extension extendee
 	0,  // [0:3] is the sub-list for field type_name

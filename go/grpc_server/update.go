@@ -136,6 +136,22 @@ func selfUpdateRefusal(goos string) string {
 	return ""
 }
 
+// macAppNoDownloadDirRefusal is shown when the macos-app channel sends no staging directory.
+const macAppNoDownloadDirRefusal = "Proxor could not choose a folder for the update download. Download the new Proxor.app from the release page instead."
+
+// selfUpdateRefusalFor is selfUpdateRefusal for one Download request. On darwin only the macos-app
+// channel (a Proxor.app installed from the release zip, never Homebrew) may download, and only into
+// a directory it names. Every other case keeps selfUpdateRefusal's result.
+func selfUpdateRefusalFor(goos, channel, downloadDir string) string {
+	if goos == "darwin" && channel == "macos-app" {
+		if downloadDir == "" {
+			return macAppNoDownloadDirRefusal
+		}
+		return ""
+	}
+	return selfUpdateRefusal(goos)
+}
+
 // suffixesForChannel resolves the asset name suffix published for the channel the GUI
 // detected. Knowing a version exists is independent of being able to apply it, so this
 // resolves an asset even for channels the GUI will never call Download for (deb, rpm,
@@ -557,7 +573,7 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 		return ret, nil
 
 	case gen.UpdateAction_Download:
-		if msg := selfUpdateRefusal(updateGOOS); msg != "" {
+		if msg := selfUpdateRefusalFor(updateGOOS, in.Channel, in.DownloadDir); msg != "" {
 			ret.Error = msg
 			return ret, nil
 		}

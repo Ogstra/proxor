@@ -51,4 +51,11 @@ for s in 'macos-x86_64.zip' 'macOS 12' 'build_macos_intel.sh' 'PROXOR_MACOS_ARCH
   grep -qF -- "$s" "$doc" || fail "docs/Build_macOS.md must contain: $s"
 done
 if grep -qF 'is a universal binary' "$doc"; then fail "docs/Build_macOS.md must not say the Intel build is a universal binary"; fi
+for s in 'proxor-app-update.sh' '.proxor-update' 'Download and Restart' 'Download manually'; do
+  grep -qF -- "$s" "$doc" || fail "docs/Build_macOS.md must contain: $s"
+done
+for s in 'There is no in-app download on macOS' 'macOS in-app self-update does NOT work yet' 'a DMG installer and in-app self-update'; do
+  if grep -qF -- "$s" "$doc"; then fail "docs/Build_macOS.md must not contain: $s"; fi
+done
+grep -qF 'update-e2e-macos' "$repo_root/packaging/PUBLISHING.md" || fail "packaging/PUBLISHING.md must list update-e2e-macos"
 echo "mac_docs: OK"
