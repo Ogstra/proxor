@@ -537,7 +537,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 #endif
     //
     connect(ui->menu_start, &QAction::triggered, this, [=]() { proxor_start(); });
-    connect(ui->menu_stop, &QAction::triggered, this, [=]() { proxor_stop(); });
+    connect(ui->menu_stop, &QAction::triggered, this, [=]() { wakeDropRestore(); proxor_stop(); });
     ui->tabWidget->tabBar()->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(ui->tabWidget->tabBar(), &QTabBar::customContextMenuRequested, this, [=](const QPoint &pos) {
         auto *tabBar = ui->tabWidget->tabBar();
@@ -1756,6 +1756,7 @@ bool MainWindow::applyOnDemandForSsid(const QString &ssid) {
     } else {
         auto_start_consumed_ssid.clear();
         if (started_via_ssid_trigger && ProxorGui::dataStore->started_id >= 0) {
+            wakeDropRestore();
             MW_show_log(tr("[On-Demand] Non-trigger SSID \"%1\" — stopping proxy").arg(ssid));
             proxor_stop(false, false);
             return true;
@@ -3712,6 +3713,7 @@ void MainWindow::on_toolButton_toggle_proxy_clicked() {
     // The button shows "Stop" while a start is pending, so it must cancel that start instead of
     // asking for another one.
     if (ProxorGui::dataStore->started_id >= 0 || start_pending) {
+        wakeDropRestore();
         proxor_stop();
         return;
     }

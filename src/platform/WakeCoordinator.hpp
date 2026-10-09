@@ -49,6 +49,7 @@ public:
     WakeStep step(const WakeObservation &o);
     bool active() const;
     void cancel();
+    void dropRestore(); // the user or On-Demand stopped the profile on purpose: do not bring it (or its modes) back
     WakeSnapshot snapshot() const; // of the current or last run
     WakeSource source() const;     // of the current or last run
 

@@ -296,6 +296,7 @@ private:
     void wakeOnSleepEvent(bool sleeping);
     void wakeDetected(ProxorPlatform::WakeSource source);
     void wakeResetCoreNetwork();
+    void wakeDropRestore() { wake_coord.dropRestore(); } // a deliberate Stop must survive a wake that is still running
     void wakeRunStep();
     void wakeSubsStep();
     bool wakeOwnsSubscriptions() const;

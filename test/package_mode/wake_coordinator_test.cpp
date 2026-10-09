@@ -321,6 +321,19 @@ private slots:
         QCOMPARE(c.step(online(10)).delayMs, -1);
     }
 
+    void droppedRestoreDoesNotRestartTheProfile() {
+        WakeCoordinator c;
+        c.noteWake(WakeSource::Native, 0, prof(7));
+        c.dropRestore(); // e.g. On-Demand stopped the proxy on a non-trigger network during the wake
+        Run r = drive(c, 0, [](qint64 now) {
+            WakeObservation o = online(now);
+            o.coreRunning = false;
+            return o;
+        }, 60000);
+        QVERIFY(r.over);
+        for (const auto &s : r.steps) QVERIFY(s.action != WakeAction::RestartProfile);
+    }
+
     void modeRepair() {
         WakeModes none, sp, tun, both;
         sp.systemProxy = true;
