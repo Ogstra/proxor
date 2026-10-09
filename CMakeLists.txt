@@ -167,6 +167,22 @@ if (DBG_CMAKE)
     set_property(GLOBAL PROPERTY RULE_LAUNCH_LINK "${CMAKE_COMMAND} -E time")
 endif ()
 
+# Camera QR scan: AVFoundation on macOS (listed in macos.cmake); Qt Multimedia elsewhere, only when the
+# build has it. Without Qt Multimedia the menu entry is hidden and nothing else changes.
+if (NOT APPLE)
+    find_package(Qt${QT_VERSION_MAJOR} QUIET COMPONENTS Multimedia)
+    if (Qt${QT_VERSION_MAJOR}Multimedia_FOUND)
+        list(APPEND PLATFORM_SOURCES
+                src/sys/camera/QtCameraCapture.h src/sys/camera/QtCameraCapture.cpp
+                src/ui/dialog_scan_camera.h src/ui/dialog_scan_camera.cpp)
+        list(APPEND PLATFORM_LIBRARIES Qt${QT_VERSION_MAJOR}::Multimedia)
+        nkr_add_compile_definitions(NKR_QT_CAMERA)
+        message(STATUS "Camera QR scan: Qt Multimedia")
+    else ()
+        message(STATUS "Camera QR scan: off (Qt Multimedia not found)")
+    endif ()
+endif ()
+
 # Sources
 # Cross-platform capability and policy modules (phase 54+). One directory, globbed, so parallel work
 # adds files without editing this list.

@@ -26,8 +26,8 @@ set(PLATFORM_SOURCES
     src/sys/macos/MacScreenCapture.mm
     src/sys/macos/MacCamera.h
     src/sys/macos/MacCamera.mm
-    src/ui/mac/dialog_scan_camera.h
-    src/ui/mac/dialog_scan_camera.cpp
+    src/ui/dialog_scan_camera.h
+    src/ui/dialog_scan_camera.cpp
     src/sys/wifi/WifiBackendMac.mm
     src/sys/wifi/WifiPermissionMac.mm
     src/sys/macos/MacLocalNetwork.h

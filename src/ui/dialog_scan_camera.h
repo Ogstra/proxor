@@ -1,6 +1,7 @@
 #pragma once
 
-// macOS: live camera preview that closes as soon as a QR code is read. Listed only in cmake/macos/macos.cmake.
+// Live camera preview that closes as soon as a QR code is read. Listed in cmake/macos/macos.cmake, and in
+// CMakeLists.txt when Qt Multimedia is found (Windows, Linux).
 
 #include <QDialog>
 #include <QString>
@@ -9,6 +10,7 @@ class QLabel;
 class QImage;
 
 namespace ProxorMac { class CameraCapture; }
+namespace ProxorQt { class CameraCapture; }
 
 class DialogScanCamera : public QDialog {
     Q_OBJECT
@@ -23,7 +25,11 @@ private:
     void onFrame(const QImage &image);
 
     QLabel *preview;
+#ifdef Q_OS_MACOS
     ProxorMac::CameraCapture *camera;
+#else
+    ProxorQt::CameraCapture *camera;
+#endif
     qint64 lastDecodeMs = 0;
     QString decoded;
     QString failureReason;

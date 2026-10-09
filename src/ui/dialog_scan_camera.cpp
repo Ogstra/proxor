@@ -1,7 +1,11 @@
-#include "ui/mac/dialog_scan_camera.h"
+#include "ui/dialog_scan_camera.h"
 
 #include "platform/QrImageDecode.hpp"
+#ifdef Q_OS_MACOS
 #include "sys/macos/MacCamera.h"
+#else
+#include "sys/camera/QtCameraCapture.h"
+#endif
 
 #include <QDateTime>
 #include <QImage>
@@ -19,9 +23,14 @@ DialogScanCamera::DialogScanCamera(QWidget *parent) : QDialog(parent) {
     layout->setContentsMargins(0, 0, 0, 0);
     layout->addWidget(preview);
 
-    camera = new ProxorMac::CameraCapture(this);
-    connect(camera, &ProxorMac::CameraCapture::frame, this, &DialogScanCamera::onFrame);
-    connect(camera, &ProxorMac::CameraCapture::failed, this, [this](const QString &reason) {
+#ifdef Q_OS_MACOS
+    using Capture = ProxorMac::CameraCapture;
+#else
+    using Capture = ProxorQt::CameraCapture;
+#endif
+    camera = new Capture(this);
+    connect(camera, &Capture::frame, this, &DialogScanCamera::onFrame);
+    connect(camera, &Capture::failed, this, [this](const QString &reason) {
         failureReason = reason;
         reject();
     });

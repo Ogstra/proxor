@@ -33,8 +33,9 @@
 #include "platform/PlatformCapabilitiesApp.hpp"
 #include "platform/HotkeyReport.hpp"
 #include "platform/QrScanPolicy.hpp"
-#ifdef Q_OS_MACOS
-#include "ui/mac/dialog_scan_camera.h"
+#if (defined(Q_OS_MACOS) || defined(NKR_QT_CAMERA)) && !defined(NKR_NO_ZXING)
+#define NKR_CAMERA_SCAN
+#include "ui/dialog_scan_camera.h"
 #endif
 #include "platform/QrImageDecode.hpp"
 #include "platform/LinuxSystemProxyPlan.hpp"
@@ -1175,8 +1176,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         proxor_set_spmode_vpn(false);
     });
     connect(ui->menu_qr, &QAction::triggered, this, [=]() { display_qr_link(false); });
-#if defined(NKR_NO_ZXING) || !defined(Q_OS_MACOS)
-    ui->menu_scan_qr_camera->setVisible(false); // camera scanning exists on macOS only
+#ifndef NKR_CAMERA_SCAN
+    ui->menu_scan_qr_camera->setVisible(false); // this build has no camera support
 #endif
 #ifdef NKR_NO_ZXING
     // on_menu_scan_qr_triggered needs the barcode reader this build does not link.
@@ -3394,7 +3395,7 @@ void MainWindow::importQrFromImage(const QImage &image, ProxorPlatform::QrSource
 }
 
 void MainWindow::on_menu_scan_qr_camera_triggered() {
-#if defined(Q_OS_MACOS) && !defined(NKR_NO_ZXING)
+#ifdef NKR_CAMERA_SCAN
     DialogScanCamera dialog(this);
     if (dialog.exec() != QDialog::Accepted) {
         if (!dialog.failure().isEmpty()) show_log_impl(tr("Scan QR code with camera: %1.").arg(dialog.failure()));
