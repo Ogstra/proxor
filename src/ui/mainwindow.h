@@ -163,6 +163,8 @@ private slots:
 
     void on_menu_scan_qr_triggered();
 
+    void on_menu_scan_qr_camera_triggered();
+
     void on_menu_scan_qr_image_triggered();
 
     void on_menu_scan_qr_clipboard_triggered();
