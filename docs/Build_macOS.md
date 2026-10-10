@@ -44,8 +44,9 @@ zip, so it still works, but without Homebrew support. Without Homebrew, download
 Both switches (toolbar check boxes and App > Proxy Mode) work on macOS through a small Proxor
 service. macOS releases are prereleases, so expect rough edges and report them.
 
-- **How it works.** The first time you turn on Tun Mode or System Proxy, Proxor explains what it
-  will do and macOS asks for an administrator password once. This installs the Proxor service:
+- **How it works.** The first time you open Proxor, macOS asks for an administrator password once
+  to install the Proxor service (if you cancel, Proxor asks again when you turn on Tun Mode or
+  System Proxy). The service is:
   `/Library/LaunchDaemons/io.github.Ogstra.Proxor.helper.plist`,
   `/Library/PrivilegedHelperTools/io.github.Ogstra.Proxor.helper`, and a root-owned copy of
   `proxor_core`. After that Tun and System Proxy switch on and off without a password, including
@@ -72,19 +73,16 @@ service. macOS releases are prereleases, so expect rough edges and report them.
   touch them, and a quick Stop then Start does nothing in between. The switches respond
   immediately (the service works in the background). Quitting Proxor restores your proxy settings.
 - **Tun at launch.** When Tun (or System Proxy) is remembered and the service is missing, outdated
-  or does not accept this user yet, which is the case on the first launch and after every
-  `brew upgrade` (Homebrew removes the service), Proxor connects without Tun right away and then
+  or does not accept this user yet, Proxor connects without Tun right away and then
   asks once to install the service (one administrator password prompt). If you press Cancel, or
   the install fails, it stays connected without Tun and says so; Tun can be turned on later from
   the toolbar or from Settings > Tun settings. It asks at most once per launch, and asks again at
   the next launch. If the service IS installed but Tun cannot start at launch while it is
   remembered, Proxor does not connect until Tun works or you turn Tun Mode off ("Tun could not
   start: ... Turn off Tun Mode to connect without it.").
-- **Homebrew.** `brew uninstall --cask proxor` removes the service, and so does
-  `brew upgrade --cask proxor` (Homebrew runs the old version's uninstall steps on upgrade). Both
-  ask for your administrator password in the terminal, even if you never used Tun; this is an
-  accepted trade-off. After an upgrade, turning on Tun Mode or System Proxy asks for the
-  administrator password once more to reinstall the service. `--zap` also removes
+- **Homebrew.** The service stays across `brew upgrade --cask proxor` and `brew uninstall --cask
+  proxor`, so an upgrade does not ask for the administrator password again. `brew uninstall --zap
+  --cask proxor` (or Tun settings > Proxor service > Remove) takes it out, together with
   `/var/log/proxor-helper.log` and your preferences.
 - **Removing manually.** Tun settings > Proxor service > Remove (Tun Mode and System Proxy are turned
   off first), or `sudo launchctl bootout system/io.github.Ogstra.Proxor.helper` and then delete the
@@ -135,8 +133,9 @@ service. macOS releases are prereleases, so expect rough edges and report them.
   `/Applications` for a standard user), a translocated copy, and every copy of Proxor 1.6.14 or
   older (once). macOS ties permissions such as Screen Recording, Location and Local Network to the
   ad-hoc signature, so grant them again after an update (as after `brew upgrade`). The Tun and
-  System Proxy service keeps working after an update; if the new version needs a newer service,
-  Proxor asks to update it (administrator password) the next time Tun or System Proxy is turned on.
+  System Proxy service stays installed and keeps working after an update. Only a new service
+  protocol needs a newer service; then Proxor asks to update it (administrator password) the next
+  time Tun or System Proxy is turned on.
 - **Scan QR code from screen.** Needs the Screen Recording permission. The first scan makes macOS
   ask for it; if it is not granted Proxor says so and offers a button that opens System Settings >
   Privacy & Security > Screen & System Audio Recording (plus the image file and clipboard

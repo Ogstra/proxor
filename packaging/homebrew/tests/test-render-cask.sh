@@ -21,12 +21,12 @@ cask "proxor" do
   app "Proxor.app"
   postflight_steps do
     run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{appdir}}/Proxor.app"]
-  uninstall launchctl: "io.github.Ogstra.Proxor.helper",
-            quit:      "io.github.Ogstra.Proxor",
-              "/Library/Application Support/Proxor",
-              "/Library/LaunchDaemons/io.github.Ogstra.Proxor.helper.plist",
-              "/Library/PrivilegedHelperTools/io.github.Ogstra.Proxor.helper",
-  zap delete: "/var/log/proxor-helper.log",
+  uninstall quit: "io.github.Ogstra.Proxor"
+  zap launchctl: "io.github.Ogstra.Proxor.helper",
+        "/Library/Application Support/Proxor",
+        "/Library/LaunchDaemons/io.github.Ogstra.Proxor.helper.plist",
+        "/Library/PrivilegedHelperTools/io.github.Ogstra.Proxor.helper",
+        "/var/log/proxor-helper.log",
         "~/Library/LaunchAgents/io.github.Ogstra.Proxor.autostart.plist",
         "~/Library/Preferences/io.github.Ogstra.Proxor.plist",
         "~/Library/Preferences/proxor",
@@ -41,28 +41,24 @@ cmp "$cask" "$tmp/ok2/proxor.rb"
 
 ruby -c "$cask" >/dev/null
 
-# Helper removal stanzas: launchctl exactly once and before quit; delete paths inside the uninstall block.
+# The Proxor service must survive `brew upgrade` (Homebrew runs the uninstall block on upgrade): it is removed by zap only.
 if [ "$(grep -c 'launchctl:' "$cask")" != 1 ]; then
   echo 'FAIL: expected exactly one launchctl: directive' >&2; exit 1
 fi
-launchctl_line="$(grep -n 'launchctl:' "$cask" | cut -d: -f1)"
-quit_line="$(grep -n 'quit:' "$cask" | cut -d: -f1)"
-if [ "$launchctl_line" -ge "$quit_line" ]; then
-  echo 'FAIL: launchctl: must appear before quit:' >&2; exit 1
-fi
 uninstall_block="$(awk '/^  uninstall/{f=1} /^  zap/{f=0} f' "$cask")"
+zap_block="$(awk '/^  zap/{f=1} f' "$cask")"
+if grep -qE 'launchctl|delete|PrivilegedHelperTools|LaunchDaemons|Application Support' <<<"$uninstall_block"; then
+  echo 'FAIL: the uninstall block must not remove the Proxor service' >&2; exit 1
+fi
 for path in \
   "/Library/Application Support/Proxor" \
   "/Library/LaunchDaemons/io.github.Ogstra.Proxor.helper.plist" \
-  "/Library/PrivilegedHelperTools/io.github.Ogstra.Proxor.helper"; do
-  grep -qF -- "\"$path\"" <<<"$uninstall_block" || { echo "FAIL: uninstall block lacks delete path: $path" >&2; exit 1; }
+  "/Library/PrivilegedHelperTools/io.github.Ogstra.Proxor.helper" \
+  "~/Library/LaunchAgents/io.github.Ogstra.Proxor.autostart.plist"; do
+  grep -qF -- "\"$path\"" <<<"$zap_block" || { echo "FAIL: zap block lacks path: $path" >&2; exit 1; }
 done
-# The Start-with-system agent must survive `brew upgrade` (the uninstall block runs on upgrade): zap only.
-if grep -q 'io.github.Ogstra.Proxor.autostart' <<<"$uninstall_block"; then
-  echo 'FAIL: the uninstall block must not touch the autostart agent' >&2; exit 1
-fi
-if ! grep -q 'delete:' <<<"$uninstall_block"; then
-  echo 'FAIL: delete: missing from the uninstall block' >&2; exit 1
+if ! grep -q 'launchctl:' <<<"$zap_block"; then
+  echo 'FAIL: launchctl: missing from the zap block' >&2; exit 1
 fi
 
 n=0
