@@ -29,9 +29,6 @@ from the release page and extract its `proxor` folder over the install folder (`
    (`.github/workflows/validate-winget-release.yml`) and check the identifier collision.
 3. Review the rendered AUR `PKGBUILD` and `.SRCINFO` from the `release-recipes` artifact.
 
-The Flatpak bundle is deprecated and no longer built or published: the Flatpak sandbox cannot run
-Tun mode, so it was a proxy-only format.
-
 ## Publishing
 
 `.github/workflows/publish-packages.yml` performs the AUR push, the `microsoft/winget-pkgs`

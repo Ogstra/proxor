@@ -16,8 +16,7 @@ Intel Macs: a release may also carry `proxor-<version>-macos-x86_64.zip`, built 
 official Qt 6.7.2 (aqtinstall). It is Intel only (not a universal binary) and needs macOS 12
 (Monterey) or later. The Intel zip is optional for now: a release can be published without it, so
 check the release page. The `MACOS_INTEL_REQUIRED` switch in the workflow makes it required later.
-The Intel build was compiled and linked for macOS 12 during development, but nothing has been run
-on a real Intel Mac or on macOS 12 yet.
+The Intel build has been run on a real Intel Mac with macOS 12.
 
 ## Install with Homebrew
 
@@ -149,7 +148,7 @@ service. macOS releases are prereleases, so expect rough edges and report them.
 - **macOS 12 (Intel).** Start with system uses the same LaunchAgent. macOS 12 has no Login Items
   status API for it, so the LaunchAgent counts as enabled when the file exists and Settings never
   shows the "turned off in System Settings" note there. The "open Login Items" button opens
-  System Preferences > Users & Groups. This code path has not run on a real macOS 12.
+  System Preferences > Users & Groups.
 - **Theme.** See Notes: Fusion follows the macOS light/dark appearance; the System theme is hidden.
 
 Does NOT work yet on macOS:
