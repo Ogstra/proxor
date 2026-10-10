@@ -187,7 +187,7 @@ void ProxyListView::paintEvent(QPaintEvent *event) {
         hint.setPen(palette().color(QPalette::Disabled, QPalette::Text));
         hint.drawText(viewport()->rect().adjusted(16, 16, -16, -16),
                       Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap,
-                      tr("No profiles. Use Profiles > Add from Clipboard, or Add Subscription…"));
+                      tr("No profiles"));
     }
     if (m_dropIndicatorRow < 0) return;
 

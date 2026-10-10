@@ -415,7 +415,7 @@ QIcon makeToggleProxyIcon(const QColor &color, bool stopShape = false) {
         painter.setRenderHint(QPainter::Antialiasing, true);
         painter.setPen(QPen(color.darker(140), 1.5));
         painter.setBrush(color);
-        if (stopShape) painter.drawRoundedRect(QRectF(5, 5, 14, 14), 3, 3);
+        if (stopShape) painter.drawRoundedRect(QRectF(3, 3, 18, 18), 4, 4);
         else painter.drawEllipse(QRectF(3, 3, 18, 18));
         painter.end();
 
