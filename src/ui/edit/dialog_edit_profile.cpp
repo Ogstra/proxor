@@ -204,7 +204,7 @@ void DialogEditProfile::typeSelected(const QString &newType) {
     }
 
     if (!ent->EnsureHydrated()) {
-        MessageBoxWarning(newType, "Profile is not hydrated");
+        MessageBoxWarning(software_name, tr("This profile could not be loaded."));
         return;
     }
 
@@ -361,7 +361,7 @@ void DialogEditProfile::applySectionLayout() {
 
 bool DialogEditProfile::onEnd() {
     if (!ent->EnsureHydrated()) {
-        MessageBoxWarning(software_name, "Profile is not hydrated");
+        MessageBoxWarning(software_name, tr("This profile could not be loaded."));
         return false;
     }
     // bean

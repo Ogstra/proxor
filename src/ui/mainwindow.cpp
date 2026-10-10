@@ -3730,7 +3730,7 @@ void MainWindow::on_toolButton_toggle_proxy_clicked() {
             proxor_start(fallbackId);
             return;
         }
-        MessageBoxWarning(software_name, tr("Select at least one proxy in the Toggle column first."));
+        MessageBoxWarning(software_name, tr("Select a profile first."));
         return;
     }
 

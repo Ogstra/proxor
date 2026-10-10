@@ -194,7 +194,7 @@ void MainWindow::speedtest_profiles(const QList<std::shared_ptr<ProxorGui::Proxy
 
                     if (mode == libcore::TestMode::UrlTest || mode == libcore::FullTest || mode == libcore::HeadPing) {
                         if (!profile->EnsureHydrated()) {
-                            profile->full_test_report = tr("Profile is not hydrated");
+                            profile->full_test_report = tr("This profile could not be loaded.");
                             ProxorGui::profileManager->SaveProfile(profile);
                             continue;
                         }
@@ -239,14 +239,14 @@ void MainWindow::speedtest_profiles(const QList<std::shared_ptr<ProxorGui::Proxy
                         req.set_full_speed_timeout(ProxorGui::dataStore->test_download_timeout);
                     } else if (effectiveMode == libcore::TcpPing) {
                         if (!profile->EnsureHydrated()) {
-                            profile->full_test_report = tr("Profile is not hydrated");
+                            profile->full_test_report = tr("This profile could not be loaded.");
                             ProxorGui::profileManager->SaveProfile(profile);
                             continue;
                         }
                         req.set_address(profile->bean->DisplayAddress().toStdString());
                     } else if (effectiveMode == libcore::IcmpPing) {
                         if (!profile->EnsureHydrated()) {
-                            profile->full_test_report = tr("Profile is not hydrated");
+                            profile->full_test_report = tr("This profile could not be loaded.");
                             ProxorGui::profileManager->SaveProfile(profile);
                             continue;
                         }
@@ -401,7 +401,7 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
     auto ent = (_id < 0 && !ents.isEmpty()) ? ents.first() : ProxorGui::profileManager->GetProfile(_id);
     if (ent == nullptr) return;
     if (!ent->EnsureHydrated()) {
-        MessageBoxWarning(software_name, tr("Profile is not hydrated"));
+        MessageBoxWarning(software_name, tr("This profile could not be loaded."));
         return;
     }
 
@@ -419,7 +419,7 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
     if (!result->error.isEmpty()) {
         start_pending = false;
         refresh_status();
-        MessageBoxWarning("BuildConfig return error", result->error);
+        MessageBoxWarning(software_name, tr("Could not start: %1").arg(result->error));
         return;
     }
 
@@ -448,7 +448,7 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
             start_pending = false;
             runOnUiThread([=] {
                 refresh_status();
-                MessageBoxWarning("LoadConfig return error", error);
+                MessageBoxWarning(software_name, tr("Could not start: %1").arg(error));
             });
             return false;
         } else if (!rpcOK) {
@@ -538,7 +538,7 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
         QString validateError = defaultClient->Validate(&validateRpcOK, validateReq);
         if (validateRpcOK && !validateError.isEmpty()) {
             MW_show_log("<<<<<<<< " + tr("Config validation failed for %1: %2").arg(ent->bean->DisplayTypeAndName(), validateError));
-            runOnUiThread([=] { MessageBoxWarning("Validate return error", validateError); });
+            runOnUiThread([=] { MessageBoxWarning(software_name, tr("Could not start: %1").arg(validateError)); });
             start_pending = false;
             mu_starting.unlock();
 #ifdef Q_OS_MACOS
@@ -683,7 +683,7 @@ void MainWindow::proxor_stop(bool crash, bool sem) {
             bool rpcOK;
             QString error = defaultClient->Stop(&rpcOK);
             if (rpcOK && !error.isEmpty()) {
-                runOnUiThread([=] { MessageBoxWarning("Stop return error", error); });
+                runOnUiThread([=] { MessageBoxWarning(software_name, tr("Could not stop: %1").arg(error)); });
                 return false;
             } else if (!rpcOK) {
                 return false;
