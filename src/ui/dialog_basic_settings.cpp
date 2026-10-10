@@ -710,6 +710,15 @@ void DialogBasicSettings::selectSection(const QString &title) {
 
 // slots
 
+void DialogBasicSettings::changeEvent(QEvent *event) {
+    QDialog::changeEvent(event);
+    // The lock icons are tinted with the palette text color: tint again when the palette changes.
+    // (isVisible: palette events also arrive while the dialog is still being constructed.)
+    if (isVisible() && (event->type() == QEvent::PaletteChange || event->type() == QEvent::ApplicationPaletteChange)) {
+        refresh_auth();
+    }
+}
+
 void DialogBasicSettings::refresh_auth() {
     ui->inbound_auth->setText({});
     if (ProxorGui::dataStore->inbound_auth->NeedAuth()) {

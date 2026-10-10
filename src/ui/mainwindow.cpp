@@ -400,6 +400,8 @@ public:
     }
 };
 
+inline QJsonArray last_arr; // Matches the gRPC connection statistics payload.
+
 // Start is a circle, Stop a rounded square, so the state is not conveyed by color alone.
 // Rendered at 1x/2x/3x so the icon stays sharp on HiDPI screens.
 QIcon makeToggleProxyIcon(const QColor &color, bool stopShape = false) {
@@ -938,6 +940,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 #endif
     connect(themeManager, &ThemeManager::themeChanged, this, [=](const QString &) {
         rebuildLogDocument(ui->log_filter->text());
+        // The status icons are tinted with the palette text color: rebuild the rows with the new tint.
+        if (!last_arr.isEmpty()) {
+            const auto arr = last_arr;
+            last_arr = QJsonArray();
+            refresh_connection_list(arr);
+        }
     });
     ui->proxyListTable->verticalHeader()->setVisible(false);
     ui->proxyListTable->setShowGrid(false);
@@ -4120,7 +4128,6 @@ void MainWindow::start_select_mode(QObject *context, const std::function<void(in
 
 // 连接列表
 
-inline QJsonArray last_arr; // Matches the gRPC connection statistics payload.
 
 void MainWindow::refresh_connection_list(const QJsonArray &arr) {
     if (last_arr == arr) {
