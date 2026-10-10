@@ -3,6 +3,8 @@
 #include "fmt/includes.h"
 
 #include <QColor>
+#include <QGuiApplication>
+#include <QPalette>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -605,18 +607,18 @@ namespace ProxorGui {
     }
 
     QColor ProxyEntity::DisplayLatencyColor() const {
+        if (latency == 0) return {};
+        // Same base-lightness test as the rest of the UI: lighter tones on dark bases so the
+        // red/green/amber meaning keeps enough contrast.
+        const bool dark = QGuiApplication::palette().color(QPalette::Base).lightness() < 128;
         if (latency < 0) {
-            return Qt::red;
-        } else if (latency > 0) {
-            auto greenMs = dataStore->test_latency_url.startsWith("https://") ? 200 : 100;
-            if (latency < greenMs) {
-                return Qt::darkGreen;
-            } else {
-                return Qt::darkYellow;
-            }
-        } else {
-            return {};
+            return dark ? QColor(0xff, 0x6b, 0x6b) : QColor(0xc6, 0x28, 0x28);
         }
+        auto greenMs = dataStore->test_latency_url.startsWith("https://") ? 200 : 100;
+        if (latency < greenMs) {
+            return dark ? QColor(0x4c, 0xc3, 0x8a) : QColor(0x1a, 0x7f, 0x37);
+        }
+        return dark ? QColor(0xe0, 0xa8, 0x00) : QColor(0x8a, 0x6d, 0x00);
     }
 
     int ProfileManager::NewProfileID() const {
