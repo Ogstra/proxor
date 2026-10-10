@@ -23,6 +23,7 @@ struct WakeModes {
 struct WakeSnapshot {
     int profileId = -1;
     WakeModes modes;
+    bool viaSsidTrigger = false; // On-Demand started it: the restart must keep that, or a later non-trigger network cannot stop it
 }; // what ran when the system went to sleep
 struct WakeObservation {
     qint64 nowMs = 0;
@@ -38,6 +39,7 @@ struct WakeStep {
     WakeAction action = WakeAction::Finished;
     int delayMs = -1;   // >= 0: call step() again after this delay; -1: the run is over
     int profileId = -1; // RestartProfile
+    bool viaSsidTrigger = false; // RestartProfile: the profile was started by an On-Demand trigger
     WakeModes modes;    // CheckModes: what was on before sleep
     WakeNote note = WakeNote::None;
 };

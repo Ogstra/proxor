@@ -83,6 +83,7 @@ WakeStep WakeCoordinator::step(const WakeObservation &o) {
                 s.action = WakeAction::RestartProfile;
                 s.delayMs = kWakePollMs;
                 s.profileId = snapshot_.profileId;
+                s.viaSsidTrigger = snapshot_.viaSsidTrigger;
                 s.note = WakeNote::CoreRestarting;
                 return s;
             }
