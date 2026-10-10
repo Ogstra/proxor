@@ -9,11 +9,12 @@ UpdateProgressDialog::UpdateProgressDialog(const QString &assetName, QWidget *pa
     setAttribute(Qt::WA_DeleteOnClose);
     setWindowFlags(windowFlags() | Qt::WindowStaysOnTopHint);
     setWindowTitle(tr("Downloading Update"));
-    setFixedSize(400, 150);
+    setMinimumWidth(400);
 
     auto *mainLayout = new QVBoxLayout(this);
     
     auto *titleLabel = new QLabel(tr("Downloading %1...").arg(assetName), this);
+    titleLabel->setWordWrap(true);
     mainLayout->addWidget(titleLabel);
 
     progressBar = new QProgressBar(this);
