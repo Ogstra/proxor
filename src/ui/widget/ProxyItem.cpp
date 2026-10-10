@@ -1,12 +1,17 @@
 #include "ProxyItem.h"
 #include "ui_ProxyItem.h"
 
+#include <QEvent>
+#include <QIcon>
 #include <QMessageBox>
+
+#include "ui/Icon.hpp"
 
 ProxyItem::ProxyItem(QWidget *parent, const std::shared_ptr<ProxorGui::ProxyEntity> &ent, QListWidgetItem *item)
     : QWidget(parent), ui(new Ui::ProxyItem) {
     ui->setupUi(this);
     this->setLayoutDirection(Qt::LeftToRight);
+    applyThemeStyle();
 
     this->item = item;
     this->ent = ent;
@@ -17,6 +22,19 @@ ProxyItem::ProxyItem(QWidget *parent, const std::shared_ptr<ProxorGui::ProxyEnti
 
 ProxyItem::~ProxyItem() {
     delete ui;
+}
+
+void ProxyItem::changeEvent(QEvent *event) {
+    QWidget::changeEvent(event);
+    if (event->type() == QEvent::PaletteChange || event->type() == QEvent::ApplicationPaletteChange) {
+        applyThemeStyle();
+    }
+}
+
+void ProxyItem::applyThemeStyle() {
+    // The material SVGs are black; Icon tints them with the current palette text color.
+    ui->change->setIcon(QIcon(Icon::GetMaterialIcon("swap-horizontal")));
+    ui->remove->setIcon(QIcon(Icon::GetMaterialIcon("delete")));
 }
 
 void ProxyItem::refresh_data() {
