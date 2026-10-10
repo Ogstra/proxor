@@ -777,7 +777,7 @@ namespace ProxorGui_sub {
             }
         } catch (const YAML::Exception &ex) {
             runOnUiThread([=] {
-                MessageBoxWarning("YAML Exception", ex.what());
+                MessageBoxWarning(QObject::tr("Import"), QObject::tr("The YAML subscription could not be read: %1").arg(ex.what()));
             });
         }
 #endif
@@ -796,7 +796,7 @@ namespace ProxorGui_sub {
             };
             bool ok;
             auto a = QInputDialog::getItem(nullptr,
-                                           QObject::tr("url detected"),
+                                           QObject::tr("URL detected"),
                                            QObject::tr("%1\nHow to update?").arg(content),
                                            items, 0, false, &ok);
             if (!ok) return;
@@ -930,7 +930,7 @@ namespace ProxorGui_sub {
                 group->name = sub_name;
             }
 
-            MW_show_log("<<<<<<<< " + QObject::tr("Subscription request fininshed: %1").arg(groupName));
+            MW_show_log("<<<<<<<< " + QObject::tr("Subscription request finished: %1").arg(groupName));
         }
 
         QList<std::shared_ptr<ProxorGui::ProxyEntity>> in;          // 更新前
@@ -1031,7 +1031,7 @@ namespace ProxorGui_sub {
 
 void UI_update_all_groups(bool onlyAllowed) {
     if (UI_update_all_groups_Updating) {
-        MW_show_log("The last subscription update has not exited.");
+        MW_show_log(QObject::tr("A subscription update is already running."));
         return;
     }
 
@@ -1043,7 +1043,7 @@ void UI_update_all_groups(bool onlyAllowed) {
 
 void UI_update_due_groups_on_start() {
     if (UI_update_all_groups_Updating) {
-        MW_show_log("The last subscription update has not exited.");
+        MW_show_log(QObject::tr("A subscription update is already running."));
         return;
     }
 
@@ -1055,7 +1055,7 @@ void UI_update_due_groups_on_start() {
 
 void UI_update_due_groups_on_timer() {
     if (UI_update_all_groups_Updating) {
-        MW_show_log("The last subscription update has not exited.");
+        MW_show_log(QObject::tr("A subscription update is already running."));
         return;
     }
 
