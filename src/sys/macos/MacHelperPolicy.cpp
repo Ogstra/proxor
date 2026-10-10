@@ -36,21 +36,21 @@ MacTunStartupDecision DecideMacTunStartup(bool rememberedTun, MacHelperState sta
         return {MacTunStartupAction::RestoreTun, true, QString()};
     case MacHelperState::NotInstalled:
         return {MacTunStartupAction::SkipNotInstalled, false,
-                tr("Tun Mode is remembered, but the Proxor Tun service is not installed (Homebrew upgrades remove it). "
+                tr("Tun Mode is remembered, but the Proxor service is not installed (Homebrew upgrades remove it). "
                    "Connecting without Tun; turn on Tun Mode to install the service.")};
     case MacHelperState::InstalledNotRunning:
         return {MacTunStartupAction::SkipNotRunning, false,
-                tr("Tun Mode is remembered, but the Proxor Tun service is not running. "
+                tr("Tun Mode is remembered, but the Proxor service is not running. "
                    "Allow Proxor in System Settings > General > Login Items & Extensions, "
                    "or reinstall it from Tun settings. Connecting without Tun.")};
     case MacHelperState::NotAuthorized:
         return {MacTunStartupAction::SkipNotAuthorized, false,
-                tr("Tun Mode is remembered, but the Proxor Tun service on this Mac was installed by another user "
+                tr("Tun Mode is remembered, but the Proxor service on this Mac was installed by another user "
                    "and does not accept this one yet. Connecting without Tun; turn on Tun Mode to allow this user "
                    "(one administrator password prompt).")};
     case MacHelperState::Outdated:
         return {MacTunStartupAction::SkipOutdated, false,
-                tr("Tun Mode is remembered, but the Proxor Tun service needs an update. "
+                tr("Tun Mode is remembered, but the Proxor service needs an update. "
                    "Connecting without Tun; turn on Tun Mode to update it.")};
     }
     return {MacTunStartupAction::NoTun, false, QString()};

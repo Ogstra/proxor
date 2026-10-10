@@ -129,7 +129,7 @@ void startInstall(DoneFn done) {
             return;
         }
         waitUntilReady(done);
-    }, tr("Proxor needs administrator rights to install its network service, which turns Tun and System Proxy on and off."));
+    }, tr("Proxor needs administrator rights to install the Proxor service, which turns Tun and System Proxy on and off."));
 }
 
 } // namespace
@@ -157,7 +157,7 @@ void MacHelperInstaller::ConfirmAndInstall(QWidget *parent, const QString &featu
         startInstall(finish);
         return;
     }
-    auto *box = new QMessageBox(QMessageBox::Question, tr("Proxor network service"), explanation(feature, action),
+    auto *box = new QMessageBox(QMessageBox::Question, tr("Proxor service"), explanation(feature, action),
                                 QMessageBox::Yes | QMessageBox::No, parent);
     box->setDefaultButton(QMessageBox::Yes);
     box->setAttribute(Qt::WA_DeleteOnClose);

@@ -336,7 +336,7 @@ bool DialogVPNSettings::save(QStringList &flags) {
 
 void DialogVPNSettings::on_troubleshooting_clicked() {
     auto r = QMessageBox::information(this, tr("Troubleshooting"),
-                                      tr("If you have trouble starting VPN, you can force reset proxor_core process here.\n\n"
+                                      tr("If you have trouble starting Tun, you can force reset proxor_core process here.\n\n"
                                          "If it still does not work, restart the application with administrator privileges and try again."),
                                       tr("Reset"), tr("Cancel"), "",
                                       1, 1);

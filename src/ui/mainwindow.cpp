@@ -1055,7 +1055,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         auto *menu = new QMenu(this);
         bool pendingSeparator = false;
         for (auto *action : ui->menu_program->actions()) {
-            const bool isRestartProxy = action == ui->actionRestart_Proxy; // replaced by Connect / Disconnect
+            const bool isRestartProxy = action == ui->actionRestart_Proxy; // replaced by Start / Stop
             if (!isRestartProxy && hidden.contains(action)) continue;
             if (action->isSeparator()) {
                 pendingSeparator = !menu->isEmpty();
@@ -1085,7 +1085,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 #endif
             if (isRestartProxy) {
                 // One action for both directions, same behavior as the Start/Stop button of the window.
-                tray_toggle_action = new QAction(tr("Connect"), menu);
+                tray_toggle_action = new QAction(tr("Start"), menu);
                 connect(tray_toggle_action, &QAction::triggered, this, [this] { on_toolButton_toggle_proxy_clicked(); });
                 menu->addAction(tray_toggle_action);
                 continue;
@@ -2027,7 +2027,7 @@ void MainWindow::dialog_message_impl(const QString &sender, const QString &info)
             refresh_groups();
             refresh_proxy_list();
             if (!info.contains("dingyue")) {
-                show_log_impl(tr("Imported %1 profile(s)").arg(ProxorGui::dataStore->imported_count));
+                show_log_impl(tr("Added %1 profile(s)").arg(ProxorGui::dataStore->imported_count));
             }
         } else if (info == "NewGroup") {
             refresh_groups();
@@ -2082,7 +2082,7 @@ void MainWindow::on_menu_routing_settings_triggered() {
 }
 
 void MainWindow::on_menu_vpn_settings_triggered() {
-    openSettings(tr("VPN"));
+    openSettings(tr("Tun"));
 }
 
 void MainWindow::on_menu_ssid_settings_triggered() {
@@ -2873,7 +2873,7 @@ void MainWindow::refresh_status(const QString &traffic_update) {
     ui->checkBox_SystemProxy->setChecked(ProxorGui::dataStore->spmode_system_proxy);
     if (ProxorGui::dataStore->started_id >= 0) last_started_profile_id = ProxorGui::dataStore->started_id;
     const bool showStopState = running != nullptr || start_pending;
-    if (tray_toggle_action != nullptr) tray_toggle_action->setText(showStopState ? tr("Disconnect") : tr("Connect"));
+    if (tray_toggle_action != nullptr) tray_toggle_action->setText(showStopState ? tr("Stop") : tr("Start"));
     ui->toolButton_toggle_proxy->setText(showStopState ? tr("Stop") : tr("Start"));
     ui->toolButton_toggle_proxy->setIcon(showStopState ? makeToggleProxyIcon(QColor(255, 59, 48))
                                                        : makeToggleProxyIcon(QColor(52, 199, 89)));
@@ -4480,7 +4480,7 @@ void MainWindow::macStartupProbed(MacHelperState st, bool rememberedTun, bool re
                 ProxorGui_log::WriteDiagnostic(tr("The Proxor service installation is already waiting for your answer."));
                 return;
             }
-            MW_show_log(tr("%1 is on, but the Proxor network service is not installed or needs an update; asking to install it. Connected without it meanwhile.").arg(inst.feature));
+            MW_show_log(tr("%1 is on, but the Proxor service is not installed or needs an update; asking to install it. Connected without it meanwhile.").arg(inst.feature));
             // Parentless when the window is hidden, so the dialog is not a sheet on an invisible window.
             MacHelperInstaller::ConfirmAndInstall(isVisible() ? this : nullptr, inst.feature, inst.enableAction,
                                                   [this, rememberedTun, rememberedSystemProxy](MacAdminScriptResult result) {

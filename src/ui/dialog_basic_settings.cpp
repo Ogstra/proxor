@@ -209,7 +209,7 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     auto *vpnHost = new QWidget(this);
     auto *vpnLay = new QVBoxLayout(vpnHost);
     vpnLay->setContentsMargins(0, 0, 0, 0);
-    const int vpnIdx = ui->tabWidget->addTab(vpnHost, tr("VPN"));
+    const int vpnIdx = ui->tabWidget->addTab(vpnHost, tr("Tun"));
     auto *ssidHost = new QWidget(this);
     auto *ssidLay = new QVBoxLayout(ssidHost);
     ssidLay->setContentsMargins(0, 0, 0, 0);
