@@ -275,7 +275,9 @@ void applyDarkTitleBarToWidget(QWidget *w, bool dark) {
     HWND hwnd = reinterpret_cast<HWND>(w->winId());
     DwmSetWindowAttribute(hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &value, sizeof(value));
 
-    const DWORD captionColor = dark ? RGB(32, 32, 32) : kDwmColorDefault;
+    // Match the title bar to the active palette so it does not look two-tone against the window.
+    const QColor windowColor = qApp->palette().color(QPalette::Window);
+    const DWORD captionColor = dark ? RGB(windowColor.red(), windowColor.green(), windowColor.blue()) : kDwmColorDefault;
     const DWORD textColor = dark ? RGB(255, 255, 255) : kDwmColorDefault;
     setDwmAttribute(hwnd, kDwmCaptionColorAttribute, &captionColor, sizeof(captionColor));
     setDwmAttribute(hwnd, kDwmTextColorAttribute, &textColor, sizeof(textColor));
