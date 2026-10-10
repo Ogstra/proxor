@@ -6,9 +6,7 @@ This document covers locally built packages and the x86_64 AppImage produced by 
 
 Supported x86_64 channels are the retained AppImage, Debian/Ubuntu `.deb`, Fedora RPM, source
 AUR `proxor`. `.deb` upgrades use apt/dpkg, RPM upgrades use dnf, and AUR upgrades use the
-selected AUR helper. The Flatpak bundle is deprecated and no longer published: the Flatpak
-sandbox cannot run Tun mode, so it was a proxy-only format. An existing Flatpak install keeps
-working and updates with `flatpak update`.
+selected AUR helper.
 
 ## AppImage
 
@@ -30,8 +28,7 @@ download is kept and the app tells you exactly where, and stays open rather than
 with a closed app and no running version.
 
 Every native package names its own update command instead: `.deb` and RPM name the release
-asset to install and AUR names the selected AUR helper; an existing Flatpak install names
-`flatpak update`. None of them overwrite themselves in place, since their files belong to a
+asset to install and AUR names the selected AUR helper. None of them overwrite themselves in place, since their files belong to a
 package manager that expects to be the one to replace them.
 
 ## Native packages
@@ -52,8 +49,7 @@ services Proxor relies on must be added or configured in the compositor.
   Hyprland and sway do not run by themselves. Adding `exec-once = proxor` to `hyprland.conf` or
   `exec proxor` to the sway config may be required. A session tool that runs XDG autostart
   entries, such as uwsm, or `dex -a` started from the compositor config can also work. Check your
-  compositor's documentation. For the AppImage use its path instead of `proxor`; for an existing
-  Flatpak install use `flatpak run io.github.Ogstra.Proxor`. Other compositors have their own startup command.
+  compositor's documentation. For the AppImage use its path instead of `proxor`. Other compositors have their own startup command.
 - **Global hotkeys:** they use the desktop's GlobalShortcuts portal. On Hyprland,
   xdg-desktop-portal-hyprland offers it, and a bind in `hyprland.conf` with the `global`
   dispatcher may also be required (`hyprctl globalshortcuts` may list what Proxor registered);
@@ -71,8 +67,7 @@ apps manually or use Tun. The log file's `Platform:` line names the compositor, 
 
 On-Demand reads the connected Wi-Fi network name from NetworkManager first (D-Bus, then `nmcli`).
 When NetworkManager does not manage a Wi-Fi adapter, it reads the name from iwd instead.
-Wi-Fi run only by wpa_supplicant or ConnMan is not supported. An existing Flatpak install reads
-NetworkManager only, because it has no permission to talk to iwd.
+Wi-Fi run only by wpa_supplicant or ConnMan is not supported.
 
 ## Runtime Options
 

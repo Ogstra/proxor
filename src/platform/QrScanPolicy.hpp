@@ -25,7 +25,5 @@ struct MacScreenScanDecision {
     bool requestAccess = false;
 };
 MacScreenScanDecision DecideMacScreenScan(bool preflightGranted, bool requestedThisSession);
-// Explicit permission text; never says "not found".
-QString MacScreenRecordingMessage();
 
 } // namespace ProxorPlatform

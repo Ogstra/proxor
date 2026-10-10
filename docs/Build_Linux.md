@@ -10,8 +10,7 @@ publish that AppImage alongside the Windows package.
 
 Tagged releases provide a native Debian/Ubuntu `.deb`, Fedora RPM, and source AUR `proxor` in
 addition to AppImage. Native packages are built from source in their target environment;
-AppImage is not repackaged as a distro package. The Flatpak bundle is deprecated and no longer
-built or published, because the Flatpak sandbox cannot run Tun mode.
+AppImage is not repackaged as a distro package.
 
 ## Prerequisites
 

@@ -46,7 +46,7 @@
       <item>
        <widget class="QToolButton" name="toolButton_program">
         <property name="text">
-         <string>App</string>
+         <string>&amp;App</string>
         </property>
         <property name="icon">
          <iconset theme="b-papirus-applications-all">
@@ -69,7 +69,7 @@
       <item>
        <widget class="QToolButton" name="toolButton_preferences">
         <property name="text">
-         <string>Settings</string>
+         <string>&amp;Settings</string>
         </property>
         <property name="icon">
          <iconset theme="b-papirus-preferences-desktop">
@@ -92,7 +92,7 @@
       <item>
        <widget class="QToolButton" name="toolButton_server">
         <property name="text">
-         <string>Profiles</string>
+         <string>&amp;Profiles</string>
         </property>
         <property name="icon">
          <iconset theme="b-papirus-network-server">
@@ -180,7 +180,7 @@
         <item>
          <widget class="QToolButton" name="toolButton_update_subscription">
           <property name="text">
-           <string>Update Sub</string>
+           <string>Update Subscription</string>
           </property>
           <property name="toolButtonStyle">
            <enum>Qt::ToolButtonTextOnly</enum>
@@ -563,6 +563,7 @@
     <addaction name="menu_scan_qr_clipboard"/>
     <addaction name="menu_add_subscription"/>
     <addaction name="separator"/>
+    <addaction name="menu_find"/>
     <addaction name="menu_select_all"/>
     <addaction name="menu_move"/>
     <addaction name="menu_clone"/>
@@ -598,7 +599,7 @@
   </action>
   <action name="menu_basic_settings">
    <property name="text">
-    <string>Settings</string>
+    <string>Settings…</string>
    </property>
   </action>
   <action name="menu_add_from_input">
@@ -667,12 +668,20 @@
   </action>
   <action name="menu_scan_qr_camera">
    <property name="text">
-    <string>Add from QR Code with Camera</string>
+    <string>Add from QR Code with Camera…</string>
+   </property>
+  </action>
+  <action name="menu_find">
+   <property name="text">
+    <string>Find…</string>
+   </property>
+   <property name="shortcut">
+    <string notr="true">Ctrl+F</string>
    </property>
   </action>
   <action name="menu_scan_qr_image">
    <property name="text">
-    <string>Add from QR Code in Image File...</string>
+    <string>Add from QR Code in Image File…</string>
    </property>
   </action>
   <action name="menu_scan_qr_clipboard">
@@ -698,7 +707,7 @@
     <string>QR Code and link</string>
    </property>
    <property name="shortcut">
-    <string notr="true">Ctrl+Q</string>
+    <string notr="true">Ctrl+Shift+Q</string>
    </property>
   </action>
   <action name="menu_copy_link">
@@ -783,7 +792,7 @@
     <string>Move</string>
    </property>
    <property name="shortcut">
-    <string notr="true">Ctrl+M</string>
+    <string notr="true">Ctrl+Shift+M</string>
    </property>
   </action>
   <action name="menu_remove_unavailable">
@@ -820,7 +829,7 @@
     <string>Copy links of selected (Proxor Links)</string>
    </property>
    <property name="shortcut">
-    <string notr="true">Ctrl+N</string>
+    <string notr="true">Ctrl+Shift+C</string>
    </property>
   </action>
   <action name="menu_copy_links">
@@ -870,7 +879,7 @@
   </action>
   <action name="menu_ssid_settings">
    <property name="text">
-    <string>On-Demand WiFi Settings</string>
+    <string>On-Demand Wi-Fi Settings</string>
    </property>
   </action>
   <action name="actionRestart_Program">

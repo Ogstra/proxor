@@ -40,6 +40,7 @@ bool MainWindow::wakeOwnsSubscriptions() const {
 ProxorPlatform::WakeSnapshot MainWindow::wakeSnapshotNow() const {
     ProxorPlatform::WakeSnapshot s;
     s.profileId = ProxorGui::dataStore->started_id >= 0 ? ProxorGui::dataStore->started_id : -1;
+    s.viaSsidTrigger = s.profileId >= 0 && started_via_ssid_trigger;
 #ifdef Q_OS_MACOS
     s.modes.systemProxy = ProxorGui::dataStore->spmode_system_proxy && !(mac_modes && mac_modes->systemProxyParked());
     s.modes.tun = ProxorGui::dataStore->spmode_vpn && vpn_pid != 0;
@@ -127,7 +128,7 @@ void MainWindow::wakeRunStep() {
                 ProxorGui_log::WriteDiagnostic(QStringLiteral("[Wake] profile %1 no longer exists; not restarting it").arg(s.profileId));
             } else {
                 MW_show_log(WakeCoreRestartLine(ent->bean->DisplayTypeAndName()));
-                proxor_start(s.profileId);
+                proxor_start(s.profileId, s.viaSsidTrigger);
             }
             if (s.delayMs >= 0) wake_timer->start(s.delayMs);
             break;

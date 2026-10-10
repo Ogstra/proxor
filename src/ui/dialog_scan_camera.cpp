@@ -30,16 +30,25 @@ DialogScanCamera::DialogScanCamera(QWidget *parent) : QDialog(parent) {
 #endif
     camera = new Capture(this);
     connect(camera, &Capture::frame, this, &DialogScanCamera::onFrame);
+    // failed() can fire from inside start() (no camera, access denied), before exec() runs the event loop.
+    // A reject() issued that early is lost and the dialog would stay open on a black preview, so queue it.
     connect(camera, &Capture::failed, this, [this](const QString &reason) {
-        failureReason = reason;
-        reject();
-    });
+        if (failureReason.isEmpty()) failureReason = reason;
+        QMetaObject::invokeMethod(this, &QDialog::reject, Qt::QueuedConnection);
+    }, Qt::QueuedConnection);
     camera->start();
 }
 
 DialogScanCamera::~DialogScanCamera() { camera->stop(); }
 
+// accept(), reject(), Esc and the window close button all end here: release the camera on every path.
+void DialogScanCamera::done(int result) {
+    camera->stop();
+    QDialog::done(result);
+}
+
 void DialogScanCamera::onFrame(const QImage &image) {
+    if (!decoded.isEmpty()) return; // a frame queued before stop() must not accept twice
     preview->setPixmap(QPixmap::fromImage(image.mirrored(true, false))
                            .scaled(preview->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
     const auto now = QDateTime::currentMSecsSinceEpoch();
@@ -48,6 +57,5 @@ void DialogScanCamera::onFrame(const QImage &image) {
     const auto text = ProxorPlatform::DecodeQrFromImage(image);
     if (text.isEmpty()) return;
     decoded = text;
-    camera->stop();
     accept();
 }

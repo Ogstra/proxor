@@ -21,4 +21,5 @@ public:
 
 private:
     Ui::DialogHotkey *ui;
+    QStringList hotkeysAtOpen;
 };

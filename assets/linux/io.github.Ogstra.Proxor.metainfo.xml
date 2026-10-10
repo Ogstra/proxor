@@ -11,7 +11,6 @@
   <launchable type="desktop-id">io.github.Ogstra.Proxor.desktop</launchable>
   <description>
     <p>Proxor manages sing-box proxy profiles, subscriptions, and routing.</p>
-    <p>This Flatpak uses network and display access only. TUN and host system proxy changes are unavailable in the Flatpak sandbox.</p>
   </description>
   <url type="homepage">https://github.com/Ogstra/proxor</url>
   <url type="bugtracker">https://github.com/Ogstra/proxor/issues</url>

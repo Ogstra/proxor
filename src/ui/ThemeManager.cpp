@@ -275,7 +275,9 @@ void applyDarkTitleBarToWidget(QWidget *w, bool dark) {
     HWND hwnd = reinterpret_cast<HWND>(w->winId());
     DwmSetWindowAttribute(hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &value, sizeof(value));
 
-    const DWORD captionColor = dark ? RGB(32, 32, 32) : kDwmColorDefault;
+    // Match the title bar to the active palette so it does not look two-tone against the window.
+    const QColor windowColor = qApp->palette().color(QPalette::Window);
+    const DWORD captionColor = dark ? RGB(windowColor.red(), windowColor.green(), windowColor.blue()) : kDwmColorDefault;
     const DWORD textColor = dark ? RGB(255, 255, 255) : kDwmColorDefault;
     setDwmAttribute(hwnd, kDwmCaptionColorAttribute, &captionColor, sizeof(captionColor));
     setDwmAttribute(hwnd, kDwmTextColorAttribute, &textColor, sizeof(textColor));
@@ -500,7 +502,7 @@ void ThemeManager::ApplyTheme(const QString &theme, bool force) {
         event_filter_installed = true;
     }
 
-#ifdef Q_OS_MACOS
+#if defined(Q_OS_MACOS) || QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
     // The native macos style and the default palette already follow the OS light/dark
     // setting, but Proxor's own themeChanged listeners (log colors, table theme, settings
     // navigation QSS) only refresh on ApplyTheme, so re-apply System when the OS flips.

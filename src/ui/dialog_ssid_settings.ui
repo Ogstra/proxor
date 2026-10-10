@@ -17,7 +17,7 @@
    </size>
   </property>
   <property name="windowTitle">
-   <string>On-Demand WiFi Settings</string>
+   <string>On-Demand Wi-Fi Settings</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
@@ -29,7 +29,7 @@
       <item>
        <widget class="QCheckBox" name="ssid_on_demand_enabled">
         <property name="text">
-         <string>Enable automatic proxy activation by WiFi SSID</string>
+         <string>&amp;Start automatically on selected Wi-Fi networks</string>
         </property>
        </widget>
       </item>
@@ -44,6 +44,9 @@
        <layout class="QFormLayout" name="formLayout_profile">
         <item row="0" column="0">
          <widget class="QLabel" name="label_target_profile">
+          <property name="buddy">
+           <cstring>ssid_on_demand_profile</cstring>
+          </property>
           <property name="text">
            <string>Target profile</string>
           </property>
@@ -78,14 +81,14 @@
         <item>
          <widget class="QPushButton" name="btn_add_ssid">
           <property name="text">
-           <string>Add</string>
+           <string>&amp;Add</string>
           </property>
          </widget>
         </item>
         <item>
          <widget class="QPushButton" name="btn_remove_ssid">
           <property name="text">
-           <string>Remove</string>
+           <string>&amp;Remove</string>
           </property>
          </widget>
         </item>

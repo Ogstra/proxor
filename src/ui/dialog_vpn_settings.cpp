@@ -56,19 +56,23 @@ DialogVPNSettings::DialogVPNSettings(QWidget *parent) : QDialog(parent), ui(new 
         bypassClients->setToolTip(tr("On: these VPN clients connect directly. Off: their traffic goes through the proxy, for example to carry WireGuard over a VLESS Reality proxy."));
         bypassClients->setChecked(ProxorGui::dataStore->vpn_bypass_vpn_clients);
         ui->verticalLayout_4->insertWidget(0, bypassClients);
+        // Widgets added in code are not part of the .ui tab stops: put them in reading order.
+        setTabOrder(ui->vpn_rule_cidr, ui->btn_pick_process);
+        setTabOrder(ui->btn_pick_process, bypassClients);
+        setTabOrder(bypassClients, ui->vpn_rule_process);
     }
     ui->single_core->setChecked(ProxorGui::dataStore->vpn_internal_tun);
 #ifdef Q_OS_MACOS
     // The single-core Tun option does not apply on macOS (Tun runs in the Proxor service).
     ui->single_core->setVisible(false);
     {
-        auto *box = new QGroupBox(tr("Tun service"), this);
+        auto *box = new QGroupBox(tr("Proxor service"), this);
         auto *boxLayout = new QVBoxLayout(box);
         auto *status = new QLabel(box);
         status->setWordWrap(true);
         auto *buttons = new QHBoxLayout();
         auto *install = new QPushButton(box);
-        auto *remove = new QPushButton(tr("Remove Tun service"), box);
+        auto *remove = new QPushButton(tr("Remove Proxor service"), box);
         buttons->addWidget(install);
         buttons->addWidget(remove);
         buttons->addStretch();
@@ -90,6 +94,7 @@ DialogVPNSettings::DialogVPNSettings(QWidget *parent) : QDialog(parent), ui(new 
         const auto refresh = [self, status, install, remove, state]() {
             if (!self) return;
             status->setText(tr("Checking..."));
+            status->setToolTip(QString());
             install->setEnabled(false);
             remove->setEnabled(false);
             MacHelperSvc()->probe(self.data(), 1000, [self, status, install, remove, state](const MacHelperProbe &probe, MacHelperState st) {
@@ -100,7 +105,8 @@ DialogVPNSettings::DialogVPNSettings(QWidget *parent) : QDialog(parent), ui(new 
                 remove->setEnabled(true);
                 switch (st) {
                 case MacHelperState::NotInstalled:
-                    status->setText(tr("Not installed. Turning on Tun Mode or System Proxy installs it (one administrator password prompt)."));
+                    status->setText(tr("Not installed"));
+                    status->setToolTip(tr("Turning on Tun Mode or System Proxy installs it (one administrator password prompt)."));
                     install->setText(tr("Install"));
                     remove->setEnabled(false);
                     break;
@@ -142,8 +148,8 @@ DialogVPNSettings::DialogVPNSettings(QWidget *parent) : QDialog(parent), ui(new 
 
         connect(remove, &QPushButton::clicked, this, [this, self, refresh] {
             const auto answer = QMessageBox::question(
-                this, tr("Remove Tun service"),
-                tr("Remove the Proxor Tun service? Tun Mode and System Proxy will be turned off. You can install it again later."));
+                this, tr("Remove Proxor service"),
+                tr("Remove the Proxor service? Tun Mode and System Proxy will be turned off. You can install it again later."));
             if (answer != QMessageBox::Yes) return;
             GetMainWindow()->proxor_set_spmode_vpn(false);
             GetMainWindow()->proxor_set_spmode_system_proxy(false);
@@ -336,7 +342,7 @@ bool DialogVPNSettings::save(QStringList &flags) {
 
 void DialogVPNSettings::on_troubleshooting_clicked() {
     auto r = QMessageBox::information(this, tr("Troubleshooting"),
-                                      tr("If you have trouble starting VPN, you can force reset proxor_core process here.\n\n"
+                                      tr("If you have trouble starting Tun, you can force reset proxor_core process here.\n\n"
                                          "If it still does not work, restart the application with administrator privileges and try again."),
                                       tr("Reset"), tr("Cancel"), "",
                                       1, 1);

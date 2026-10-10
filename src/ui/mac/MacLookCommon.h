@@ -11,6 +11,10 @@ namespace ProxorMac {
 
 // True while the System theme is selected: the native look applies only there; the Fusion/QSS
 // themes keep their own styling.
+// NOTE: ThemeManager::NormalizeTheme maps "System" to "Fusion" on macOS while the native System theme
+// is hidden, so this is currently always false here and the System branches below (kLineEditQss,
+// MacLook.cpp, MacDialogs.cpp) are intentionally dormant until the native theme is enabled again.
+// Do not enable them without a visual check on a Mac.
 inline bool systemThemeActive() {
     return themeManager != nullptr &&
            themeManager->NormalizeTheme(ProxorGui::dataStore->theme) == QStringLiteral("System");

@@ -33,28 +33,16 @@ constexpr int kReadyPollIntervalMs = 500;
 constexpr int kReadyPollAttempts = 20; // 10 s
 
 QString explanation(const QString &feature, MacHelperEnableAction action) {
-    QString first;
     switch (action) {
     case MacHelperEnableAction::AskUpdate:
-        first = tr("%1 needs an updated Proxor network service, which runs in the background with administrator rights.")
-                    .arg(feature);
-        break;
+        return tr("%1 needs an updated Proxor service. Install it now?").arg(feature);
     case MacHelperEnableAction::AskReinstall:
-        first = tr("%1 needs the Proxor network service, but it is not running or does not accept this user yet "
-                   "(for example it was installed by another user). Reinstalling it allows this user.")
-                    .arg(feature);
-        break;
+        return tr("%1 needs the Proxor service to be reinstalled. Install it now?").arg(feature);
     case MacHelperEnableAction::AskInstall:
     case MacHelperEnableAction::Proceed:
-        first = tr("%1 needs the Proxor network service, which runs in the background with administrator rights.")
-                    .arg(feature);
         break;
     }
-    return first + QLatin1Char(' ') +
-           tr("macOS will ask for your administrator password once to install it and may show a "
-              "'Background Items Added' notification: keep Proxor allowed in Login Items & Extensions. "
-              "Homebrew removes the service when Proxor is upgraded or uninstalled, so you will be asked again "
-              "after an upgrade.");
+    return tr("%1 needs the Proxor service. Install it now?").arg(feature);
 }
 
 QString sha256Hex(const QString &path) {
@@ -141,7 +129,7 @@ void startInstall(DoneFn done) {
             return;
         }
         waitUntilReady(done);
-    }, tr("Proxor needs administrator rights to install its network service, which turns Tun and System Proxy on and off."));
+    }, tr("Proxor needs administrator rights to install the Proxor service, which turns Tun and System Proxy on and off."));
 }
 
 } // namespace
@@ -169,7 +157,7 @@ void MacHelperInstaller::ConfirmAndInstall(QWidget *parent, const QString &featu
         startInstall(finish);
         return;
     }
-    auto *box = new QMessageBox(QMessageBox::Question, tr("Proxor network service"), explanation(feature, action),
+    auto *box = new QMessageBox(QMessageBox::Question, tr("Proxor service"), explanation(feature, action),
                                 QMessageBox::Yes | QMessageBox::No, parent);
     box->setDefaultButton(QMessageBox::Yes);
     box->setAttribute(Qt::WA_DeleteOnClose);

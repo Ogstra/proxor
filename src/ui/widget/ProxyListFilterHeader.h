@@ -16,10 +16,10 @@ public:
           m_view(qobject_cast<QAbstractItemView *>(header->parentWidget())) {
         auto *vp = header->viewport();
 
-        name_filter    = makeEditor(vp, tr("Filter..."));
-        type_filter    = makeEditor(vp, tr("Filter..."));
-        address_filter = makeEditor(vp, tr("Filter..."));
-        test_filter    = makeEditor(vp, tr("Filter..."));
+        name_filter    = makeEditor(vp, tr("Filter…"));
+        type_filter    = makeEditor(vp, tr("Filter…"));
+        address_filter = makeEditor(vp, tr("Filter…"));
+        test_filter    = makeEditor(vp, tr("Filter…"));
 
         auto wire = [this](QLineEdit *e, int col) {
             connect(e, &QLineEdit::textChanged, this, [this, col](const QString &text) {
@@ -53,7 +53,8 @@ public slots:
         }
 
         const int baseH = m_header->sizeHint().height();
-        m_header->setFixedHeight(visible ? baseH + 32 : baseH);
+        // Editor row plus 8 px of padding, both following the font so large system text does not clip.
+        m_header->setFixedHeight(visible ? baseH + editorHeight() + 8 : baseH);
         if (m_view) QMetaObject::invokeMethod(m_view, "updateGeometries");
         m_header->setDefaultAlignment(visible ? (Qt::AlignLeft | Qt::AlignTop)
                                                : (Qt::AlignLeft | Qt::AlignVCenter));
@@ -73,7 +74,7 @@ private slots:
     void adjustPositions() {
         if (!m_filtersVisible) return;
 
-        const int editHeight = 24;
+        const int editHeight = editorHeight();
         const int topPos = m_header->height() - editHeight - 4;
 
         auto place = [&](QLineEdit *e, int section) {
@@ -89,6 +90,8 @@ private slots:
     }
 
 private:
+    [[nodiscard]] int editorHeight() const { return m_header->fontMetrics().height() + 8; }
+
     static QLineEdit *makeEditor(QWidget *parent, const QString &placeholder) {
         auto *e = new QLineEdit(parent);
         e->setPlaceholderText(placeholder);

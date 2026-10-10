@@ -32,6 +32,7 @@ GOOS=linux GOARCH=amd64 ./libs/build_go.sh
 DESTDIR="%{buildroot}" ./packaging/linux/stage-native-root.sh --gui redhat-linux-build/proxor --core deployment/linux64/proxor_core --geodata deployment/public_res --channel rpm
 install -Dpm0644 assets/linux/proxor.desktop %{buildroot}%{_datadir}/applications/proxor.desktop
 install -Dpm0644 assets/res/public/proxor.png %{buildroot}%{_datadir}/icons/hicolor/256x256/apps/proxor.png
+for s in 16 24 32 48; do install -Dpm0644 "assets/linux/icons/hicolor/${s}x${s}/apps/proxor.png" "%{buildroot}%{_datadir}/icons/hicolor/${s}x${s}/apps/proxor.png"; done
 
 %files
 %{_bindir}/proxor
@@ -44,6 +45,10 @@ install -Dpm0644 assets/res/public/proxor.png %{buildroot}%{_datadir}/icons/hico
 %{_datadir}/proxor/package-channel
 %{_datadir}/applications/proxor.desktop
 %{_datadir}/icons/hicolor/256x256/apps/proxor.png
+%{_datadir}/icons/hicolor/16x16/apps/proxor.png
+%{_datadir}/icons/hicolor/24x24/apps/proxor.png
+%{_datadir}/icons/hicolor/32x32/apps/proxor.png
+%{_datadir}/icons/hicolor/48x48/apps/proxor.png
 
 %changelog
 * Thu Sep 11 2026 Proxor maintainers <maintainers@ogstra.github.io> - %{version}-1

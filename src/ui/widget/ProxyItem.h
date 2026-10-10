@@ -29,7 +29,12 @@ public:
     QListWidgetItem *item;
     bool remove_confirm = false;
 
+protected:
+    void changeEvent(QEvent *event) override;
+
 private:
+    void applyThemeStyle();
+
     Ui::ProxyItem *ui;
 
 private slots:

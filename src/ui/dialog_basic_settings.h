@@ -53,6 +53,8 @@ private:
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
+    void changeEvent(QEvent *event) override;
+
 private slots:
 
     void refresh_auth();

@@ -321,6 +321,25 @@ private slots:
         QCOMPARE(c.step(online(10)).delayMs, -1);
     }
 
+    void restartKeepsTheOnDemandOrigin() {
+        WakeCoordinator c;
+        WakeSnapshot snap = prof(7);
+        snap.viaSsidTrigger = true;
+        c.noteWake(WakeSource::Native, 0, snap);
+        Run r = drive(c, 0, [](qint64 now) {
+            WakeObservation o = online(now);
+            o.coreRunning = false;
+            return o;
+        }, 60000);
+        bool restarted = false;
+        for (const auto &s : r.steps)
+            if (s.action == WakeAction::RestartProfile) {
+                restarted = true;
+                QVERIFY(s.viaSsidTrigger);
+            }
+        QVERIFY(restarted);
+    }
+
     void droppedRestoreDoesNotRestartTheProfile() {
         WakeCoordinator c;
         c.noteWake(WakeSource::Native, 0, prof(7));

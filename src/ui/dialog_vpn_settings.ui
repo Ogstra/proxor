@@ -25,6 +25,9 @@
      <layout class="QHBoxLayout" name="horizontalLayout_5">
       <item>
        <widget class="QLabel" name="label_4">
+        <property name="buddy">
+         <cstring>vpn_implementation</cstring>
+        </property>
         <property name="sizePolicy">
          <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
           <horstretch>0</horstretch>
@@ -57,6 +60,9 @@
       </item>
       <item>
        <widget class="QLabel" name="label_10">
+        <property name="buddy">
+         <cstring>vpn_mtu</cstring>
+        </property>
         <property name="sizePolicy">
          <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
           <horstretch>0</horstretch>
@@ -94,21 +100,21 @@
       <item>
        <widget class="QCheckBox" name="vpn_ipv6">
         <property name="text">
-         <string>Tun Enable IPv6</string>
+         <string>Tun Enable &amp;IPv6</string>
         </property>
        </widget>
       </item>
       <item>
        <widget class="QCheckBox" name="strict_route">
         <property name="text">
-         <string notr="true">Strict Route</string>
+         <string notr="true">&amp;Strict Route</string>
         </property>
        </widget>
       </item>
       <item>
        <widget class="QCheckBox" name="fake_dns">
         <property name="text">
-         <string notr="true">FakeDNS</string>
+         <string notr="true">&amp;FakeDNS</string>
         </property>
        </widget>
       </item>
@@ -133,7 +139,7 @@ This needs to be run Proxor with administrator privileges.</string>
       <item>
        <widget class="QCheckBox" name="hide_console">
         <property name="text">
-         <string>Hide Console</string>
+         <string>&amp;Hide Console</string>
         </property>
        </widget>
       </item>
@@ -175,7 +181,7 @@ This needs to be run Proxor with administrator privileges.</string>
          </sizepolicy>
         </property>
         <property name="text">
-         <string>Pick...</string>
+         <string>Pick…</string>
         </property>
        </widget>
        <layout class="QVBoxLayout" name="verticalLayout_4">
@@ -215,7 +221,7 @@ This needs to be run Proxor with administrator privileges.</string>
      <item>
       <widget class="QPushButton" name="troubleshooting">
        <property name="text">
-        <string>Troubleshooting</string>
+        <string>&amp;Troubleshooting</string>
        </property>
       </widget>
      </item>

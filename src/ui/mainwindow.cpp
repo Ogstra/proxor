@@ -121,6 +121,28 @@
 #include <QPushButton>
 
 namespace {
+#ifndef Q_OS_MACOS
+// Top-bar menu buttons take Tab focus; Space already clicks a button, this adds Enter/Return.
+class EnterClicksFilter : public QObject {
+public:
+    using QObject::QObject;
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override {
+        if (event->type() == QEvent::KeyPress) {
+            const int key = static_cast<QKeyEvent *>(event)->key();
+            if (key == Qt::Key_Return || key == Qt::Key_Enter) {
+                if (auto *button = qobject_cast<QAbstractButton *>(watched)) {
+                    button->click();
+                    return true;
+                }
+            }
+        }
+        return QObject::eventFilter(watched, event);
+    }
+};
+#endif
+
 // When the tunnel is the active mode, every test leaves through it, so a test that runs
 // while the core is still installing routes reports the whole list as unavailable. The
 // moment Tun was last switched on lives here rather than in the class because the tests
@@ -378,23 +400,39 @@ public:
     }
 };
 
-QIcon makeToggleProxyIcon(const QColor &color) {
-    QPixmap pixmap(24, 24);
-    pixmap.fill(Qt::transparent);
+inline QJsonArray last_arr; // Matches the gRPC connection statistics payload.
 
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setPen(QPen(color.darker(140), 1.5));
-    painter.setBrush(color);
-    painter.drawEllipse(QRectF(3, 3, 18, 18));
+// Start is a circle, Stop a rounded square, so the state is not conveyed by color alone.
+// Rendered at 1x/2x/3x so the icon stays sharp on HiDPI screens.
+QIcon makeToggleProxyIcon(const QColor &color, bool stopShape = false) {
+    QIcon icon;
+    for (const int scale: {1, 2, 3}) {
+        QPixmap pixmap(24 * scale, 24 * scale);
+        pixmap.setDevicePixelRatio(scale);
+        pixmap.fill(Qt::transparent);
 
-    return QIcon(pixmap);
+        QPainter painter(&pixmap);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setPen(QPen(color.darker(140), 1.5));
+        painter.setBrush(color);
+        if (stopShape) painter.drawRoundedRect(QRectF(3, 3, 18, 18), 4, 4);
+        else painter.drawEllipse(QRectF(3, 3, 18, 18));
+        painter.end();
+
+        icon.addPixmap(pixmap);
+    }
+    return icon;
 }
 
 QString groupTabText(const QString &name) {
     constexpr int maxLen = 20;
     if (name.size() <= maxLen) return name;
     return name.left(maxLen) + "...";
+}
+
+// The tab text is shortened for long names; the tooltip carries the full name (empty when nothing was cut).
+QString groupTabToolTip(const QString &name) {
+    return groupTabText(name) == name ? QString() : name;
 }
 
 QList<int> mergeVisibleGroupOrder(const QList<int> &oldOrder, const QList<int> &visibleOrder) {
@@ -501,6 +539,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 #ifdef Q_OS_MACOS
     // The System theme on macOS keeps the native checkboxes; the Windows-tuned padding only
     // applies to the other (Fusion/QSS) themes, and is re-evaluated when the theme changes.
+    // Dormant branch: NormalizeTheme never returns "System" on macOS today (it maps to Fusion), so
+    // isSystem is always false here until the native System theme is enabled again.
     {
         auto applyToolbarCheckboxSS = [this](const QString &themeName) {
             const bool isSystem = (themeManager->NormalizeTheme(themeName) == QStringLiteral("System"));
@@ -563,7 +603,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         auto *chosen = menu.exec(tabBar->mapToGlobal(pos));
         if (chosen == updateAction) {
             if (startup_tun_pending || startup_tun_failed) {
-                MessageBoxWarning(software_name, tr("Subscription updates are disabled until Tun authorization succeeds."));
+                MessageBoxWarning(software_name, tr("Subscription updates are paused until Tun is on or turned off."));
                 return;
             }
             ProxorGui_sub::groupUpdater->AsyncUpdate(group->url, group->id);
@@ -583,7 +623,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             return;
         }
         if (chosen == deleteAction) {
-            if (QMessageBox::question(this, tr("Confirmation"), tr("Remove %1?").arg(group->name)) ==
+            if (QMessageBox::question(this, tr("Confirmation"), tr("Remove %1?").arg(group->name),
+                                      QMessageBox::Yes | QMessageBox::No, QMessageBox::No) ==
                 QMessageBox::StandardButton::Yes) {
                 ProxorGui::profileManager->DeleteGroup(group->id);
                 refresh_groups();
@@ -629,8 +670,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     // any associated QMenu causes UxTheme to draw a native drop arrow that
     // cannot be suppressed via QSS on the Windows platform style.
     auto attachMenuOnClick = [](QToolButton *btn, QMenu *menu) {
-        btn->setFocusPolicy(Qt::NoFocus);
 #ifdef Q_OS_MACOS
+        btn->setFocusPolicy(Qt::NoFocus);
         // Pop the menu up as a native NSMenu, like the menu-bar menus (the Qt-drawn popup had square
         // corners, no shortcuts, and on the Settings button did not show at all, leaving it pressed).
         QObject::connect(btn, &QToolButton::clicked, btn, [btn, menu]() {
@@ -639,6 +680,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             btn->update();
         });
 #else
+        // Keyboard users have no menu bar here: let Tab reach the button, Space/Enter opens the menu.
+        btn->setFocusPolicy(Qt::TabFocus);
+        btn->installEventFilter(new EnterClicksFilter(btn));
         QObject::connect(btn, &QToolButton::clicked, btn, [btn, menu]() {
             menu->popup(btn->mapToGlobal(QPoint(0, btn->height())));
         });
@@ -712,6 +756,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         // QMacStyle draws a QToolButton outside a QToolBar as a boxed bevel, which gives the same
         // boxed buttons as the other platforms in the Mac style. The Windows-tuned systemBtnSS
         // would replace that native drawing, so every button keeps no style sheet here.
+        // (isSystem is always false on macOS today: NormalizeTheme maps System to Fusion.)
         (void) systemBtnSS;
         (void) isSystem;
         for (auto *btn : btns) {
@@ -747,8 +792,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 #ifndef Q_OS_MACOS
         const int stackedSpacing = ui->verticalLayout_url_sub->spacing();
         const int stackedAvailableHeight = qMax(2, referenceHeight - stackedSpacing);
-        const int topButtonHeight = stackedAvailableHeight / 2;
-        const int bottomButtonHeight = stackedAvailableHeight - topButtonHeight;
+        // Never below the font height, so large system text is not clipped by the forced maximum.
+        const int minButtonHeight = ui->toolButton_url_test->fontMetrics().height() + 4;
+        const int topButtonHeight = qMax(stackedAvailableHeight / 2, minButtonHeight);
+        const int bottomButtonHeight = qMax(stackedAvailableHeight - stackedAvailableHeight / 2, minButtonHeight);
         ui->toolButton_url_test->setMinimumHeight(topButtonHeight);
         ui->toolButton_url_test->setMaximumHeight(topButtonHeight);
         ui->toolButton_update_subscription->setMinimumHeight(bottomButtonHeight);
@@ -757,8 +804,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
         const int checkboxSpacing = ui->verticalLayout_4->spacing();
         const int checkboxAvailableHeight = qMax(2, referenceHeight - checkboxSpacing);
-        const int topCheckboxHeight = checkboxAvailableHeight / 2;
-        const int bottomCheckboxHeight = checkboxAvailableHeight - topCheckboxHeight;
+        const int minCheckboxHeight = ui->checkBox_VPN->fontMetrics().height() + 2;
+        const int topCheckboxHeight = qMax(checkboxAvailableHeight / 2, minCheckboxHeight);
+        const int bottomCheckboxHeight = qMax(checkboxAvailableHeight - checkboxAvailableHeight / 2, minCheckboxHeight);
         ui->checkBox_VPN->setMinimumHeight(topCheckboxHeight);
         ui->checkBox_VPN->setMaximumHeight(topCheckboxHeight);
         ui->checkBox_SystemProxy->setMinimumHeight(bottomCheckboxHeight);
@@ -798,7 +846,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 #ifdef Q_OS_MACOS
     bottomPaneFont.setPointSize(11); // macOS points are 72-dpi based, 9 pt is too small there
 #else
-    bottomPaneFont.setPointSize(9);
+    // Respect the system font size instead of forcing 9 pt (high-DPI and accessibility font settings).
+    const qreal systemPointSize = QFontDatabase::systemFont(QFontDatabase::GeneralFont).pointSizeF();
+    if (systemPointSize > 0) bottomPaneFont.setPointSizeF(systemPointSize);
 #endif
     ui->masterLogBrowser->setFont(bottomPaneFont);
     qvLogDocument->setDefaultFont(bottomPaneFont);
@@ -896,6 +946,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 #endif
     connect(themeManager, &ThemeManager::themeChanged, this, [=](const QString &) {
         rebuildLogDocument(ui->log_filter->text());
+        // The status icons are tinted with the palette text color: rebuild the rows with the new tint.
+        if (!last_arr.isEmpty()) {
+            const auto arr = last_arr;
+            last_arr = QJsonArray();
+            refresh_connection_list(arr);
+        }
     });
     ui->proxyListTable->verticalHeader()->setVisible(false);
     ui->proxyListTable->setShowGrid(false);
@@ -1011,12 +1067,23 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     // search box
     ui->search->setPlaceholderText(tr("Search profiles"));
+    // Accessible names for screen readers (no visible change).
+    ui->search->setAccessibleName(tr("Search profiles"));
+    ui->proxyListTable->setAccessibleName(tr("Profiles"));
+    ui->masterLogBrowser->setAccessibleName(tr("Log"));
+    ui->tableWidget_conn->setAccessibleName(tr("Connections"));
+    ui->log_filter->setAccessibleName(tr("Filter log"));
+    ui->conn_filter->setAccessibleName(tr("Filter connections"));
+    ui->label_running->setAccessibleName(tr("Running profile"));
     ui->search->setMinimumWidth(120);
     ui->search->setVisible(false);
-    connect(shortcut_ctrl_f, &QShortcut::activated, this, [=] {
+    auto showSearch = [=] {
         ui->search->setVisible(true);
         ui->search->setFocus();
-    });
+    };
+    // Same pattern as Ctrl+V: the menu action shows the shortcut, the QShortcut covers the hidden menu bar.
+    connect(shortcut_ctrl_f, &QShortcut::activated, this, showSearch);
+    connect(ui->menu_find, &QAction::triggered, this, showSearch);
     connect(shortcut_ctrl_v, &QShortcut::activated, this, [=] {
         on_menu_add_from_clipboard_triggered();
     });
@@ -1055,7 +1122,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         auto *menu = new QMenu(this);
         bool pendingSeparator = false;
         for (auto *action : ui->menu_program->actions()) {
-            const bool isRestartProxy = action == ui->actionRestart_Proxy; // replaced by Connect / Disconnect
+            const bool isRestartProxy = action == ui->actionRestart_Proxy; // replaced by Start / Stop
             if (!isRestartProxy && hidden.contains(action)) continue;
             if (action->isSeparator()) {
                 pendingSeparator = !menu->isEmpty();
@@ -1085,7 +1152,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 #endif
             if (isRestartProxy) {
                 // One action for both directions, same behavior as the Start/Stop button of the window.
-                tray_toggle_action = new QAction(tr("Connect"), menu);
+                tray_toggle_action = new QAction(tr("Start"), menu);
                 connect(tray_toggle_action, &QAction::triggered, this, [this] { on_toolButton_toggle_proxy_clicked(); });
                 menu->addAction(tray_toggle_action);
                 continue;
@@ -1479,7 +1546,7 @@ void MainWindow::closeEvent(QCloseEvent *event) {
             event->ignore();
             if (!noTrayCloseNoticeShown) {
                 noTrayCloseNoticeShown = true;
-                MessageBoxInfo(software_name, ProxorPlatform::NoTrayCloseNotice(trayCap));
+                MW_show_log(ProxorPlatform::NoTrayCloseNotice(trayCap));
             }
             return;
         }
@@ -1657,9 +1724,9 @@ void MainWindow::refreshWifiMonitoring() {
             QTimer::singleShot(0, this, [this, perm] {
                 QMessageBox box(GetMessageBoxParent());
                 box.setIcon(QMessageBox::Information);
-                box.setWindowTitle(tr("Wi-Fi network name"));
+                box.setWindowTitle(tr("Wi-Fi access"));
                 box.setText(ProxorWifi::DescribePermission(perm));
-                auto *cont = box.addButton(tr("Continue..."), QMessageBox::AcceptRole);
+                auto *cont = box.addButton(tr("Continue"), QMessageBox::AcceptRole);
                 box.addButton(tr("Not Now"), QMessageBox::RejectRole);
                 box.exec();
                 if (box.clickedButton() == cont) {
@@ -2027,7 +2094,9 @@ void MainWindow::dialog_message_impl(const QString &sender, const QString &info)
             refresh_groups();
             refresh_proxy_list();
             if (!info.contains("dingyue")) {
-                show_log_impl(tr("Imported %1 profile(s)").arg(ProxorGui::dataStore->imported_count));
+                const int addedCount = ProxorGui::dataStore->imported_count;
+                // Nothing parsed (e.g. unrelated clipboard text): say so instead of a bare "Added 0".
+                show_log_impl(addedCount > 0 ? tr("Added %1 profile(s)").arg(addedCount) : tr("No profiles were found."));
             }
         } else if (info == "NewGroup") {
             refresh_groups();
@@ -2082,7 +2151,7 @@ void MainWindow::on_menu_routing_settings_triggered() {
 }
 
 void MainWindow::on_menu_vpn_settings_triggered() {
-    openSettings(tr("VPN"));
+    openSettings(tr("Tun"));
 }
 
 void MainWindow::on_menu_ssid_settings_triggered() {
@@ -2345,7 +2414,7 @@ void MainWindow::onUpdateStaged() {
     update_staged = true;
     tray->showMessage(
         tr("Proxor"),
-        tr("Update downloaded. It will install automatically when you close the app."),
+        tr("Update downloaded. Proxor is closing to install it."),
         QSystemTrayIcon::Information,
         4000
     );
@@ -2536,6 +2605,8 @@ void MainWindow::proxor_set_spmode_system_proxy(bool enable, bool save) {
 #else
         if (enable) {
             auto socks_port = ProxorGui::dataStore->inbound_socks_port;
+            // The inbound is a single "mixed" listener that answers both HTTP and SOCKS, so the HTTP proxy
+            // port is intentionally the same port as SOCKS (not a copy and paste slip).
             auto http_port = ProxorGui::dataStore->inbound_socks_port;
             if (!SetSystemProxy(http_port, socks_port)) {
 #ifdef Q_OS_LINUX
@@ -2593,7 +2664,7 @@ void MainWindow::macInstallHelperThen(const QString &feature, MacHelperEnableAct
             onReady();
             break;
         case MacAdminScriptOutcome::Cancelled:
-            MessageBoxWarning(software_name, tr("%1 was not turned on: the Proxor service was not installed.").arg(feature));
+            MW_show_log(tr("%1 was not turned on: the Proxor service was not installed.").arg(feature));
             break;
         case MacAdminScriptOutcome::Failed:
             MessageBoxWarning(software_name, tr("The Proxor service could not be installed: %1").arg(result.reason));
@@ -2654,29 +2725,34 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
                 if (requestPermission) {
 #ifdef Q_OS_LINUX
                     if (!Linux_HavePkexec()) {
-                        MessageBoxWarning(software_name, tr("Tun mode needs pkexec. Install PolicyKit and try again."));
+                        MessageBoxWarning(software_name, tr("Tun Mode needs PolicyKit (pkexec). Install it and try again."));
                         proxor_set_spmode_FAILED
                     }
                     if (!Linux_HaveSetcap()) {
-                        MessageBoxWarning(software_name, tr("Tun mode needs setcap. Install libcap and try again."));
+                        MessageBoxWarning(software_name, tr("Tun Mode needs libcap tools (setcap). Install them and try again."));
                         proxor_set_spmode_FAILED
                     }
                     auto ret = Linux_Pkexec_SetCapString(ProxorGui::FindProxorCoreRealPath(), "cap_net_admin=ep");
                     if (ret == 0) {
+                        MW_show_log(tr("Restarting Proxor to apply Tun permissions."));
                         this->exit_reason = 3;
                         on_menu_exit_triggered();
                     } else {
-                        MessageBoxWarning(
-                            software_name,
-                            tr("Tun mode could not grant cap_net_admin to proxor_core. You may have cancelled the authorization dialog, or the installation may not allow file capabilities.")
-                        );
+                        // Technical detail goes to the log; the dialog only says what the user can do.
+                        MW_show_log(tr("Tun Mode: granting cap_net_admin to proxor_core failed (setcap exit code %1). The authorization dialog may have been cancelled, or the installation may not allow file capabilities.").arg(ret));
+                        MessageBoxWarning(software_name, tr("Tun Mode could not get the permission it needs. If you cancelled the password prompt, try again."));
                     }
 #endif
 #ifdef Q_OS_WIN
-                    auto n = QMessageBox::warning(GetMessageBoxParent(), software_name, tr("Please run Proxor as admin"), QMessageBox::Yes | QMessageBox::No);
-                    if (n == QMessageBox::Yes) {
-                        this->exit_reason = 3;
-                        on_menu_exit_triggered();
+                    if (startup_tun_pending) {
+                        // Restoring a remembered Tun at launch: a modal at every login is noise, so log only.
+                        MW_show_log(tr("Tun Mode was not restored: run Proxor as administrator."));
+                    } else {
+                        auto n = QMessageBox::warning(GetMessageBoxParent(), tr("Tun Mode"), tr("Tun needs administrator rights. Restart Proxor as administrator?"), QMessageBox::Yes | QMessageBox::No);
+                        if (n == QMessageBox::Yes) {
+                            this->exit_reason = 3;
+                            on_menu_exit_triggered();
+                        }
                     }
 #endif
                     proxor_set_spmode_FAILED
@@ -2718,7 +2794,7 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
 #endif
 #ifdef Q_OS_LINUX
                 if (!Linux_HavePkexec()) {
-                    MessageBoxWarning(software_name, tr("Tun mode needs pkexec. Install PolicyKit and try again."));
+                    MessageBoxWarning(software_name, tr("Tun Mode needs PolicyKit (pkexec). Install it and try again."));
                     proxor_set_spmode_FAILED
                 }
                 if (qEnvironmentVariableIsSet("APPIMAGE")) {
@@ -2873,9 +2949,9 @@ void MainWindow::refresh_status(const QString &traffic_update) {
     ui->checkBox_SystemProxy->setChecked(ProxorGui::dataStore->spmode_system_proxy);
     if (ProxorGui::dataStore->started_id >= 0) last_started_profile_id = ProxorGui::dataStore->started_id;
     const bool showStopState = running != nullptr || start_pending;
-    if (tray_toggle_action != nullptr) tray_toggle_action->setText(showStopState ? tr("Disconnect") : tr("Connect"));
+    if (tray_toggle_action != nullptr) tray_toggle_action->setText(showStopState ? tr("Stop") : tr("Start"));
     ui->toolButton_toggle_proxy->setText(showStopState ? tr("Stop") : tr("Start"));
-    ui->toolButton_toggle_proxy->setIcon(showStopState ? makeToggleProxyIcon(QColor(255, 59, 48))
+    ui->toolButton_toggle_proxy->setIcon(showStopState ? makeToggleProxyIcon(QColor(255, 59, 48), true)
                                                        : makeToggleProxyIcon(QColor(52, 199, 89)));
     if (select_mode) {
         ui->label_running->setText(tr("Select") + " *");
@@ -2955,6 +3031,7 @@ void MainWindow::refresh_groups() {
             auto group = ProxorGui::profileManager->GetGroup(visibleGroups[index]);
             if (group == nullptr) continue;
             ui->tabWidget->setTabText(index, groupTabText(group->name));
+            tabBar->setTabToolTip(index, groupTabToolTip(group->name));
             tabBar->setTabData(index, group->id);
         }
         tabBar->setTabData(visibleGroups.count(), kAddGroupTabId);
@@ -2976,6 +3053,7 @@ void MainWindow::refresh_groups() {
             layout2->setSpacing(0);
             widget2->setLayout(layout2);
             ui->tabWidget->addTab(widget2, group == nullptr ? QString{} : groupTabText(group->name));
+            if (group != nullptr) tabBar->setTabToolTip(index, groupTabToolTip(group->name));
             tabBar->setTabData(index, gid);
             index++;
         }
@@ -3169,9 +3247,6 @@ void MainWindow::on_menu_clone_triggered() {
     auto ents = get_now_selected_list();
     if (ents.isEmpty()) return;
 
-    auto btn = QMessageBox::question(this, tr("Clone"), tr("Clone %1 item(s)").arg(ents.count()));
-    if (btn != QMessageBox::Yes) return;
-
     QStringList sls;
     for (const auto &ent: ents) {
         sls << ent->bean->ToProxorShareLink(ent->type);
@@ -3207,7 +3282,8 @@ void MainWindow::on_menu_move_triggered() {
 void MainWindow::on_menu_delete_triggered() {
     auto ents = get_now_selected_list();
     if (ents.count() == 0) return;
-    if (QMessageBox::question(this, tr("Confirmation"), QString(tr("Remove %1 item(s) ?")).arg(ents.count())) ==
+    if (QMessageBox::question(this, tr("Confirmation"), QString(tr("Remove %1 item(s)?")).arg(ents.count()),
+                              QMessageBox::Yes | QMessageBox::No, QMessageBox::No) ==
         QMessageBox::StandardButton::Yes) {
         for (const auto &ent: ents) {
             ProxorGui::profileManager->DeleteProfile(ent->id);
@@ -3219,6 +3295,9 @@ void MainWindow::on_menu_delete_triggered() {
 void MainWindow::on_menu_reset_traffic_triggered() {
     auto ents = get_now_selected_list();
     if (ents.count() == 0) return;
+    if (ents.count() > 1 &&
+        QMessageBox::question(this, software_name, tr("Reset traffic of %1 profiles?").arg(ents.count())) != QMessageBox::Yes)
+        return;
     for (const auto &ent: ents) {
         ent->traffic_data->Reset();
         ProxorGui::profileManager->SaveProfile(ent);
@@ -3230,9 +3309,9 @@ void MainWindow::on_menu_profile_debug_info_triggered() {
     auto ents = get_now_selected_list();
     if (ents.count() != 1) return;
     QMessageBox mb(QMessageBox::Information, software_name, ents.first()->ToJsonBytes(), QMessageBox::NoButton, this);
-    auto *btnEdit   = mb.addButton("Edit",   QMessageBox::ActionRole);
-    auto *btnReload = mb.addButton("Reload", QMessageBox::ActionRole);
-    mb.addButton("OK", QMessageBox::AcceptRole);
+    auto *btnEdit   = mb.addButton(tr("Edit"),   QMessageBox::ActionRole);
+    auto *btnReload = mb.addButton(tr("Reload"), QMessageBox::ActionRole);
+    mb.addButton(tr("OK"), QMessageBox::AcceptRole);
     mb.exec();
     if (mb.clickedButton() == btnEdit) {
         auto dialog = new DialogEditProfile("", ents.first()->id, this);
@@ -3276,26 +3355,18 @@ void MainWindow::on_menu_export_config_triggered() {
     auto ent = ents.first();
     if (ent->bean->DisplayCoreType() != software_core_name) return;
 
-    auto result = BuildConfig(ent, false, true);
-    QString config_core = QJsonObject2QString(result->coreConfig, false);
-    QApplication::clipboard()->setText(config_core);
+    QMessageBox msg(QMessageBox::Question, software_name, tr("Export %1 config").arg(ent->bean->DisplayName()), QMessageBox::NoButton, this);
+    auto *btnCore = msg.addButton(tr("Copy core config"), QMessageBox::AcceptRole);
+    auto *btnTest = msg.addButton(tr("Copy test config"), QMessageBox::AcceptRole);
+    auto *btnCancel = msg.addButton(QMessageBox::Cancel);
+    msg.setEscapeButton(btnCancel);
+    msg.setDefaultButton(btnCore);
+    msg.exec();
+    if (msg.clickedButton() != btnCore && msg.clickedButton() != btnTest) return;
 
-    QMessageBox msg(QMessageBox::Information, tr("Config copied"), tr("Config copied"));
-    msg.addButton("Copy core config", QMessageBox::YesRole);
-    msg.addButton("Copy test config", QMessageBox::NoRole);
-    msg.addButton(QMessageBox::Ok);
-    msg.setEscapeButton(QMessageBox::Ok);
-    msg.setDefaultButton(QMessageBox::Ok);
-    auto ret = msg.exec();
-    if (ret == 2) {
-        result = BuildConfig(ent, false, false);
-        config_core = QJsonObject2QString(result->coreConfig, false);
-        QApplication::clipboard()->setText(config_core);
-    } else if (ret == 3) {
-        result = BuildConfig(ent, true, false);
-        config_core = QJsonObject2QString(result->coreConfig, false);
-        QApplication::clipboard()->setText(config_core);
-    }
+    auto result = BuildConfig(ent, msg.clickedButton() == btnTest, false);
+    QApplication::clipboard()->setText(QJsonObject2QString(result->coreConfig, false));
+    show_log_impl(tr("Config copied"));
 }
 
 void MainWindow::display_qr_link(bool nkrFormat) {
@@ -3338,7 +3409,7 @@ void MainWindow::display_qr_link(bool nkrFormat) {
                             im.setPixel(x + qr_padding, y + qr_padding, black);
                 show_qr(size());
             } catch (const std::exception &ex) {
-                QMessageBox::warning(nullptr, "error", ex.what());
+                MessageBoxWarning(software_name, ex.what());
             }
         }
 
@@ -3359,7 +3430,7 @@ void MainWindow::display_qr_link(bool nkrFormat) {
             l->setScaledContents(true);
             layout()->addWidget(l);
             cb = new QCheckBox;
-            cb->setText("Proxor Links");
+            cb->setText(tr("Proxor Links"));
             layout()->addWidget(cb);
             l2 = new QPlainTextEdit();
             l2->setReadOnly(true);
@@ -3390,7 +3461,7 @@ void MainWindow::importQrFromImage(const QImage &image, ProxorPlatform::QrSource
         MessageBoxInfo(software_name, msg);
         return;
     }
-    show_log_impl("QR Code Result:\n" + text);
+    show_log_impl(tr("QR code found"));
     ProxorGui_sub::groupUpdater->AsyncUpdate(text);
 }
 
@@ -3398,10 +3469,21 @@ void MainWindow::on_menu_scan_qr_camera_triggered() {
 #ifdef NKR_CAMERA_SCAN
     DialogScanCamera dialog(this);
     if (dialog.exec() != QDialog::Accepted) {
-        if (!dialog.failure().isEmpty()) show_log_impl(tr("Scan QR code with camera: %1.").arg(dialog.failure()));
+        if (!dialog.failure().isEmpty()) {
+            // The OS asks only once; later denials need this pointer to the right settings page (log only, no extra modal).
+            QString hint;
+#if defined(Q_OS_MACOS)
+            if (dialog.failure().contains(QStringLiteral("not allowed")))
+                hint = tr(" Allow Proxor in System Settings > Privacy & Security > Camera.");
+#elif defined(Q_OS_WIN)
+            if (dialog.failure().contains(QStringLiteral("not allowed")))
+                hint = tr(" Allow Proxor in Settings > Privacy & security > Camera.");
+#endif
+            show_log_impl(tr("Scan QR code with camera: %1.").arg(dialog.failure()) + hint);
+        }
         return;
     }
-    show_log_impl("QR Code Result:\n" + dialog.text());
+    show_log_impl(tr("QR code found"));
     ProxorGui_sub::groupUpdater->AsyncUpdate(dialog.text());
 #endif
 }
@@ -3429,7 +3511,7 @@ bool MainWindow::macScreenCaptureReady() {
     using namespace ProxorPlatform;
     const auto d = DecideMacScreenScan(ProxorMac::ScreenCapturePreflight(), false);
     if (d.capture) return true;
-    show_log_impl(tr("Scan QR code from screen: the Screen Recording permission is missing."));
+    show_log_impl(tr("Scan QR code from screen: the Screen Recording permission is missing. Allow Proxor in System Settings > Privacy & Security > Screen & System Audio Recording."));
     ProxorMac::ScreenCaptureRequest();
     return false;
 }
@@ -3446,7 +3528,7 @@ void MainWindow::on_menu_scan_qr_triggered() {
 #endif
     auto offerAlternatives = [this](const QString &message) {
         QMessageBox box(QMessageBox::Information, software_name, message, QMessageBox::Close, this);
-        auto *fileBtn = box.addButton(tr("Choose Image File..."), QMessageBox::ActionRole);
+        auto *fileBtn = box.addButton(tr("Choose Image File…"), QMessageBox::ActionRole);
         auto *clipBtn = box.addButton(tr("Use Clipboard Image"), QMessageBox::ActionRole);
         box.exec();
         if (box.clickedButton() == fileBtn) on_menu_scan_qr_image_triggered();
@@ -3458,10 +3540,11 @@ void MainWindow::on_menu_scan_qr_triggered() {
     }
 
     if (SelectScreenCaptureBackend(CurrentPlatformEnvironment()) == ScreenCaptureBackend::Portal) {
+        const bool wasVisible = isVisible();
         hide();
-        QTimer::singleShot(400, this, [this, cap, offerAlternatives] {
-            ProxorDesktop::TakeScreenshot(QString(), this, [this, cap, offerAlternatives](const ProxorDesktop::ScreenshotResult &r) {
-                show();
+        QTimer::singleShot(400, this, [this, cap, offerAlternatives, wasVisible] {
+            ProxorDesktop::TakeScreenshot(QString(), this, [this, cap, offerAlternatives, wasVisible](const ProxorDesktop::ScreenshotResult &r) {
+                if (wasVisible) show();
                 if (r.result.outcome == ProxorDesktop::PortalOutcome::Cancelled) {
                     show_log_impl(tr("Scan QR code from screen: %1").arg(r.result.detail));
                     return;
@@ -3481,48 +3564,51 @@ void MainWindow::on_menu_scan_qr_triggered() {
                     MessageBoxInfo(software_name, msg);
                     return;
                 }
-                show_log_impl("QR Code Result:\n" + text);
+                show_log_impl(tr("QR code found"));
                 ProxorGui_sub::groupUpdater->AsyncUpdate(text);
             });
         });
         return;
     }
 
+    // Let the window disappear from the screenshot without blocking the event loop, and only bring it back
+    // if it was visible before (a window hidden in the tray stays hidden).
+    const bool wasVisible = isVisible();
     hide();
-    QThread::sleep(1);
+    QTimer::singleShot(400, this, [this, cap, wasVisible] {
+        // Primary screen first, then every other screen.
+        QList<QScreen *> screens = QGuiApplication::screens();
+        if (auto *primary = QGuiApplication::primaryScreen()) {
+            screens.removeAll(primary);
+            screens.prepend(primary);
+        }
+        bool anyImage = false;
+        QString text;
+        for (auto *screen : screens) {
+            const auto g = screen->geometry();
+            const auto image = screen->grabWindow(0, g.x(), g.y(), g.width(), g.height()).toImage();
+            if (image.isNull()) continue;
+            anyImage = true;
+            text = ProxorPlatform::DecodeQrFromImage(image);
+            if (!text.isEmpty()) break;
+        }
 
-    // Primary screen first, then every other screen.
-    QList<QScreen *> screens = QGuiApplication::screens();
-    if (auto *primary = QGuiApplication::primaryScreen()) {
-        screens.removeAll(primary);
-        screens.prepend(primary);
-    }
-    bool anyImage = false;
-    QString text;
-    for (auto *screen : screens) {
-        const auto g = screen->geometry();
-        const auto image = screen->grabWindow(0, g.x(), g.y(), g.width(), g.height()).toImage();
-        if (image.isNull()) continue;
-        anyImage = true;
-        text = DecodeQrFromImage(image);
-        if (!text.isEmpty()) break;
-    }
-
-    show();
+        if (wasVisible) show();
 
 #ifdef Q_OS_MACOS
-    if (!anyImage) { // preflight said granted but the grab is empty: still the permission, not "not found"
-        show_log_impl(tr("Scan QR code from screen: the Screen Recording permission is missing."));
-        return;
-    }
+        if (!anyImage) { // preflight said granted but the grab is empty: still the permission, not "not found"
+            show_log_impl(tr("Scan QR code from screen: the Screen Recording permission is missing. Allow Proxor in System Settings > Privacy & Security > Screen & System Audio Recording."));
+            return;
+        }
 #endif
-    const auto msg = QrScanMessage(QrSource::Screen, {anyImage, !text.isEmpty()}, cap);
-    if (!msg.isEmpty()) {
-        MessageBoxInfo(software_name, msg);
-    } else {
-        show_log_impl("QR Code Result:\n" + text);
-        ProxorGui_sub::groupUpdater->AsyncUpdate(text);
-    }
+        const auto msg = ProxorPlatform::QrScanMessage(ProxorPlatform::QrSource::Screen, {anyImage, !text.isEmpty()}, cap);
+        if (!msg.isEmpty()) {
+            MessageBoxInfo(software_name, msg);
+        } else {
+            show_log_impl(tr("QR code found"));
+            ProxorGui_sub::groupUpdater->AsyncUpdate(text);
+        }
+    });
 #endif
 }
 
@@ -3579,7 +3665,8 @@ void MainWindow::on_menu_delete_repeat_triggered() {
     }
 
     if (out_del.length() > 0 &&
-        QMessageBox::question(this, tr("Confirmation"), tr("Remove %1 item(s) ?").arg(out_del.length()) + "\n" + remove_display) == QMessageBox::StandardButton::Yes) {
+        QMessageBox::question(this, tr("Confirmation"), tr("Remove %1 item(s)?").arg(out_del.length()) + "\n" + remove_display,
+                              QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::StandardButton::Yes) {
         for (const auto &ent: out_del) {
             ProxorGui::profileManager->DeleteProfile(ent->id);
         }
@@ -3616,7 +3703,8 @@ void MainWindow::on_menu_remove_unavailable_triggered() {
     }
 
     if (out_del.length() > 0 &&
-        QMessageBox::question(this, tr("Confirmation"), tr("Remove %1 item(s) ?").arg(out_del.length()) + "\n" + remove_display) == QMessageBox::StandardButton::Yes) {
+        QMessageBox::question(this, tr("Confirmation"), tr("Remove %1 item(s)?").arg(out_del.length()) + "\n" + remove_display,
+                              QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::StandardButton::Yes) {
         for (const auto &ent: out_del) {
             ProxorGui::profileManager->DeleteProfile(ent->id);
         }
@@ -3640,8 +3728,8 @@ void MainWindow::on_menu_resolve_domain_triggered() {
     if (profiles.isEmpty()) return;
 
     if (QMessageBox::question(this,
-                              tr("Confirmation"),
-                              tr("Resolving domain to IP, if support.")) != QMessageBox::StandardButton::Yes) {
+                              tr("Resolve Domain"),
+                              tr("Resolve domain names to IP addresses?")) != QMessageBox::StandardButton::Yes) {
         return;
     }
     if (mw_sub_updating) return;
@@ -3730,7 +3818,7 @@ void MainWindow::on_toolButton_toggle_proxy_clicked() {
             proxor_start(fallbackId);
             return;
         }
-        MessageBoxWarning(software_name, tr("Select at least one proxy in the Toggle column first."));
+        MessageBoxWarning(software_name, tr("Select a profile first."));
         return;
     }
 
@@ -4054,7 +4142,6 @@ void MainWindow::start_select_mode(QObject *context, const std::function<void(in
 
 // 连接列表
 
-inline QJsonArray last_arr; // Matches the gRPC connection statistics payload.
 
 void MainWindow::refresh_connection_list(const QJsonArray &arr) {
     if (last_arr == arr) {
@@ -4491,7 +4578,7 @@ void MainWindow::macStartupProbed(MacHelperState st, bool rememberedTun, bool re
                 ProxorGui_log::WriteDiagnostic(tr("The Proxor service installation is already waiting for your answer."));
                 return;
             }
-            MW_show_log(tr("%1 is on, but the Proxor network service is not installed or needs an update; asking to install it. Connected without it meanwhile.").arg(inst.feature));
+            MW_show_log(tr("%1 is on, but the Proxor service is not installed or needs an update; asking to install it. Connected without it meanwhile.").arg(inst.feature));
             // Parentless when the window is hidden, so the dialog is not a sheet on an invisible window.
             MacHelperInstaller::ConfirmAndInstall(isVisible() ? this : nullptr, inst.feature, inst.enableAction,
                                                   [this, rememberedTun, rememberedSystemProxy](MacAdminScriptResult result) {
@@ -4515,7 +4602,7 @@ void MainWindow::macStartupProbed(MacHelperState st, bool rememberedTun, bool re
                 }
                 MW_show_log(MacStartupInstallDeclinedText(rememberedTun, rememberedSystemProxy));
                 refresh_status();
-                MessageBoxWarning(software_name, text);
+                if (result.outcome == MacAdminScriptOutcome::Failed) MessageBoxWarning(software_name, text);
             });
             return;
         }
@@ -4655,7 +4742,7 @@ void MainWindow::failStartupTunAuthorization() {
     // startup_network_work is deliberately left in place: the work is not cancelled, only
     // held, so enabling Tun later -- or turning the mode off -- still runs it instead of
     // sending those requests outside the tunnel the user asked for.
-    MW_show_log(tr("Tun authorization failed; startup network work waits until Tun is available."));
+    MW_show_log(tr("Tun could not start. Updates are paused until Tun is on or turned off."));
 }
 
 bool MainWindow::StopVPNProcess(bool unconditional) {

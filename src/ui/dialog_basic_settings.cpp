@@ -121,6 +121,8 @@ void RefreshThemeModeOptions(QComboBox *themeCombo, QComboBox *modeCombo) {
 
 QString SettingsListStyleForTheme(const QString &themeName) {
 #ifdef Q_OS_MACOS
+    // Dormant today: NormalizeTheme maps System to Fusion on macOS, so this branch only runs once the
+    // native System theme is enabled again.
     if (themeManager->NormalizeTheme(themeName) == QStringLiteral("System")) {
         // Sidebar-like navigation that follows light/dark through palette roles.
         return QStringLiteral(
@@ -133,9 +135,9 @@ QString SettingsListStyleForTheme(const QString &themeName) {
     QString style = QStringLiteral("QListWidget::item{padding:4px 10px;}");
     if (themeManager->NormalizeTheme(themeName) != QStringLiteral("System")) {
         style += QStringLiteral(
-            "QListWidget::item:selected{background:#455364;color:#DFE1E2;}"
-            "QListWidget::item:selected:active{background:#455364;color:#DFE1E2;}"
-            "QListWidget::item:selected:!active{background:#455364;color:#DFE1E2;}"
+            "QListWidget::item:selected{background:palette(highlight);color:palette(highlighted-text);}"
+            "QListWidget::item:selected:active{background:palette(highlight);color:palette(highlighted-text);}"
+            "QListWidget::item:selected:!active{background:palette(highlight);color:palette(highlighted-text);}"
         );
     }
     return style;
@@ -209,7 +211,7 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     auto *vpnHost = new QWidget(this);
     auto *vpnLay = new QVBoxLayout(vpnHost);
     vpnLay->setContentsMargins(0, 0, 0, 0);
-    const int vpnIdx = ui->tabWidget->addTab(vpnHost, tr("VPN"));
+    const int vpnIdx = ui->tabWidget->addTab(vpnHost, tr("Tun"));
     auto *ssidHost = new QWidget(this);
     auto *ssidLay = new QVBoxLayout(ssidHost);
     ssidLay->setContentsMargins(0, 0, 0, 0);
@@ -243,6 +245,7 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     });
 
     m_settingsNav = new QListWidget(this);
+    m_settingsNav->setAccessibleName(tr("Settings sections"));
     m_settingsNav->setObjectName(QStringLiteral("settingsNav"));
     for (int i = 0; i < ui->tabWidget->count(); ++i) {
         m_settingsNav->addItem(ui->tabWidget->tabText(i));
@@ -331,15 +334,12 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
         const auto icmp = ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::IcmpPing);
         if (icmp.support != ProxorPlatform::Support::Supported) {
             ui->ping_type->setItemData(1, icmp.reason, Qt::ToolTipRole);
-            auto *icmpNote = ProxorPlatform::MakeCapabilityNote(ui->ping_type->parentWidget());
-            ui->verticalLayout_latency->insertWidget(1, icmpNote);
-            auto refreshIcmpNote = [this, icmp, icmpNote](int index) {
-                if (index == 1) {
-                    icmpNote->setText(icmp.reason);
-                    icmpNote->setVisible(true);
-                } else {
-                    icmpNote->setVisible(false);
-                }
+            // The reason stays in tooltips only (no extra visible text): the item tooltip above, and the
+            // combo box tooltip/accessible description while the unsupported ICMP item is selected.
+            auto refreshIcmpNote = [this, icmp](int index) {
+                const QString reason = index == 1 ? icmp.reason : QString();
+                ui->ping_type->setToolTip(reason);
+                ui->ping_type->setAccessibleDescription(reason);
             };
             connect(ui->ping_type, QOverload<int>::of(&QComboBox::currentIndexChanged), this, refreshIcmpNote);
             refreshIcmpNote(ui->ping_type->currentIndex());
@@ -706,6 +706,15 @@ void DialogBasicSettings::selectSection(const QString &title) {
 }
 
 // slots
+
+void DialogBasicSettings::changeEvent(QEvent *event) {
+    QDialog::changeEvent(event);
+    // The lock icons are tinted with the palette text color: tint again when the palette changes.
+    // (isVisible: palette events also arrive while the dialog is still being constructed.)
+    if (isVisible() && (event->type() == QEvent::PaletteChange || event->type() == QEvent::ApplicationPaletteChange)) {
+        refresh_auth();
+    }
+}
 
 void DialogBasicSettings::refresh_auth() {
     ui->inbound_auth->setText({});

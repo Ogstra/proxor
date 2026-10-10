@@ -2,6 +2,7 @@
 #include "ui_edit_quic.h"
 
 #include "fmt/QUICBean.hpp"
+#include "db/Database.hpp"
 
 #include <QInputDialog>
 #include <QUuid>
@@ -88,6 +89,11 @@ void EditQUIC::onStart(std::shared_ptr<ProxorGui::ProxyEntity> _ent) {
 
 bool EditQUIC::onEnd() {
     auto bean = this->ent->QUICBean();
+
+    if (bean->proxy_type != ProxorGui_fmt::QUICBean::proxy_Hysteria2 && ui->uuid->text().trimmed().isEmpty()) {
+        MessageBoxWarning(software_name, tr("UUID cannot be empty."));
+        return false;
+    }
 
     P_SAVE_BOOL(forceExternal);
 

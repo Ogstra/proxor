@@ -40,10 +40,16 @@ void CameraCapture::start() {
 
 void CameraCapture::stop() {
     if (!camera) return;
+    // stop() is called from a frame slot (the QR was read), i.e. while sink is still emitting:
+    // detach everything first and let the event loop delete the objects.
+    sink->disconnect(this);
+    camera->disconnect(this);
     camera->stop();
-    delete camera;
-    delete session;
-    delete sink;
+    session->setCamera(nullptr);
+    session->setVideoSink(nullptr);
+    camera->deleteLater();
+    session->deleteLater();
+    sink->deleteLater();
     camera = nullptr;
     session = nullptr;
     sink = nullptr;

@@ -194,7 +194,7 @@ void MainWindow::speedtest_profiles(const QList<std::shared_ptr<ProxorGui::Proxy
 
                     if (mode == libcore::TestMode::UrlTest || mode == libcore::FullTest || mode == libcore::HeadPing) {
                         if (!profile->EnsureHydrated()) {
-                            profile->full_test_report = tr("Profile is not hydrated");
+                            profile->full_test_report = tr("This profile could not be loaded.");
                             ProxorGui::profileManager->SaveProfile(profile);
                             continue;
                         }
@@ -239,14 +239,14 @@ void MainWindow::speedtest_profiles(const QList<std::shared_ptr<ProxorGui::Proxy
                         req.set_full_speed_timeout(ProxorGui::dataStore->test_download_timeout);
                     } else if (effectiveMode == libcore::TcpPing) {
                         if (!profile->EnsureHydrated()) {
-                            profile->full_test_report = tr("Profile is not hydrated");
+                            profile->full_test_report = tr("This profile could not be loaded.");
                             ProxorGui::profileManager->SaveProfile(profile);
                             continue;
                         }
                         req.set_address(profile->bean->DisplayAddress().toStdString());
                     } else if (effectiveMode == libcore::IcmpPing) {
                         if (!profile->EnsureHydrated()) {
-                            profile->full_test_report = tr("Profile is not hydrated");
+                            profile->full_test_report = tr("This profile could not be loaded.");
                             ProxorGui::profileManager->SaveProfile(profile);
                             continue;
                         }
@@ -401,7 +401,7 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
     auto ent = (_id < 0 && !ents.isEmpty()) ? ents.first() : ProxorGui::profileManager->GetProfile(_id);
     if (ent == nullptr) return;
     if (!ent->EnsureHydrated()) {
-        MessageBoxWarning(software_name, tr("Profile is not hydrated"));
+        MessageBoxWarning(software_name, tr("This profile could not be loaded."));
         return;
     }
 
@@ -419,7 +419,7 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
     if (!result->error.isEmpty()) {
         start_pending = false;
         refresh_status();
-        MessageBoxWarning("BuildConfig return error", result->error);
+        MessageBoxWarning(software_name, tr("Could not start: %1").arg(result->error));
         return;
     }
 
@@ -448,7 +448,7 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
             start_pending = false;
             runOnUiThread([=] {
                 refresh_status();
-                MessageBoxWarning("LoadConfig return error", error);
+                MessageBoxWarning(software_name, tr("Could not start: %1").arg(error));
             });
             return false;
         } else if (!rpcOK) {
@@ -498,7 +498,7 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
     if (!mu_stopping.tryLock()) {
         start_pending = false;
         refresh_status();
-        MessageBoxWarning(software_name, "Another profile is stopping...");
+        MW_show_log(tr("Another profile is still stopping. Try again in a moment."));
         mu_starting.unlock();
         return;
     }
@@ -511,7 +511,7 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
     if (!ProxorGui::dataStore->core_running) {
         runOnUiThread(
             [=] {
-                MW_show_log("Try to start the config, but the core has not listened to the grpc port, so restart it...");
+                MW_show_log(tr("The core is not ready yet, restarting it to start the profile."));
                 core_process->start_profile_when_core_is_up = ent->id;
                 core_process->Restart();
             },
@@ -521,7 +521,7 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
     }
 
     // timeout message
-    auto restartMsgbox = new QMessageBox(QMessageBox::Question, software_name, tr("If there is no response for a long time, it is recommended to restart the software."),
+    auto restartMsgbox = new QMessageBox(QMessageBox::Question, software_name, tr("This is taking a long time. Restart Proxor?"),
                                          QMessageBox::Yes | QMessageBox::No, this);
     connect(restartMsgbox, &QMessageBox::accepted, this, [=] { MW_dialog_message("", "RestartProgram"); });
     auto restartMsgboxTimer = new MessageBoxTimer(this, restartMsgbox, 5000);
@@ -538,7 +538,7 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
         QString validateError = defaultClient->Validate(&validateRpcOK, validateReq);
         if (validateRpcOK && !validateError.isEmpty()) {
             MW_show_log("<<<<<<<< " + tr("Config validation failed for %1: %2").arg(ent->bean->DisplayTypeAndName(), validateError));
-            runOnUiThread([=] { MessageBoxWarning("Validate return error", validateError); });
+            runOnUiThread([=] { MessageBoxWarning(software_name, tr("Could not start: %1").arg(validateError)); });
             start_pending = false;
             mu_starting.unlock();
 #ifdef Q_OS_MACOS
@@ -683,7 +683,7 @@ void MainWindow::proxor_stop(bool crash, bool sem) {
             bool rpcOK;
             QString error = defaultClient->Stop(&rpcOK);
             if (rpcOK && !error.isEmpty()) {
-                runOnUiThread([=] { MessageBoxWarning("Stop return error", error); });
+                runOnUiThread([=] { MessageBoxWarning(software_name, tr("Could not stop: %1").arg(error)); });
                 return false;
             } else if (!rpcOK) {
                 return false;
@@ -723,7 +723,7 @@ void MainWindow::proxor_stop(bool crash, bool sem) {
     }
 
     // timeout message
-    auto restartMsgbox = new QMessageBox(QMessageBox::Question, software_name, tr("If there is no response for a long time, it is recommended to restart the software."),
+    auto restartMsgbox = new QMessageBox(QMessageBox::Question, software_name, tr("This is taking a long time. Restart Proxor?"),
                                          QMessageBox::Yes | QMessageBox::No, this);
     connect(restartMsgbox, &QMessageBox::accepted, this, [=] { MW_dialog_message("", "RestartProgram"); });
     auto restartMsgboxTimer = new MessageBoxTimer(this, restartMsgbox, 5000);
@@ -761,7 +761,14 @@ void MainWindow::CheckUpdate(bool silent) {
         return;
     }
 
-    if (startup_tun_pending || startup_tun_failed) return;
+    if (startup_tun_pending || startup_tun_failed) {
+        if (!silent) {
+            runOnUiThread([=] {
+                MessageBoxInfo(QObject::tr("Check for Updates"), QObject::tr("Cannot check right now: waiting for Tun."));
+            });
+        }
+        return;
+    }
 
     // The core may not have finished starting up yet. The client may not exist,
     // and even once it does, Call() short-circuits with -1919 until the core
@@ -787,7 +794,14 @@ void MainWindow::CheckUpdate(bool silent) {
 #endif
     request.set_channel(PackageModeName(mode).toStdString());
     auto response = ProxorGui_rpc::defaultClient->Update(&ok, request);
-    if (!ok) return;
+    if (!ok) {
+        if (!silent) {
+            runOnUiThread([=] {
+                MessageBoxInfo(QObject::tr("Check for Updates"), QObject::tr("Could not reach the update server."));
+            });
+        }
+        return;
+    }
 
     auto err = response.error();
     if (!err.empty()) {
@@ -916,10 +930,18 @@ void MainWindow::CheckUpdate(bool silent) {
                         return;
                     }
 #endif
-                    if (!ok2) return;
+                    if (!ok2) {
+                        // Windows/macOS handled this above; elsewhere the dialog would otherwise hang.
+                        runOnUiThread([=] {
+                            if (updateProgressDialog) updateProgressDialog->close();
+                            MessageBoxWarning(QObject::tr("Update"), QObject::tr("Could not reach the update server."));
+                        });
+                        return;
+                    }
 
                     if (!response2.error().empty()) {
                         runOnUiThread([=] {
+                            if (updateProgressDialog) updateProgressDialog->close();
 #ifdef Q_OS_MACOS
                             if (macRoute != ProxorPlatform::MacAppUpdateRoute::Guidance) {
                                 if (updateProgressDialog) updateProgressDialog->close();

@@ -21,6 +21,7 @@ void ApplyCapability(QWidget *control, const CapabilityStatus &status, QLabel *n
     const bool supported = status.support == Support::Supported;
     if (control != nullptr && !supported) {
         control->setToolTip(status.reason);
+        control->setAccessibleDescription(status.reason); // tooltips are invisible to keyboard and screen-reader users
         if (status.support == Support::Unsupported) control->setEnabled(false);
     }
     if (note != nullptr) {

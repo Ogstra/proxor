@@ -25,7 +25,7 @@ done < <(grep 'UpdateFailureStage::Download' "$grpc")
 in_win 'update_release_url = releasePageUrl.toString();' "$grpc" || fail "update_release_url capture must be inside #ifdef Q_OS_WIN"
 in_win_else 'MessageBoxWarning(QObject::tr("Update"), err.c_str());' "$grpc" || fail "original check-error box must stay in the #else branch"
 in_win_else 'MessageBoxWarning(QObject::tr("Update"), response2.error().c_str());' "$grpc" || fail "original download-error box must stay in the #else branch"
-grep -qxF '                    if (!ok2) return;' "$grpc" || fail "the plain if (!ok2) return; must remain"
+grep -qF 'Could not reach the update server.' "$grpc" || fail "the non-Windows download RPC failure must still close the progress dialog and report"
 s=$(grep -c 'if (silent) return;' "$grpc" || true)
 [ "$s" -ge 2 ] || fail "both silent guards must be kept"
 

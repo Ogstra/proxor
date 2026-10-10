@@ -194,7 +194,7 @@ void DialogEditProfile::typeSelected(const QString &newType) {
     }
 
     if (!validType) {
-        MessageBoxWarning(newType, "Wrong type");
+        MessageBoxWarning(software_name, tr("Unknown profile type."));
         return;
     }
 
@@ -204,7 +204,7 @@ void DialogEditProfile::typeSelected(const QString &newType) {
     }
 
     if (!ent->EnsureHydrated()) {
-        MessageBoxWarning(newType, "Profile is not hydrated");
+        MessageBoxWarning(software_name, tr("This profile could not be loaded."));
         return;
     }
 
@@ -361,8 +361,20 @@ void DialogEditProfile::applySectionLayout() {
 
 bool DialogEditProfile::onEnd() {
     if (!ent->EnsureHydrated()) {
-        MessageBoxWarning(software_name, "Profile is not hydrated");
+        MessageBoxWarning(software_name, tr("This profile could not be loaded."));
         return false;
+    }
+    // Address and port are hidden for chain/internal profiles; validate only what is shown.
+    if (!ui->address->isHidden()) {
+        if (ui->address->text().remove(' ').isEmpty()) {
+            MessageBoxWarning(software_name, tr("Address cannot be empty."));
+            return false;
+        }
+        const auto port = ui->port->text().toInt();
+        if (port < 1 || port > 65535) {
+            MessageBoxWarning(software_name, tr("Port must be between 1 and 65535."));
+            return false;
+        }
     }
     // bean
     if (!innerEditor->onEnd()) {
@@ -414,7 +426,7 @@ void DialogEditProfile::accept() {
     if (newEnt) {
         auto ok = ProxorGui::profileManager->AddProfile(ent);
         if (!ok) {
-            MessageBoxWarning("???", "id exists");
+            MessageBoxWarning(software_name, tr("This profile already exists."));
         }
     } else {
         auto changed = ProxorGui::profileManager->SaveProfile(ent);
@@ -489,15 +501,14 @@ void DialogEditProfile::on_apply_to_group_clicked() {
     } else {
         auto group = ProxorGui::profileManager->GetGroup(ent->gid);
         if (group == nullptr) {
-            MessageBoxWarning("failed", "unknown group");
+            MessageBoxWarning(software_name, tr("The group no longer exists."));
             return;
         }
         // save this
         if (onEnd()) {
             ProxorGui::profileManager->SaveProfile(ent);
         } else {
-            MessageBoxWarning("failed", "failed to save");
-            return;
+            return; // onEnd() already told the user what is wrong
         }
         // copy keys
         for (const auto &pair: apply_to_group_ui) {

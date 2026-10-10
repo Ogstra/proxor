@@ -21,6 +21,9 @@ public:
     QString text() const { return decoded; }
     QString failure() const { return failureReason; }
 
+protected:
+    void done(int result) override;
+
 private:
     void onFrame(const QImage &image);
 
