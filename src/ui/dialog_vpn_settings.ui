@@ -181,7 +181,7 @@ This needs to be run Proxor with administrator privileges.</string>
          </sizepolicy>
         </property>
         <property name="text">
-         <string>Pick...</string>
+         <string>Pick…</string>
         </property>
        </widget>
        <layout class="QVBoxLayout" name="verticalLayout_4">

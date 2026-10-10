@@ -1695,9 +1695,9 @@ void MainWindow::refreshWifiMonitoring() {
             QTimer::singleShot(0, this, [this, perm] {
                 QMessageBox box(GetMessageBoxParent());
                 box.setIcon(QMessageBox::Information);
-                box.setWindowTitle(tr("Wi-Fi network name"));
+                box.setWindowTitle(tr("Wi-Fi access"));
                 box.setText(ProxorWifi::DescribePermission(perm));
-                auto *cont = box.addButton(tr("Continue..."), QMessageBox::AcceptRole);
+                auto *cont = box.addButton(tr("Continue"), QMessageBox::AcceptRole);
                 box.addButton(tr("Not Now"), QMessageBox::RejectRole);
                 box.exec();
                 if (box.clickedButton() == cont) {
@@ -3473,7 +3473,7 @@ void MainWindow::on_menu_scan_qr_triggered() {
 #endif
     auto offerAlternatives = [this](const QString &message) {
         QMessageBox box(QMessageBox::Information, software_name, message, QMessageBox::Close, this);
-        auto *fileBtn = box.addButton(tr("Choose Image File..."), QMessageBox::ActionRole);
+        auto *fileBtn = box.addButton(tr("Choose Image File…"), QMessageBox::ActionRole);
         auto *clipBtn = box.addButton(tr("Use Clipboard Image"), QMessageBox::ActionRole);
         box.exec();
         if (box.clickedButton() == fileBtn) on_menu_scan_qr_image_triggered();
@@ -3667,8 +3667,8 @@ void MainWindow::on_menu_resolve_domain_triggered() {
     if (profiles.isEmpty()) return;
 
     if (QMessageBox::question(this,
-                              tr("Confirmation"),
-                              tr("Resolving domain to IP, if support.")) != QMessageBox::StandardButton::Yes) {
+                              tr("Resolve Domain"),
+                              tr("Resolve domain names to IP addresses?")) != QMessageBox::StandardButton::Yes) {
         return;
     }
     if (mw_sub_updating) return;

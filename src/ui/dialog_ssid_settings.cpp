@@ -251,8 +251,8 @@ void DialogSSIDSettings::updatePermissionRow() {
         return;
     }
     m_permissionNote->setText(ProxorWifi::DescribePermission(perm));
-    m_permissionButton->setText(perm == ProxorWifi::PermissionState::NotDetermined ? tr("Allow Location Access...")
-                                                                                   : tr("Open Location Settings..."));
+    m_permissionButton->setText(perm == ProxorWifi::PermissionState::NotDetermined ? tr("Allow Location Access…")
+                                                                                   : tr("Open Location Settings…"));
     m_permissionNote->show();
     m_permissionButton->show();
 }

@@ -681,7 +681,7 @@
   </action>
   <action name="menu_scan_qr_image">
    <property name="text">
-    <string>Add from QR Code in Image File...</string>
+    <string>Add from QR Code in Image File…</string>
    </property>
   </action>
   <action name="menu_scan_qr_clipboard">
