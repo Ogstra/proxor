@@ -400,17 +400,26 @@ public:
     }
 };
 
-QIcon makeToggleProxyIcon(const QColor &color) {
-    QPixmap pixmap(24, 24);
-    pixmap.fill(Qt::transparent);
+// Start is a circle, Stop a rounded square, so the state is not conveyed by color alone.
+// Rendered at 1x/2x/3x so the icon stays sharp on HiDPI screens.
+QIcon makeToggleProxyIcon(const QColor &color, bool stopShape = false) {
+    QIcon icon;
+    for (const int scale: {1, 2, 3}) {
+        QPixmap pixmap(24 * scale, 24 * scale);
+        pixmap.setDevicePixelRatio(scale);
+        pixmap.fill(Qt::transparent);
 
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setPen(QPen(color.darker(140), 1.5));
-    painter.setBrush(color);
-    painter.drawEllipse(QRectF(3, 3, 18, 18));
+        QPainter painter(&pixmap);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setPen(QPen(color.darker(140), 1.5));
+        painter.setBrush(color);
+        if (stopShape) painter.drawRoundedRect(QRectF(5, 5, 14, 14), 3, 3);
+        else painter.drawEllipse(QRectF(3, 3, 18, 18));
+        painter.end();
 
-    return QIcon(pixmap);
+        icon.addPixmap(pixmap);
+    }
+    return icon;
 }
 
 QString groupTabText(const QString &name) {
@@ -523,6 +532,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 #ifdef Q_OS_MACOS
     // The System theme on macOS keeps the native checkboxes; the Windows-tuned padding only
     // applies to the other (Fusion/QSS) themes, and is re-evaluated when the theme changes.
+    // Dormant branch: NormalizeTheme never returns "System" on macOS today (it maps to Fusion), so
+    // isSystem is always false here until the native System theme is enabled again.
     {
         auto applyToolbarCheckboxSS = [this](const QString &themeName) {
             const bool isSystem = (themeManager->NormalizeTheme(themeName) == QStringLiteral("System"));
@@ -737,6 +748,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         // QMacStyle draws a QToolButton outside a QToolBar as a boxed bevel, which gives the same
         // boxed buttons as the other platforms in the Mac style. The Windows-tuned systemBtnSS
         // would replace that native drawing, so every button keeps no style sheet here.
+        // (isSystem is always false on macOS today: NormalizeTheme maps System to Fusion.)
         (void) systemBtnSS;
         (void) isSystem;
         for (auto *btn : btns) {
@@ -772,8 +784,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 #ifndef Q_OS_MACOS
         const int stackedSpacing = ui->verticalLayout_url_sub->spacing();
         const int stackedAvailableHeight = qMax(2, referenceHeight - stackedSpacing);
-        const int topButtonHeight = stackedAvailableHeight / 2;
-        const int bottomButtonHeight = stackedAvailableHeight - topButtonHeight;
+        // Never below the font height, so large system text is not clipped by the forced maximum.
+        const int minButtonHeight = ui->toolButton_url_test->fontMetrics().height() + 4;
+        const int topButtonHeight = qMax(stackedAvailableHeight / 2, minButtonHeight);
+        const int bottomButtonHeight = qMax(stackedAvailableHeight - stackedAvailableHeight / 2, minButtonHeight);
         ui->toolButton_url_test->setMinimumHeight(topButtonHeight);
         ui->toolButton_url_test->setMaximumHeight(topButtonHeight);
         ui->toolButton_update_subscription->setMinimumHeight(bottomButtonHeight);
@@ -782,8 +796,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
         const int checkboxSpacing = ui->verticalLayout_4->spacing();
         const int checkboxAvailableHeight = qMax(2, referenceHeight - checkboxSpacing);
-        const int topCheckboxHeight = checkboxAvailableHeight / 2;
-        const int bottomCheckboxHeight = checkboxAvailableHeight - topCheckboxHeight;
+        const int minCheckboxHeight = ui->checkBox_VPN->fontMetrics().height() + 2;
+        const int topCheckboxHeight = qMax(checkboxAvailableHeight / 2, minCheckboxHeight);
+        const int bottomCheckboxHeight = qMax(checkboxAvailableHeight - checkboxAvailableHeight / 2, minCheckboxHeight);
         ui->checkBox_VPN->setMinimumHeight(topCheckboxHeight);
         ui->checkBox_VPN->setMaximumHeight(topCheckboxHeight);
         ui->checkBox_SystemProxy->setMinimumHeight(bottomCheckboxHeight);
@@ -2922,7 +2937,7 @@ void MainWindow::refresh_status(const QString &traffic_update) {
     const bool showStopState = running != nullptr || start_pending;
     if (tray_toggle_action != nullptr) tray_toggle_action->setText(showStopState ? tr("Stop") : tr("Start"));
     ui->toolButton_toggle_proxy->setText(showStopState ? tr("Stop") : tr("Start"));
-    ui->toolButton_toggle_proxy->setIcon(showStopState ? makeToggleProxyIcon(QColor(255, 59, 48))
+    ui->toolButton_toggle_proxy->setIcon(showStopState ? makeToggleProxyIcon(QColor(255, 59, 48), true)
                                                        : makeToggleProxyIcon(QColor(52, 199, 89)));
     if (select_mode) {
         ui->label_running->setText(tr("Select") + " *");

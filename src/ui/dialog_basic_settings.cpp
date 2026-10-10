@@ -121,6 +121,8 @@ void RefreshThemeModeOptions(QComboBox *themeCombo, QComboBox *modeCombo) {
 
 QString SettingsListStyleForTheme(const QString &themeName) {
 #ifdef Q_OS_MACOS
+    // Dormant today: NormalizeTheme maps System to Fusion on macOS, so this branch only runs once the
+    // native System theme is enabled again.
     if (themeManager->NormalizeTheme(themeName) == QStringLiteral("System")) {
         // Sidebar-like navigation that follows light/dark through palette roles.
         return QStringLiteral(

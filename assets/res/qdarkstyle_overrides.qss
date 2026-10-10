@@ -11,7 +11,7 @@ QTreeView:focus,
 QListView:focus,
 QTableView:focus,
 QColumnView:focus {
-  border: 1px solid #455364;
+  border: 1px solid palette(highlight);
 }
 
 QComboBox:focus,
@@ -19,7 +19,7 @@ QAbstractSpinBox:focus,
 QDateEdit:focus,
 QTimeEdit:focus,
 QDateTimeEdit:focus {
-  border: 1px solid #455364;
+  border: 1px solid palette(highlight);
 }
 
 QPushButton:focus,
@@ -32,16 +32,16 @@ QLineEdit,
 QTextEdit,
 QPlainTextEdit,
 QTextBrowser {
-  selection-background-color: #455364;
-  selection-color: #DFE1E2;
+  selection-background-color: palette(highlight);
+  selection-color: palette(highlighted-text);
 }
 
 QLineEdit:selected,
 QTextEdit:selected,
 QPlainTextEdit:selected,
 QTextBrowser:selected {
-  background: #455364;
-  color: #DFE1E2;
+  background: palette(highlight);
+  color: palette(highlighted-text);
 }
 
 QSplitter#splitter {
