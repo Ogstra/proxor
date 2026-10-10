@@ -502,7 +502,7 @@ void ThemeManager::ApplyTheme(const QString &theme, bool force) {
         event_filter_installed = true;
     }
 
-#ifdef Q_OS_MACOS
+#if defined(Q_OS_MACOS) || QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
     // The native macos style and the default palette already follow the OS light/dark
     // setting, but Proxor's own themeChanged listeners (log colors, table theme, settings
     // navigation QSS) only refresh on ApplyTheme, so re-apply System when the OS flips.
