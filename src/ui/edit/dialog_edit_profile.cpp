@@ -364,6 +364,18 @@ bool DialogEditProfile::onEnd() {
         MessageBoxWarning(software_name, tr("This profile could not be loaded."));
         return false;
     }
+    // Address and port are hidden for chain/internal profiles; validate only what is shown.
+    if (!ui->address->isHidden()) {
+        if (ui->address->text().remove(' ').isEmpty()) {
+            MessageBoxWarning(software_name, tr("Address cannot be empty."));
+            return false;
+        }
+        const auto port = ui->port->text().toInt();
+        if (port < 1 || port > 65535) {
+            MessageBoxWarning(software_name, tr("Port must be between 1 and 65535."));
+            return false;
+        }
+    }
     // bean
     if (!innerEditor->onEnd()) {
         return false;
