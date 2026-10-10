@@ -158,12 +158,7 @@ DialogSSIDSettings::DialogSSIDSettings(QWidget *parent) : QDialog(parent), ui(ne
     statusLayout->addWidget(m_permissionNote);
     statusLayout->addWidget(m_permissionButton, 0, Qt::AlignLeft);
 
-    auto *hint = new QLabel(tr("Proxor reads the Wi-Fi network only while On-Demand is on with at least one network, or a Hosts entry has \"Skip on SSIDs\"."), wifiStatusGroup);
-    hint->setWordWrap(true);
-    QPalette hintPalette = hint->palette();
-    hintPalette.setColor(QPalette::WindowText, hintPalette.color(QPalette::PlaceholderText));
-    hint->setPalette(hintPalette);
-    statusLayout->addWidget(hint);
+    wifiStatusGroup->setToolTip(tr("Proxor reads the Wi-Fi network only while On-Demand is on with at least one network, or a Hosts entry has \"Skip on SSIDs\"."));
 
     ui->verticalLayout->insertWidget(ssidCapability.support != ProxorPlatform::Support::Supported ? 1 : 0, wifiStatusGroup);
 
@@ -293,7 +288,7 @@ bool DialogSSIDSettings::save(QStringList &flags) {
     std::shared_ptr<ProxorGui::ProxyEntity> selectedProfile =
         ProxorGui::profileManager->GetProfile(selectedProfileId);
     if (ProxorGui::dataStore->ssid_on_demand_enabled && selectedProfile == nullptr) {
-        MessageBoxWarning(windowTitle(), tr("Select a target profile for WiFi on-demand before enabling it."));
+        MessageBoxWarning(windowTitle(), tr("Select a target profile for Wi-Fi on-demand before enabling it."));
         return false;
     }
 
