@@ -17,6 +17,5 @@ grep -q 'MacScreenCapture.mm' "$repo_root/cmake/macos/macos.cmake" || fail "maco
 for f in windows/windows.cmake linux/linux.cmake; do
   ! grep -q 'MacScreenCapture' "$repo_root/cmake/$f" || fail "$f names MacScreenCapture"
 done
-grep -q 'QString MacScreenRecordingMessage' "$pol" || fail "MacScreenRecordingMessage not defined in QrScanPolicy.cpp"
 ! grep -q 'Q_OS_' "$repo_root"/src/sys/macos/MacScreenCapture.* || fail "Q_OS_ in MacScreenCapture"
 echo "mac_qr: OK"

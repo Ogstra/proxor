@@ -3295,6 +3295,9 @@ void MainWindow::on_menu_delete_triggered() {
 void MainWindow::on_menu_reset_traffic_triggered() {
     auto ents = get_now_selected_list();
     if (ents.count() == 0) return;
+    if (ents.count() > 1 &&
+        QMessageBox::question(this, software_name, tr("Reset traffic of %1 profiles?").arg(ents.count())) != QMessageBox::Yes)
+        return;
     for (const auto &ent: ents) {
         ent->traffic_data->Reset();
         ProxorGui::profileManager->SaveProfile(ent);
@@ -3458,7 +3461,7 @@ void MainWindow::importQrFromImage(const QImage &image, ProxorPlatform::QrSource
         MessageBoxInfo(software_name, msg);
         return;
     }
-    show_log_impl("QR Code Result:\n" + text);
+    show_log_impl(tr("QR code found"));
     ProxorGui_sub::groupUpdater->AsyncUpdate(text);
 }
 
@@ -3480,7 +3483,7 @@ void MainWindow::on_menu_scan_qr_camera_triggered() {
         }
         return;
     }
-    show_log_impl("QR Code Result:\n" + dialog.text());
+    show_log_impl(tr("QR code found"));
     ProxorGui_sub::groupUpdater->AsyncUpdate(dialog.text());
 #endif
 }
@@ -3561,7 +3564,7 @@ void MainWindow::on_menu_scan_qr_triggered() {
                     MessageBoxInfo(software_name, msg);
                     return;
                 }
-                show_log_impl("QR Code Result:\n" + text);
+                show_log_impl(tr("QR code found"));
                 ProxorGui_sub::groupUpdater->AsyncUpdate(text);
             });
         });
@@ -3602,7 +3605,7 @@ void MainWindow::on_menu_scan_qr_triggered() {
         if (!msg.isEmpty()) {
             MessageBoxInfo(software_name, msg);
         } else {
-            show_log_impl("QR Code Result:\n" + text);
+            show_log_impl(tr("QR code found"));
             ProxorGui_sub::groupUpdater->AsyncUpdate(text);
         }
     });

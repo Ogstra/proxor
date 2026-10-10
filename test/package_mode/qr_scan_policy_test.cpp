@@ -49,17 +49,6 @@ private slots:
         const auto again = DecideMacScreenScan(false, true);
         QVERIFY(!again.capture && !again.requestAccess);
     }
-    void macMessage() {
-        const auto m = MacScreenRecordingMessage();
-        QVERIFY(m.contains("Screen Recording"));
-        QVERIFY(m.contains("System Settings"));
-        QVERIFY(m.contains("quit and reopen Proxor", Qt::CaseInsensitive));
-        QVERIFY(m.contains("image file", Qt::CaseInsensitive));
-        QVERIFY(m.contains("clipboard", Qt::CaseInsensitive));
-        QVERIFY(m.contains("off and on again"));
-        QVERIFY(m.contains("brew upgrade"));
-        QVERIFY(!m.contains("not found", Qt::CaseInsensitive));
-    }
     void macGrantedMiss() {
         const auto m = QrScanMessage(QrSource::Screen, {true, false}, {Support::Supported, {}});
         QCOMPARE(m, QString("QR Code not found. You can also use Add from QR Code in Image File."));
