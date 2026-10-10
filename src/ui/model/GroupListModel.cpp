@@ -112,16 +112,12 @@ QVariant GroupListModel::data(const QModelIndex &index, int role) const {
 
     if (role == Qt::ForegroundRole) {
         if (group->archive) return QColor(128, 128, 128);
-#ifdef Q_OS_MACOS
-        // Palette roles instead of fixed pink/gray: readable in light and dark. Update/Edit/Remove
-        // are clickable text cells, so they read as links.
+        // Palette roles instead of fixed pink/gray: readable in light and dark on every OS.
+        // Update/Edit/Remove are clickable text cells, so they read as links.
         if (index.column() == TypeColumn || index.column() == UrlColumn) {
             return QGuiApplication::palette().color(QPalette::Disabled, QPalette::Text);
         }
         if (index.column() >= UpdateColumn) return QGuiApplication::palette().color(QPalette::Link);
-#endif
-        if (index.column() == TypeColumn) return QColor(251, 114, 153);
-        if (index.column() == UrlColumn) return QColor(102, 102, 102);
     }
 
     return {};

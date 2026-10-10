@@ -3,6 +3,7 @@
 
 #include <QEvent>
 #include <QIcon>
+#include <QLabel>
 #include <QMessageBox>
 
 #include "ui/Icon.hpp"
@@ -32,6 +33,16 @@ void ProxyItem::changeEvent(QEvent *event) {
 }
 
 void ProxyItem::applyThemeStyle() {
+    // Palette roles instead of fixed gray/pink: readable on light and dark themes.
+    auto setLabelColor = [](QLabel *label, const QColor &color) {
+        QPalette pal = label->palette();
+        if (pal.color(QPalette::WindowText) == color) return;
+        pal.setColor(QPalette::WindowText, color);
+        label->setPalette(pal);
+    };
+    setLabelColor(ui->address, palette().color(QPalette::Disabled, QPalette::Text));
+    setLabelColor(ui->type, palette().color(QPalette::Link));
+
     // The material SVGs are black; Icon tints them with the current palette text color.
     ui->change->setIcon(QIcon(Icon::GetMaterialIcon("swap-horizontal")));
     ui->remove->setIcon(QIcon(Icon::GetMaterialIcon("delete")));
