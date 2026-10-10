@@ -5,6 +5,7 @@
 #include <QItemSelectionModel>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPalette>
 #include <QStyle>
 #include <QStyleOptionViewItem>
 
@@ -180,6 +181,14 @@ void ProxyListView::mouseReleaseEvent(QMouseEvent *event) {
 
 void ProxyListView::paintEvent(QPaintEvent *event) {
     QTableView::paintEvent(event);
+    if (auto *proxy = proxyModel(); proxy != nullptr && proxy->rowCount() == 0 && viewport() != nullptr) {
+        // Empty state: one muted line that only exists while the list is empty (no layout change).
+        QPainter hint(viewport());
+        hint.setPen(palette().color(QPalette::Disabled, QPalette::Text));
+        hint.drawText(viewport()->rect().adjusted(16, 16, -16, -16),
+                      Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap,
+                      tr("No profiles. Use Profiles > Add from Clipboard, or Add Subscription…"));
+    }
     if (m_dropIndicatorRow < 0) return;
 
     const int y = indicatorYForInsertionRow(m_dropIndicatorRow);
