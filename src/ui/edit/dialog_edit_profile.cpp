@@ -194,7 +194,7 @@ void DialogEditProfile::typeSelected(const QString &newType) {
     }
 
     if (!validType) {
-        MessageBoxWarning(newType, "Wrong type");
+        MessageBoxWarning(software_name, tr("Unknown profile type."));
         return;
     }
 
@@ -426,7 +426,7 @@ void DialogEditProfile::accept() {
     if (newEnt) {
         auto ok = ProxorGui::profileManager->AddProfile(ent);
         if (!ok) {
-            MessageBoxWarning("???", "id exists");
+            MessageBoxWarning(software_name, tr("This profile already exists."));
         }
     } else {
         auto changed = ProxorGui::profileManager->SaveProfile(ent);
@@ -501,15 +501,14 @@ void DialogEditProfile::on_apply_to_group_clicked() {
     } else {
         auto group = ProxorGui::profileManager->GetGroup(ent->gid);
         if (group == nullptr) {
-            MessageBoxWarning("failed", "unknown group");
+            MessageBoxWarning(software_name, tr("The group no longer exists."));
             return;
         }
         // save this
         if (onEnd()) {
             ProxorGui::profileManager->SaveProfile(ent);
         } else {
-            MessageBoxWarning("failed", "failed to save");
-            return;
+            return; // onEnd() already told the user what is wrong
         }
         // copy keys
         for (const auto &pair: apply_to_group_ui) {

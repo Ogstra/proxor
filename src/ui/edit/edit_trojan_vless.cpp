@@ -3,6 +3,7 @@
 
 #include "fmt/TrojanVLESSBean.hpp"
 #include "fmt/Preset.hpp"
+#include "db/Database.hpp"
 
 EditTrojanVLESS::EditTrojanVLESS(QWidget *parent) : QWidget(parent), ui(new Ui::EditTrojanVLESS) {
     ui->setupUi(this);
@@ -29,6 +30,11 @@ void EditTrojanVLESS::onStart(std::shared_ptr<ProxorGui::ProxyEntity> _ent) {
 
 bool EditTrojanVLESS::onEnd() {
     auto bean = this->ent->TrojanVLESSBean();
+    if (ui->password->text().isEmpty()) {
+        const bool vless = bean->proxy_type == ProxorGui_fmt::TrojanVLESSBean::proxy_VLESS;
+        MessageBoxWarning(software_name, vless ? tr("UUID cannot be empty.") : tr("Password cannot be empty."));
+        return false;
+    }
     bean->password = ui->password->text();
     bean->flow = ui->flow->currentText();
     return true;

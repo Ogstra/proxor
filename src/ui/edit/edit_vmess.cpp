@@ -2,6 +2,7 @@
 #include "ui_edit_vmess.h"
 
 #include "fmt/VMessBean.hpp"
+#include "db/Database.hpp"
 
 #include <QUuid>
 
@@ -25,6 +26,11 @@ void EditVMess::onStart(std::shared_ptr<ProxorGui::ProxyEntity> _ent) {
 
 bool EditVMess::onEnd() {
     auto bean = this->ent->VMessBean();
+
+    if (ui->uuid->text().trimmed().isEmpty()) {
+        MessageBoxWarning(software_name, tr("UUID cannot be empty."));
+        return false;
+    }
 
     bean->uuid = ui->uuid->text();
     bean->aid = ui->aid->text().toInt();

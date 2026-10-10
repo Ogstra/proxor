@@ -259,7 +259,7 @@ DialogEditGroup::~DialogEditGroup() {
 void DialogEditGroup::accept() {
     if (ent->id >= 0) { // already a group
         if (!ent->url.isEmpty() && ui->url->text().isEmpty()) {
-            MessageBoxWarning(tr("Warning"), tr("Please input URL"));
+            MessageBoxWarning(software_name, tr("Enter the subscription URL."));
             return;
         }
     }
