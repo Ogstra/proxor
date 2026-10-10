@@ -76,8 +76,8 @@ void DialogManageGroups::remove_group(int groupId) {
     auto ent = ProxorGui::profileManager->GetGroup(groupId);
     if (ent == nullptr || ProxorGui::profileManager->groups.size() <= 1) return;
 
-    if (QMessageBox::question(this, tr("Confirmation"), tr("Remove %1?").arg(ent->name)) ==
-        QMessageBox::StandardButton::Yes) {
+    if (QMessageBox::question(this, tr("Confirmation"), tr("Remove %1?").arg(ent->name),
+                              QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::StandardButton::Yes) {
         ProxorGui::profileManager->DeleteGroup(ent->id);
         reload_groups();
         MW_dialog_message(Dialog_DialogManageGroups, "refresh-1");
@@ -107,9 +107,7 @@ void DialogManageGroups::on_add_clicked() {
 }
 
 void DialogManageGroups::on_update_all_clicked() {
-    if (QMessageBox::question(this, tr("Confirmation"), tr("Update all subscriptions?")) == QMessageBox::StandardButton::Yes) {
-        UI_update_all_groups();
-    }
+    UI_update_all_groups(); // reversible, so no confirmation
 }
 
 void DialogManageGroups::on_listView_clicked(const QModelIndex &index) {

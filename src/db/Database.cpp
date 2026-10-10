@@ -482,7 +482,7 @@ namespace ProxorGui {
             SaveGroupsTabOrder();
             tx.commit();
 
-            MessageBoxInfo(software_name, "Profiles and groups reorder complete.");
+            if (MW_show_log) MW_show_log(QObject::tr("Profiles and groups reordered."));
         }
     }
 

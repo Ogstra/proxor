@@ -113,7 +113,7 @@ static QString mdToHtml(const QString &md, const QString &codeBg, const QString 
                     " style=\"background-color:%1; border:1px solid %2;"
                     " border-radius:6px; margin:2px 0 6px 0;\">"
                     "<tr><td style=\"padding:8px 12px;\">"
-                    "<pre style=\"margin:0; font-family:'SFMono-Regular',Consolas,monospace;"
+                    "<pre style=\"margin:0; font-family:'SFMono-Regular',Menlo,Consolas,'Liberation Mono','DejaVu Sans Mono',monospace;"
                     " font-size:87%%; line-height:1.4; white-space:pre-wrap; color:%3;\">%4</pre>"
                     "</td></tr></table>\n"
                 ).arg(codeBg, border, fg, preLines);
@@ -182,7 +182,7 @@ static QString buildHtml(const QString &md, bool dark) {
     QString fg       = dark ? "#e6edf3" : "#1f2328";
 
     QString css = QString(R"(
-body { font-family: -apple-system,"Segoe UI",Helvetica,Arial,sans-serif; font-size: 14px; line-height: 1.35; color: %1; margin: 0; padding: 2px 4px 8px 4px; }
+body { font-family: -apple-system,"Segoe UI",system-ui,"Noto Sans",Cantarell,Helvetica,Arial,sans-serif; font-size: 14px; line-height: 1.35; color: %1; margin: 0; padding: 2px 4px 8px 4px; }
 h1 { font-size: 1.7em; font-weight: 600; border-bottom: 1px solid %2; padding-bottom: .2em; margin: .6em 0 .2em; }
 h2 { font-size: 1.3em; font-weight: 600; border-bottom: 1px solid %2; padding-bottom: .2em; margin: .6em 0 .2em; }
 h3 { font-size: 1.1em; font-weight: 600; margin: .5em 0 .15em; }
@@ -192,7 +192,7 @@ a  { color: %3; text-decoration: none; }
 a:hover { text-decoration: underline; }
 ul, ol { margin: 0 0 .65em; padding-left: 1.6em; }
 li { margin: .15em 0; }
-code { font-family: "SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace; font-size: 85%; background-color: %4; border-radius: 4px; padding: .15em .4em; }
+code { font-family: "SFMono-Regular",Menlo,Consolas,"Liberation Mono","DejaVu Sans Mono",monospace; font-size: 85%; background-color: %4; border-radius: 4px; padding: .15em .4em; }
 blockquote { border-left: 4px solid %2; color: %5; margin: 0 0 .65em; padding: .3em .8em; }
 hr { border: none; border-top: 1px solid %2; margin: 1em 0; }
 )").arg(fg, border, link, inlineBg, quoteFg);
