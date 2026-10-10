@@ -121,6 +121,28 @@
 #include <QPushButton>
 
 namespace {
+#ifndef Q_OS_MACOS
+// Top-bar menu buttons take Tab focus; Space already clicks a button, this adds Enter/Return.
+class EnterClicksFilter : public QObject {
+public:
+    using QObject::QObject;
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override {
+        if (event->type() == QEvent::KeyPress) {
+            const int key = static_cast<QKeyEvent *>(event)->key();
+            if (key == Qt::Key_Return || key == Qt::Key_Enter) {
+                if (auto *button = qobject_cast<QAbstractButton *>(watched)) {
+                    button->click();
+                    return true;
+                }
+            }
+        }
+        return QObject::eventFilter(watched, event);
+    }
+};
+#endif
+
 // When the tunnel is the active mode, every test leaves through it, so a test that runs
 // while the core is still installing routes reports the whole list as unavailable. The
 // moment Tun was last switched on lives here rather than in the class because the tests
@@ -629,8 +651,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     // any associated QMenu causes UxTheme to draw a native drop arrow that
     // cannot be suppressed via QSS on the Windows platform style.
     auto attachMenuOnClick = [](QToolButton *btn, QMenu *menu) {
-        btn->setFocusPolicy(Qt::NoFocus);
 #ifdef Q_OS_MACOS
+        btn->setFocusPolicy(Qt::NoFocus);
         // Pop the menu up as a native NSMenu, like the menu-bar menus (the Qt-drawn popup had square
         // corners, no shortcuts, and on the Settings button did not show at all, leaving it pressed).
         QObject::connect(btn, &QToolButton::clicked, btn, [btn, menu]() {
@@ -639,6 +661,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             btn->update();
         });
 #else
+        // Keyboard users have no menu bar here: let Tab reach the button, Space/Enter opens the menu.
+        btn->setFocusPolicy(Qt::TabFocus);
+        btn->installEventFilter(new EnterClicksFilter(btn));
         QObject::connect(btn, &QToolButton::clicked, btn, [btn, menu]() {
             menu->popup(btn->mapToGlobal(QPoint(0, btn->height())));
         });
@@ -1013,10 +1038,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->search->setPlaceholderText(tr("Search profiles"));
     ui->search->setMinimumWidth(120);
     ui->search->setVisible(false);
-    connect(shortcut_ctrl_f, &QShortcut::activated, this, [=] {
+    auto showSearch = [=] {
         ui->search->setVisible(true);
         ui->search->setFocus();
-    });
+    };
+    // Same pattern as Ctrl+V: the menu action shows the shortcut, the QShortcut covers the hidden menu bar.
+    connect(shortcut_ctrl_f, &QShortcut::activated, this, showSearch);
+    connect(ui->menu_find, &QAction::triggered, this, showSearch);
     connect(shortcut_ctrl_v, &QShortcut::activated, this, [=] {
         on_menu_add_from_clipboard_triggered();
     });

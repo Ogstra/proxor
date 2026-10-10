@@ -563,6 +563,7 @@
     <addaction name="menu_scan_qr_clipboard"/>
     <addaction name="menu_add_subscription"/>
     <addaction name="separator"/>
+    <addaction name="menu_find"/>
     <addaction name="menu_select_all"/>
     <addaction name="menu_move"/>
     <addaction name="menu_clone"/>
@@ -670,6 +671,14 @@
     <string>Add from QR Code with Camera</string>
    </property>
   </action>
+  <action name="menu_find">
+   <property name="text">
+    <string>Find…</string>
+   </property>
+   <property name="shortcut">
+    <string notr="true">Ctrl+F</string>
+   </property>
+  </action>
   <action name="menu_scan_qr_image">
    <property name="text">
     <string>Add from QR Code in Image File...</string>
@@ -698,7 +707,7 @@
     <string>QR Code and link</string>
    </property>
    <property name="shortcut">
-    <string notr="true">Ctrl+Q</string>
+    <string notr="true">Ctrl+Shift+Q</string>
    </property>
   </action>
   <action name="menu_copy_link">
@@ -783,7 +792,7 @@
     <string>Move</string>
    </property>
    <property name="shortcut">
-    <string notr="true">Ctrl+M</string>
+    <string notr="true">Ctrl+Shift+M</string>
    </property>
   </action>
   <action name="menu_remove_unavailable">
@@ -820,7 +829,7 @@
     <string>Copy links of selected (Proxor Links)</string>
    </property>
    <property name="shortcut">
-    <string notr="true">Ctrl+N</string>
+    <string notr="true">Ctrl+Shift+C</string>
    </property>
   </action>
   <action name="menu_copy_links">
