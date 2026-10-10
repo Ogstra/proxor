@@ -430,6 +430,11 @@ QString groupTabText(const QString &name) {
     return name.left(maxLen) + "...";
 }
 
+// The tab text is shortened for long names; the tooltip carries the full name (empty when nothing was cut).
+QString groupTabToolTip(const QString &name) {
+    return groupTabText(name) == name ? QString() : name;
+}
+
 QList<int> mergeVisibleGroupOrder(const QList<int> &oldOrder, const QList<int> &visibleOrder) {
     QList<int> merged;
     int visibleIndex = 0;
@@ -3026,6 +3031,7 @@ void MainWindow::refresh_groups() {
             auto group = ProxorGui::profileManager->GetGroup(visibleGroups[index]);
             if (group == nullptr) continue;
             ui->tabWidget->setTabText(index, groupTabText(group->name));
+            tabBar->setTabToolTip(index, groupTabToolTip(group->name));
             tabBar->setTabData(index, group->id);
         }
         tabBar->setTabData(visibleGroups.count(), kAddGroupTabId);
@@ -3047,6 +3053,7 @@ void MainWindow::refresh_groups() {
             layout2->setSpacing(0);
             widget2->setLayout(layout2);
             ui->tabWidget->addTab(widget2, group == nullptr ? QString{} : groupTabText(group->name));
+            if (group != nullptr) tabBar->setTabToolTip(index, groupTabToolTip(group->name));
             tabBar->setTabData(index, gid);
             index++;
         }
