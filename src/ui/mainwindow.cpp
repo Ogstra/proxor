@@ -823,7 +823,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 #ifdef Q_OS_MACOS
     bottomPaneFont.setPointSize(11); // macOS points are 72-dpi based, 9 pt is too small there
 #else
-    bottomPaneFont.setPointSize(9);
+    // Respect the system font size instead of forcing 9 pt (high-DPI and accessibility font settings).
+    const qreal systemPointSize = QFontDatabase::systemFont(QFontDatabase::GeneralFont).pointSizeF();
+    if (systemPointSize > 0) bottomPaneFont.setPointSizeF(systemPointSize);
 #endif
     ui->masterLogBrowser->setFont(bottomPaneFont);
     qvLogDocument->setDefaultFont(bottomPaneFont);
@@ -2381,7 +2383,7 @@ void MainWindow::onUpdateStaged() {
     update_staged = true;
     tray->showMessage(
         tr("Proxor"),
-        tr("Update downloaded. It will install automatically when you close the app."),
+        tr("Update downloaded. Proxor is closing to install it."),
         QSystemTrayIcon::Information,
         4000
     );
