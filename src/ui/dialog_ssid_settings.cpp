@@ -195,6 +195,16 @@ DialogSSIDSettings::DialogSSIDSettings(QWidget *parent) : QDialog(parent), ui(ne
         m_wifiStatus->setText(tr("The Wi-Fi monitor is not running."));
         m_refreshWifi->setEnabled(false);
     }
+    // The Wi-Fi status group is built in code and sits at the top: give it the first tab stops, then the .ui order.
+    setTabOrder(m_addCurrent, m_refreshWifi);
+    setTabOrder(m_refreshWifi, m_permissionButton);
+    setTabOrder(m_permissionButton, ui->ssid_on_demand_enabled);
+    setTabOrder(ui->ssid_on_demand_enabled, ui->ssid_on_demand_profile);
+    setTabOrder(ui->ssid_on_demand_profile, ui->ssid_list_widget);
+    setTabOrder(ui->ssid_list_widget, ui->ssid_input);
+    setTabOrder(ui->ssid_input, ui->btn_add_ssid);
+    setTabOrder(ui->btn_add_ssid, ui->btn_remove_ssid);
+    setTabOrder(ui->btn_remove_ssid, ui->buttonBox);
     updateAddCurrentEnabled();
     updatePermissionRow();
 }
@@ -228,6 +238,7 @@ void DialogSSIDSettings::updateWifiStatus(const ProxorWifi::WifiReading &reading
 
 void DialogSSIDSettings::updateAddCurrentEnabled() {
     bool enabled = false;
+    QString reason = tr("Not connected to a Wi-Fi network.");
     if (auto *m = WifiMonitor::appInstance()) {
         const auto reading = m->lastReading();
         if (m->hasReading() && reading.state == ProxorWifi::ReadState::Connected && !reading.ssid.isEmpty()) {
@@ -235,11 +246,17 @@ void DialogSSIDSettings::updateAddCurrentEnabled() {
             for (int i = 0; i < ui->ssid_list_widget->count(); i++) {
                 if (ui->ssid_list_widget->item(i)->text() == reading.ssid) {
                     enabled = false;
+                    reason = tr("This network is already in the list.");
                     break;
                 }
             }
         }
+    } else {
+        reason = tr("The Wi-Fi monitor is not running.");
     }
+    // The reason lives in the tooltip and the accessible description (no extra visible text).
+    m_addCurrent->setToolTip(enabled ? QString() : reason);
+    m_addCurrent->setAccessibleDescription(enabled ? QString() : reason);
     m_addCurrent->setEnabled(enabled);
 }
 
@@ -253,6 +270,14 @@ void DialogSSIDSettings::updatePermissionRow() {
     m_permissionNote->setText(ProxorWifi::DescribePermission(perm));
     m_permissionButton->setText(perm == ProxorWifi::PermissionState::NotDetermined ? tr("Allow Location Access…")
                                                                                    : tr("Open Location Settings…"));
+    // On macOS, before the first answer the button alone is enough (the OS prompt explains itself); the text moves to its tooltip.
+    if (ProxorPlatform::CompiledHostOs() == ProxorPlatform::HostOs::MacOS && perm == ProxorWifi::PermissionState::NotDetermined) {
+        m_permissionNote->hide();
+        m_permissionButton->setToolTip(m_permissionNote->text());
+        m_permissionButton->setAccessibleDescription(m_permissionNote->text());
+        m_permissionButton->show();
+        return;
+    }
     m_permissionNote->show();
     m_permissionButton->show();
 }
@@ -288,7 +313,11 @@ bool DialogSSIDSettings::save(QStringList &flags) {
     std::shared_ptr<ProxorGui::ProxyEntity> selectedProfile =
         ProxorGui::profileManager->GetProfile(selectedProfileId);
     if (ProxorGui::dataStore->ssid_on_demand_enabled && selectedProfile == nullptr) {
-        MessageBoxWarning(windowTitle(), tr("Select a target profile for Wi-Fi on-demand before enabling it."));
+        MessageBoxWarning(windowTitle(), tr("Select a target profile for Wi-Fi On-Demand before enabling it."));
+        return false;
+    }
+    if (ProxorGui::dataStore->ssid_on_demand_enabled && ui->ssid_list_widget->count() == 0) {
+        MessageBoxWarning(windowTitle(), tr("Add at least one Wi-Fi network."));
         return false;
     }
 

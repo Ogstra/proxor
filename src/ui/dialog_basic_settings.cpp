@@ -334,15 +334,12 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
         const auto icmp = ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::IcmpPing);
         if (icmp.support != ProxorPlatform::Support::Supported) {
             ui->ping_type->setItemData(1, icmp.reason, Qt::ToolTipRole);
-            auto *icmpNote = ProxorPlatform::MakeCapabilityNote(ui->ping_type->parentWidget());
-            ui->verticalLayout_latency->insertWidget(1, icmpNote);
-            auto refreshIcmpNote = [this, icmp, icmpNote](int index) {
-                if (index == 1) {
-                    icmpNote->setText(icmp.reason);
-                    icmpNote->setVisible(true);
-                } else {
-                    icmpNote->setVisible(false);
-                }
+            // The reason stays in tooltips only (no extra visible text): the item tooltip above, and the
+            // combo box tooltip/accessible description while the unsupported ICMP item is selected.
+            auto refreshIcmpNote = [this, icmp](int index) {
+                const QString reason = index == 1 ? icmp.reason : QString();
+                ui->ping_type->setToolTip(reason);
+                ui->ping_type->setAccessibleDescription(reason);
             };
             connect(ui->ping_type, QOverload<int>::of(&QComboBox::currentIndexChanged), this, refreshIcmpNote);
             refreshIcmpNote(ui->ping_type->currentIndex());

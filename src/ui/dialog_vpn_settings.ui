@@ -100,21 +100,21 @@
       <item>
        <widget class="QCheckBox" name="vpn_ipv6">
         <property name="text">
-         <string>Tun Enable IPv6</string>
+         <string>Tun Enable &amp;IPv6</string>
         </property>
        </widget>
       </item>
       <item>
        <widget class="QCheckBox" name="strict_route">
         <property name="text">
-         <string notr="true">Strict Route</string>
+         <string notr="true">&amp;Strict Route</string>
         </property>
        </widget>
       </item>
       <item>
        <widget class="QCheckBox" name="fake_dns">
         <property name="text">
-         <string notr="true">FakeDNS</string>
+         <string notr="true">&amp;FakeDNS</string>
         </property>
        </widget>
       </item>
@@ -139,7 +139,7 @@ This needs to be run Proxor with administrator privileges.</string>
       <item>
        <widget class="QCheckBox" name="hide_console">
         <property name="text">
-         <string>Hide Console</string>
+         <string>&amp;Hide Console</string>
         </property>
        </widget>
       </item>
@@ -221,7 +221,7 @@ This needs to be run Proxor with administrator privileges.</string>
      <item>
       <widget class="QPushButton" name="troubleshooting">
        <property name="text">
-        <string>Troubleshooting</string>
+        <string>&amp;Troubleshooting</string>
        </property>
       </widget>
      </item>

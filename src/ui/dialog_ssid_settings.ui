@@ -29,7 +29,7 @@
       <item>
        <widget class="QCheckBox" name="ssid_on_demand_enabled">
         <property name="text">
-         <string>Start automatically on selected Wi-Fi networks</string>
+         <string>&amp;Start automatically on selected Wi-Fi networks</string>
         </property>
        </widget>
       </item>
@@ -81,14 +81,14 @@
         <item>
          <widget class="QPushButton" name="btn_add_ssid">
           <property name="text">
-           <string>Add</string>
+           <string>&amp;Add</string>
           </property>
          </widget>
         </item>
         <item>
          <widget class="QPushButton" name="btn_remove_ssid">
           <property name="text">
-           <string>Remove</string>
+           <string>&amp;Remove</string>
           </property>
          </widget>
         </item>

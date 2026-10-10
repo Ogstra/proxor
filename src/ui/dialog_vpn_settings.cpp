@@ -56,6 +56,10 @@ DialogVPNSettings::DialogVPNSettings(QWidget *parent) : QDialog(parent), ui(new 
         bypassClients->setToolTip(tr("On: these VPN clients connect directly. Off: their traffic goes through the proxy, for example to carry WireGuard over a VLESS Reality proxy."));
         bypassClients->setChecked(ProxorGui::dataStore->vpn_bypass_vpn_clients);
         ui->verticalLayout_4->insertWidget(0, bypassClients);
+        // Widgets added in code are not part of the .ui tab stops: put them in reading order.
+        setTabOrder(ui->vpn_rule_cidr, ui->btn_pick_process);
+        setTabOrder(ui->btn_pick_process, bypassClients);
+        setTabOrder(bypassClients, ui->vpn_rule_process);
     }
     ui->single_core->setChecked(ProxorGui::dataStore->vpn_internal_tun);
 #ifdef Q_OS_MACOS
