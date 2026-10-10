@@ -10,6 +10,8 @@
 
 DialogHotkey::DialogHotkey(QWidget *parent) : QDialog(parent), ui(new Ui::DialogHotkey) {
     ui->setupUi(this);
+    hotkeysAtOpen = {ProxorGui::dataStore->hotkey_mainwindow, ProxorGui::dataStore->hotkey_group,
+                     ProxorGui::dataStore->hotkey_route, ProxorGui::dataStore->hotkey_system_proxy_menu};
     ui->show_mainwindow->setKeySequence(ProxorGui::dataStore->hotkey_mainwindow);
     ui->show_groups->setKeySequence(ProxorGui::dataStore->hotkey_group);
     ui->show_routes->setKeySequence(ProxorGui::dataStore->hotkey_route);
@@ -23,9 +25,16 @@ DialogHotkey::DialogHotkey(QWidget *parent) : QDialog(parent), ui(new Ui::Dialog
 DialogHotkey::~DialogHotkey() {
     const auto problems = GetMainWindow()->RegisterHotkey(false);
     const auto status = ProxorPlatform::CurrentCapability(ProxorPlatform::Capability::GlobalHotkeys);
-    if (!problems.isEmpty() && status.support != ProxorPlatform::Support::Unsupported) {
-        // No modal box inside a destructor: show it once the event loop is back.
-        QTimer::singleShot(0, GetMainWindow(), [problems] { MessageBoxWarning(QObject::tr("Hotkeys"), problems.join("\n")); });
+    const QStringList hotkeysNow{ProxorGui::dataStore->hotkey_mainwindow, ProxorGui::dataStore->hotkey_group,
+                                 ProxorGui::dataStore->hotkey_route, ProxorGui::dataStore->hotkey_system_proxy_menu};
+    if (!problems.isEmpty() && status.support != ProxorPlatform::Support::Unsupported && hotkeysNow != hotkeysAtOpen) {
+        if (status.support == ProxorPlatform::Support::Degraded) {
+            // The desktop owns these hotkeys: say so in the log, not in a box on every close.
+            if (MW_show_log) MW_show_log(QObject::tr("Hotkeys: %1").arg(problems.join("; ")));
+        } else {
+            // No modal box inside a destructor: show it once the event loop is back.
+            QTimer::singleShot(0, GetMainWindow(), [problems] { MessageBoxWarning(QObject::tr("Hotkeys"), problems.join("\n")); });
+        }
     }
     delete ui;
 }
