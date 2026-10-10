@@ -94,6 +94,7 @@ DialogVPNSettings::DialogVPNSettings(QWidget *parent) : QDialog(parent), ui(new 
         const auto refresh = [self, status, install, remove, state]() {
             if (!self) return;
             status->setText(tr("Checking..."));
+            status->setToolTip(QString());
             install->setEnabled(false);
             remove->setEnabled(false);
             MacHelperSvc()->probe(self.data(), 1000, [self, status, install, remove, state](const MacHelperProbe &probe, MacHelperState st) {
@@ -104,7 +105,8 @@ DialogVPNSettings::DialogVPNSettings(QWidget *parent) : QDialog(parent), ui(new 
                 remove->setEnabled(true);
                 switch (st) {
                 case MacHelperState::NotInstalled:
-                    status->setText(tr("Not installed. Turning on Tun Mode or System Proxy installs it (one administrator password prompt)."));
+                    status->setText(tr("Not installed"));
+                    status->setToolTip(tr("Turning on Tun Mode or System Proxy installs it (one administrator password prompt)."));
                     install->setText(tr("Install"));
                     remove->setEnabled(false);
                     break;
