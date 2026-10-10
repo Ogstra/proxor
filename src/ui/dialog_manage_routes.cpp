@@ -177,7 +177,7 @@ DialogManageRoutes::DialogManageRoutes(QWidget *parent) : QDialog(parent), ui(ne
     connect(ui->format_dns_object, &QPushButton::clicked, this, [=] {
         auto obj = QString2QJsonObject(ui->dns_object->toPlainText());
         if (obj.isEmpty()) {
-            MessageBoxInfo("DNS", "invaild json");
+            MessageBoxWarning(tr("DNS"), tr("Invalid JSON."));
         } else {
             ui->dns_object->setPlainText(QJsonObject2QString(obj, false));
         }
@@ -513,10 +513,8 @@ void DialogManageRoutes::on_load_save_clicked() {
             r->load_control_must = true;
             r->fn = ROUTES_PREFIX + fn;
             if (r->Load()) {
-                if (QMessageBox::question(nullptr, software_name, tr("Load routing: %1").arg(fn) + "\n" + r->DisplayRouting()) == QMessageBox::Yes) {
-                    REFRESH_ACTIVE_ROUTING(fn, r.get()) // temp save to the window
-                    w->accept();
-                }
+                REFRESH_ACTIVE_ROUTING(fn, r.get()) // temp save to the window
+                w->accept();
             }
         }
     });
@@ -526,7 +524,9 @@ void DialogManageRoutes::on_load_save_clicked() {
             auto r = std::make_unique<ProxorGui::Routing>();
             SaveDisplayRouting(r.get());
             r->fn = ROUTES_PREFIX + fn;
-            if (QMessageBox::question(nullptr, software_name, tr("Save routing: %1").arg(fn) + "\n" + r->DisplayRouting()) == QMessageBox::Yes) {
+            // only overwriting an existing routing needs a confirmation
+            if (!QFile::exists(r->fn) ||
+                QMessageBox::question(nullptr, software_name, tr("Replace routing: %1?").arg(fn), QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes) {
                 r->Save();
                 REFRESH_ACTIVE_ROUTING(fn, r.get())
                 w->accept();
@@ -536,7 +536,7 @@ void DialogManageRoutes::on_load_save_clicked() {
     connect(remove, &QPushButton::clicked, w, [=] {
         auto fn = lineEdit->text();
         if (!fn.isEmpty() && ProxorGui::Routing::List().length() > 1) {
-            if (QMessageBox::question(nullptr, software_name, tr("Remove routing: %1").arg(fn)) == QMessageBox::Yes) {
+            if (QMessageBox::question(nullptr, software_name, tr("Remove routing: %1?").arg(fn), QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes) {
                 QFile f(ROUTES_PREFIX + fn);
                 f.remove();
                 if (ProxorGui::dataStore->active_routing == fn) {
@@ -547,7 +547,7 @@ void DialogManageRoutes::on_load_save_clicked() {
             }
         }
     });
-    connect(cancel, &QPushButton::clicked, w, &QDialog::accept);
+    connect(cancel, &QPushButton::clicked, w, &QDialog::reject);
     connect(list, &QListWidget::itemDoubleClicked, this, [=](QListWidgetItem *item) {
         lineEdit->setText(item->text());
         emit load->clicked();
