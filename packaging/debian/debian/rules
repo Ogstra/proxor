@@ -20,6 +20,9 @@ override_dh_auto_install:
 		--channel deb
 	install -D -m 0644 assets/linux/proxor.desktop "$(CURDIR)/debian/proxor/usr/share/applications/proxor.desktop"
 	install -D -m 0644 assets/res/public/proxor.png "$(CURDIR)/debian/proxor/usr/share/icons/hicolor/256x256/apps/proxor.png"
+	for s in 16 24 32 48; do \
+		install -D -m 0644 "assets/linux/icons/hicolor/$${s}x$${s}/apps/proxor.png" "$(CURDIR)/debian/proxor/usr/share/icons/hicolor/$${s}x$${s}/apps/proxor.png"; \
+	done
 
 override_dh_builddeb:
 	dh_builddeb -- -Zxz

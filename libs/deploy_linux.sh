@@ -42,6 +42,10 @@ fi
 #### desktop entry + icon ####
 cp "$SRC_ROOT/assets/linux/proxor.desktop" "$APPDIR/usr/share/applications/"
 cp "$SRC_ROOT/assets/res/public/proxor.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/"
+for s in 16 24 32 48; do
+  mkdir -p "$APPDIR/usr/share/icons/hicolor/${s}x${s}/apps"
+  cp "$SRC_ROOT/assets/linux/icons/hicolor/${s}x${s}/apps/proxor.png" "$APPDIR/usr/share/icons/hicolor/${s}x${s}/apps/"
+done
 # linuxdeploy also wants them at the AppDir root.
 cp "$SRC_ROOT/assets/linux/proxor.desktop" "$APPDIR/"
 cp "$SRC_ROOT/assets/res/public/proxor.png" "$APPDIR/"
