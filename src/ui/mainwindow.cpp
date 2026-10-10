@@ -598,7 +598,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         auto *chosen = menu.exec(tabBar->mapToGlobal(pos));
         if (chosen == updateAction) {
             if (startup_tun_pending || startup_tun_failed) {
-                MessageBoxWarning(software_name, tr("Subscription updates are disabled until Tun authorization succeeds."));
+                MessageBoxWarning(software_name, tr("Subscription updates are paused until Tun is on or turned off."));
                 return;
             }
             ProxorGui_sub::groupUpdater->AsyncUpdate(group->url, group->id);
@@ -618,7 +618,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
             return;
         }
         if (chosen == deleteAction) {
-            if (QMessageBox::question(this, tr("Confirmation"), tr("Remove %1?").arg(group->name)) ==
+            if (QMessageBox::question(this, tr("Confirmation"), tr("Remove %1?").arg(group->name),
+                                      QMessageBox::Yes | QMessageBox::No, QMessageBox::No) ==
                 QMessageBox::StandardButton::Yes) {
                 ProxorGui::profileManager->DeleteGroup(group->id);
                 refresh_groups();
@@ -3274,7 +3275,8 @@ void MainWindow::on_menu_move_triggered() {
 void MainWindow::on_menu_delete_triggered() {
     auto ents = get_now_selected_list();
     if (ents.count() == 0) return;
-    if (QMessageBox::question(this, tr("Confirmation"), QString(tr("Remove %1 item(s)?")).arg(ents.count())) ==
+    if (QMessageBox::question(this, tr("Confirmation"), QString(tr("Remove %1 item(s)?")).arg(ents.count()),
+                              QMessageBox::Yes | QMessageBox::No, QMessageBox::No) ==
         QMessageBox::StandardButton::Yes) {
         for (const auto &ent: ents) {
             ProxorGui::profileManager->DeleteProfile(ent->id);
@@ -3653,7 +3655,8 @@ void MainWindow::on_menu_delete_repeat_triggered() {
     }
 
     if (out_del.length() > 0 &&
-        QMessageBox::question(this, tr("Confirmation"), tr("Remove %1 item(s)?").arg(out_del.length()) + "\n" + remove_display) == QMessageBox::StandardButton::Yes) {
+        QMessageBox::question(this, tr("Confirmation"), tr("Remove %1 item(s)?").arg(out_del.length()) + "\n" + remove_display,
+                              QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::StandardButton::Yes) {
         for (const auto &ent: out_del) {
             ProxorGui::profileManager->DeleteProfile(ent->id);
         }
@@ -3690,7 +3693,8 @@ void MainWindow::on_menu_remove_unavailable_triggered() {
     }
 
     if (out_del.length() > 0 &&
-        QMessageBox::question(this, tr("Confirmation"), tr("Remove %1 item(s)?").arg(out_del.length()) + "\n" + remove_display) == QMessageBox::StandardButton::Yes) {
+        QMessageBox::question(this, tr("Confirmation"), tr("Remove %1 item(s)?").arg(out_del.length()) + "\n" + remove_display,
+                              QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::StandardButton::Yes) {
         for (const auto &ent: out_del) {
             ProxorGui::profileManager->DeleteProfile(ent->id);
         }
@@ -4728,7 +4732,7 @@ void MainWindow::failStartupTunAuthorization() {
     // startup_network_work is deliberately left in place: the work is not cancelled, only
     // held, so enabling Tun later -- or turning the mode off -- still runs it instead of
     // sending those requests outside the tunnel the user asked for.
-    MW_show_log(tr("Tun authorization failed; startup network work waits until Tun is available."));
+    MW_show_log(tr("Tun could not start. Updates are paused until Tun is on or turned off."));
 }
 
 bool MainWindow::StopVPNProcess(bool unconditional) {

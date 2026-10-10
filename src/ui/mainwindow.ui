@@ -46,7 +46,7 @@
       <item>
        <widget class="QToolButton" name="toolButton_program">
         <property name="text">
-         <string>App</string>
+         <string>&amp;App</string>
         </property>
         <property name="icon">
          <iconset theme="b-papirus-applications-all">
@@ -69,7 +69,7 @@
       <item>
        <widget class="QToolButton" name="toolButton_preferences">
         <property name="text">
-         <string>Settings</string>
+         <string>&amp;Settings</string>
         </property>
         <property name="icon">
          <iconset theme="b-papirus-preferences-desktop">
@@ -92,7 +92,7 @@
       <item>
        <widget class="QToolButton" name="toolButton_server">
         <property name="text">
-         <string>Profiles</string>
+         <string>&amp;Profiles</string>
         </property>
         <property name="icon">
          <iconset theme="b-papirus-network-server">
@@ -599,7 +599,7 @@
   </action>
   <action name="menu_basic_settings">
    <property name="text">
-    <string>Settings</string>
+    <string>Settings…</string>
    </property>
   </action>
   <action name="menu_add_from_input">
