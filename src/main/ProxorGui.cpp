@@ -323,6 +323,7 @@ namespace ProxorGui {
         _add(new configItem("ssid_on_demand_enabled", &ssid_on_demand_enabled, itemType::boolean));
         _add(new configItem("wifi_permission_prompted", &wifi_permission_prompted, itemType::boolean));
         _add(new configItem("local_network_prompted", &local_network_prompted, itemType::boolean));
+        _add(new configItem("mac_service_offered", &mac_service_offered, itemType::boolean));
         _add(new configItem("ssid_trigger_list", &ssid_trigger_list, itemType::stringList));
         _add(new configItem("ssid_on_demand_profile_id", &ssid_on_demand_profile_id, itemType::integer));
         _add(new configItem("ssid_on_demand_profile_name", &ssid_on_demand_profile_name, itemType::string));

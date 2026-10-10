@@ -1385,6 +1385,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         // After the Location prompt, so the two native prompts do not start together.
         QTimer::singleShot(2500, this, [] { MacLocalNetwork::TriggerPrompt(); });
     }
+    // The Proxor service (Tun and System Proxy) is offered once at the first start, after the other native prompts.
+    if (!ProxorGui::dataStore->mac_service_offered) {
+        QTimer::singleShot(8000, this, [this] { macOfferServiceOnce(); });
+    }
 #endif
 
     connect(qApp, &QGuiApplication::commitDataRequest, this, &MainWindow::on_commitDataRequest);
@@ -4519,6 +4523,41 @@ void MainWindow::macTunFailed(const QString &reason) {
     const auto text = MacTunFailureText(mac_tun_failure_reason);
     MW_show_log(text);
     MessageBoxWarning(software_name, text);
+}
+
+void MainWindow::macOfferServiceOnce(int attempt) {
+    if (ProxorGui::dataStore->mac_service_offered || ProxorGui::dataStore->prepare_exit) return;
+    auto markOffered = [] {
+        ProxorGui::dataStore->mac_service_offered = true;
+        ProxorGui::dataStore->Save();
+    };
+    if (mac_install_prompted_this_session) { // the startup restore already asked this session
+        markOffered();
+        return;
+    }
+    if ((MacHelperInstaller::InstallInProgress() || mac_startup_probe_pending) && attempt < 4) {
+        QTimer::singleShot(15000, this, [this, attempt] { macOfferServiceOnce(attempt + 1); });
+        return;
+    }
+    MacHelperSvc()->probe(this, 1000, [this, markOffered](const MacHelperProbe &, MacHelperState st) {
+        if (ProxorGui::dataStore->mac_service_offered || MacHelperInstaller::InstallInProgress()) return;
+        markOffered(); // asked at most once: declining leaves the usual prompt when Tun or System Proxy is turned on
+        const auto action = DecideMacHelperEnable(st);
+        if (action == MacHelperEnableAction::Proceed) return;
+        MW_show_log(tr("Waiting for the administrator password prompt to install the Proxor service..."));
+        MacHelperInstaller::ConfirmAndInstall(isVisible() ? this : nullptr, tr("Tun Mode and System Proxy"), action,
+                                              [this](MacAdminScriptResult result) {
+            switch (result.outcome) {
+            case MacAdminScriptOutcome::Ok: MW_show_log(tr("Proxor service installed.")); break;
+            case MacAdminScriptOutcome::Cancelled:
+                MW_show_log(tr("The Proxor service was not installed. Turning on Tun Mode or System Proxy asks for it again."));
+                break;
+            case MacAdminScriptOutcome::Failed:
+                MessageBoxWarning(software_name, tr("The Proxor service could not be installed: %1").arg(result.reason));
+                break;
+            }
+        });
+    });
 }
 
 void MainWindow::macStartupRestore(bool rememberedSystemProxy, bool rememberedTun) {
