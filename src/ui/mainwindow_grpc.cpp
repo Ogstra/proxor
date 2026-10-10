@@ -498,7 +498,7 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
     if (!mu_stopping.tryLock()) {
         start_pending = false;
         refresh_status();
-        MessageBoxWarning(software_name, "Another profile is stopping...");
+        MW_show_log(tr("Another profile is still stopping. Try again in a moment."));
         mu_starting.unlock();
         return;
     }
@@ -511,7 +511,7 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
     if (!ProxorGui::dataStore->core_running) {
         runOnUiThread(
             [=] {
-                MW_show_log("Try to start the config, but the core has not listened to the grpc port, so restart it...");
+                MW_show_log(tr("The core is not ready yet, restarting it to start the profile."));
                 core_process->start_profile_when_core_is_up = ent->id;
                 core_process->Restart();
             },
@@ -521,7 +521,7 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
     }
 
     // timeout message
-    auto restartMsgbox = new QMessageBox(QMessageBox::Question, software_name, tr("If there is no response for a long time, it is recommended to restart the software."),
+    auto restartMsgbox = new QMessageBox(QMessageBox::Question, software_name, tr("This is taking a long time. Restart Proxor?"),
                                          QMessageBox::Yes | QMessageBox::No, this);
     connect(restartMsgbox, &QMessageBox::accepted, this, [=] { MW_dialog_message("", "RestartProgram"); });
     auto restartMsgboxTimer = new MessageBoxTimer(this, restartMsgbox, 5000);
@@ -723,7 +723,7 @@ void MainWindow::proxor_stop(bool crash, bool sem) {
     }
 
     // timeout message
-    auto restartMsgbox = new QMessageBox(QMessageBox::Question, software_name, tr("If there is no response for a long time, it is recommended to restart the software."),
+    auto restartMsgbox = new QMessageBox(QMessageBox::Question, software_name, tr("This is taking a long time. Restart Proxor?"),
                                          QMessageBox::Yes | QMessageBox::No, this);
     connect(restartMsgbox, &QMessageBox::accepted, this, [=] { MW_dialog_message("", "RestartProgram"); });
     auto restartMsgboxTimer = new MessageBoxTimer(this, restartMsgbox, 5000);
