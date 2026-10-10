@@ -133,9 +133,9 @@ QString SettingsListStyleForTheme(const QString &themeName) {
     QString style = QStringLiteral("QListWidget::item{padding:4px 10px;}");
     if (themeManager->NormalizeTheme(themeName) != QStringLiteral("System")) {
         style += QStringLiteral(
-            "QListWidget::item:selected{background:#455364;color:#DFE1E2;}"
-            "QListWidget::item:selected:active{background:#455364;color:#DFE1E2;}"
-            "QListWidget::item:selected:!active{background:#455364;color:#DFE1E2;}"
+            "QListWidget::item:selected{background:palette(highlight);color:palette(highlighted-text);}"
+            "QListWidget::item:selected:active{background:palette(highlight);color:palette(highlighted-text);}"
+            "QListWidget::item:selected:!active{background:palette(highlight);color:palette(highlighted-text);}"
         );
     }
     return style;
