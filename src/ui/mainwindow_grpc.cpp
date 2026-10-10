@@ -761,7 +761,14 @@ void MainWindow::CheckUpdate(bool silent) {
         return;
     }
 
-    if (startup_tun_pending || startup_tun_failed) return;
+    if (startup_tun_pending || startup_tun_failed) {
+        if (!silent) {
+            runOnUiThread([=] {
+                MessageBoxInfo(QObject::tr("Check for Updates"), QObject::tr("Cannot check right now: waiting for Tun."));
+            });
+        }
+        return;
+    }
 
     // The core may not have finished starting up yet. The client may not exist,
     // and even once it does, Call() short-circuits with -1919 until the core
@@ -787,7 +794,14 @@ void MainWindow::CheckUpdate(bool silent) {
 #endif
     request.set_channel(PackageModeName(mode).toStdString());
     auto response = ProxorGui_rpc::defaultClient->Update(&ok, request);
-    if (!ok) return;
+    if (!ok) {
+        if (!silent) {
+            runOnUiThread([=] {
+                MessageBoxInfo(QObject::tr("Check for Updates"), QObject::tr("Could not reach the update server."));
+            });
+        }
+        return;
+    }
 
     auto err = response.error();
     if (!err.empty()) {
@@ -916,10 +930,18 @@ void MainWindow::CheckUpdate(bool silent) {
                         return;
                     }
 #endif
-                    if (!ok2) return;
+                    if (!ok2) {
+                        // Windows/macOS handled this above; elsewhere the dialog would otherwise hang.
+                        runOnUiThread([=] {
+                            if (updateProgressDialog) updateProgressDialog->close();
+                            MessageBoxWarning(QObject::tr("Update"), QObject::tr("Could not reach the update server."));
+                        });
+                        return;
+                    }
 
                     if (!response2.error().empty()) {
                         runOnUiThread([=] {
+                            if (updateProgressDialog) updateProgressDialog->close();
 #ifdef Q_OS_MACOS
                             if (macRoute != ProxorPlatform::MacAppUpdateRoute::Guidance) {
                                 if (updateProgressDialog) updateProgressDialog->close();

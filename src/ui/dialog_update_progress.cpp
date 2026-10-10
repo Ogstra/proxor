@@ -2,6 +2,7 @@
 #include "rpc/gRPC.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QPushButton>
 
 UpdateProgressDialog::UpdateProgressDialog(const QString &assetName, QWidget *parent)
     : QDialog(parent) {
@@ -36,6 +37,15 @@ UpdateProgressDialog::UpdateProgressDialog(const QString &assetName, QWidget *pa
     infoLayout->addWidget(labelSize);
 
     mainLayout->addLayout(infoLayout);
+
+    // No cancel RPC exists: closing only abandons the staging step (downloadComplete is
+    // never delivered once the dialog is gone), which is what the user asked for.
+    auto *buttonLayout = new QHBoxLayout();
+    buttonLayout->addStretch();
+    auto *cancelButton = new QPushButton(tr("Cancel"), this);
+    connect(cancelButton, &QPushButton::clicked, this, &QDialog::reject);
+    buttonLayout->addWidget(cancelButton);
+    mainLayout->addLayout(buttonLayout);
 
     pollTimer = new QTimer(this);
     pollTimer->setInterval(500);
@@ -89,7 +99,10 @@ void UpdateProgressDialog::onPollTick() {
         if (resp.error().empty()) {
             emit downloadComplete();
         } else {
+            // Stays open: the failure dialog from the download call (or Cancel) closes it.
             labelSpeed->setText(tr("Error: %1").arg(resp.error().c_str()));
+            labelSpeed->setWordWrap(true);
+            return;
         }
         QTimer::singleShot(800, this, &QWidget::close);
     }
