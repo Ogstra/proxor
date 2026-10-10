@@ -1,10 +1,8 @@
 #include "GroupListModel.h"
 
 #include <QColor>
-#ifdef Q_OS_MACOS
 #include <QGuiApplication>
 #include <QPalette>
-#endif
 #include <QRegularExpression>
 
 #include "db/Database.hpp"
