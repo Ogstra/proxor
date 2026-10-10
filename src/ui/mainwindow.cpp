@@ -2593,7 +2593,7 @@ void MainWindow::macInstallHelperThen(const QString &feature, MacHelperEnableAct
             onReady();
             break;
         case MacAdminScriptOutcome::Cancelled:
-            MessageBoxWarning(software_name, tr("%1 was not turned on: the Proxor service was not installed.").arg(feature));
+            MW_show_log(tr("%1 was not turned on: the Proxor service was not installed.").arg(feature));
             break;
         case MacAdminScriptOutcome::Failed:
             MessageBoxWarning(software_name, tr("The Proxor service could not be installed: %1").arg(result.reason));
@@ -4515,7 +4515,7 @@ void MainWindow::macStartupProbed(MacHelperState st, bool rememberedTun, bool re
                 }
                 MW_show_log(MacStartupInstallDeclinedText(rememberedTun, rememberedSystemProxy));
                 refresh_status();
-                MessageBoxWarning(software_name, text);
+                if (result.outcome == MacAdminScriptOutcome::Failed) MessageBoxWarning(software_name, text);
             });
             return;
         }
