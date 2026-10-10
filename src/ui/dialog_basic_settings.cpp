@@ -243,6 +243,7 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
     });
 
     m_settingsNav = new QListWidget(this);
+    m_settingsNav->setAccessibleName(tr("Settings sections"));
     m_settingsNav->setObjectName(QStringLiteral("settingsNav"));
     for (int i = 0; i < ui->tabWidget->count(); ++i) {
         m_settingsNav->addItem(ui->tabWidget->tabText(i));

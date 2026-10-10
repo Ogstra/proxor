@@ -50,6 +50,9 @@
            <layout class="QHBoxLayout" name="horizontalLayout_19">
             <item>
              <widget class="QLabel" name="label">
+              <property name="buddy">
+               <cstring>inbound_address</cstring>
+              </property>
               <property name="text">
                <string>Listen Address</string>
               </property>
@@ -76,6 +79,9 @@
            <layout class="QHBoxLayout" name="horizontalLayout_10">
             <item>
              <widget class="QLabel" name="label_11">
+              <property name="buddy">
+               <cstring>custom_inbound_edit</cstring>
+              </property>
               <property name="text">
                <string>Custom Inbound</string>
               </property>
@@ -103,6 +109,9 @@
            <layout class="QHBoxLayout" name="horizontalLayout_13">
             <item>
              <widget class="QLabel" name="inbound_socks_port_l">
+              <property name="buddy">
+               <cstring>inbound_socks_port</cstring>
+              </property>
               <property name="text">
                <string>Mixed (SOCKS+HTTP) Listen Port</string>
               </property>
@@ -133,6 +142,9 @@
            <layout class="QHBoxLayout" name="horizontalLayout_latency_top" stretch="0,1,0,1">
             <item>
              <widget class="QLabel" name="label_ping_type">
+              <property name="buddy">
+               <cstring>ping_type</cstring>
+              </property>
               <property name="text">
                <string>Ping Type</string>
               </property>
@@ -159,6 +171,9 @@
             </item>
             <item>
              <widget class="QLabel" name="label_14">
+              <property name="buddy">
+               <cstring>test_concurrent</cstring>
+              </property>
               <property name="text">
                <string>Concurrent</string>
               </property>
@@ -173,6 +188,9 @@
            <layout class="QHBoxLayout" name="horizontalLayout_9" stretch="0,8">
             <item>
              <widget class="QLabel" name="label_13">
+              <property name="buddy">
+               <cstring>test_latency_url</cstring>
+              </property>
               <property name="text">
                <string>HTTP Test URL</string>
               </property>
@@ -194,6 +212,9 @@
          <layout class="QHBoxLayout" name="horizontalLayout_12" stretch="0,8,1,1">
           <item>
            <widget class="QLabel" name="label_19">
+            <property name="buddy">
+             <cstring>test_download_url</cstring>
+            </property>
             <property name="text">
              <string>Download Test URL</string>
             </property>
@@ -204,6 +225,9 @@
           </item>
           <item>
            <widget class="QLabel" name="label_10">
+            <property name="buddy">
+             <cstring>test_download_timeout</cstring>
+            </property>
             <property name="text">
              <string>Timeout (s)</string>
             </property>
@@ -348,6 +372,9 @@
              <layout class="QHBoxLayout" name="horizontalLayout_4">
               <item>
                <widget class="QLabel" name="label_8">
+                <property name="buddy">
+                 <cstring>theme</cstring>
+                </property>
                 <property name="sizePolicy">
                  <sizepolicy hsizetype="Maximum" vsizetype="Maximum">
                   <horstretch>0</horstretch>
@@ -374,6 +401,9 @@
              <layout class="QHBoxLayout" name="horizontalLayout_theme_mode">
               <item>
                <widget class="QLabel" name="label_theme_mode">
+                <property name="buddy">
+                 <cstring>theme_mode</cstring>
+                </property>
                 <property name="text">
                  <string>Mode</string>
                 </property>
@@ -463,6 +493,9 @@
            <layout class="QHBoxLayout" name="horizontalLayout_3">
             <item>
              <widget class="QLabel" name="label_16">
+              <property name="buddy">
+               <cstring>rfsh_r</cstring>
+              </property>
               <property name="text">
                <string>Statistics refresh rate</string>
               </property>
@@ -539,6 +572,9 @@
            <layout class="QHBoxLayout" name="horizontalLayout_23">
             <item>
              <widget class="QLabel" name="label_17">
+              <property name="buddy">
+               <cstring>max_log_line</cstring>
+              </property>
               <property name="text">
                <string>Max log lines</string>
               </property>
@@ -602,6 +638,9 @@
             </item>
             <item>
              <widget class="QLabel" name="label_21">
+              <property name="buddy">
+               <cstring>sub_auto_update</cstring>
+              </property>
               <property name="text">
                <string>Interval (minute, invalid if less than 30)</string>
               </property>
@@ -621,6 +660,9 @@
           </item>
           <item row="1" column="0">
            <widget class="QLabel" name="label_4">
+            <property name="buddy">
+             <cstring>user_agent</cstring>
+            </property>
             <property name="text">
              <string>User Agent</string>
             </property>
@@ -740,6 +782,9 @@
              </item>
              <item row="1" column="0">
               <widget class="QLabel" name="label_6">
+               <property name="buddy">
+                <cstring>mux_protocol</cstring>
+               </property>
                <property name="text">
                 <string>Multiplex (mux)</string>
                </property>
@@ -747,6 +792,9 @@
              </item>
              <item row="0" column="0">
               <widget class="QLabel" name="label_3">
+               <property name="buddy">
+                <cstring>log_level</cstring>
+               </property>
                <property name="text">
                 <string notr="true">Loglevel</string>
                </property>
@@ -759,6 +807,9 @@
                </item>
                <item>
                 <widget class="QLabel" name="label_7">
+                 <property name="buddy">
+                  <cstring>mux_concurrency</cstring>
+                 </property>
                  <property name="text">
                   <string>concurrency</string>
                  </property>
@@ -875,6 +926,9 @@
            <layout class="QHBoxLayout" name="horizontalLayout_26">
             <item>
              <widget class="QLabel" name="label_18">
+              <property name="buddy">
+               <cstring>utlsFingerprint</cstring>
+              </property>
               <property name="text">
                <string>Default uTLS Fingerprint</string>
               </property>

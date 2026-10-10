@@ -1036,6 +1036,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     // search box
     ui->search->setPlaceholderText(tr("Search profiles"));
+    // Accessible names for screen readers (no visible change).
+    ui->search->setAccessibleName(tr("Search profiles"));
+    ui->proxyListTable->setAccessibleName(tr("Profiles"));
+    ui->masterLogBrowser->setAccessibleName(tr("Log"));
+    ui->tableWidget_conn->setAccessibleName(tr("Connections"));
+    ui->log_filter->setAccessibleName(tr("Filter log"));
+    ui->conn_filter->setAccessibleName(tr("Filter connections"));
+    ui->label_running->setAccessibleName(tr("Running profile"));
     ui->search->setMinimumWidth(120);
     ui->search->setVisible(false);
     auto showSearch = [=] {

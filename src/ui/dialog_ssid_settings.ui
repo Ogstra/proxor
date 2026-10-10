@@ -44,6 +44,9 @@
        <layout class="QFormLayout" name="formLayout_profile">
         <item row="0" column="0">
          <widget class="QLabel" name="label_target_profile">
+          <property name="buddy">
+           <cstring>ssid_on_demand_profile</cstring>
+          </property>
           <property name="text">
            <string>Target profile</string>
           </property>

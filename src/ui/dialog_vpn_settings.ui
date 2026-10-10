@@ -25,6 +25,9 @@
      <layout class="QHBoxLayout" name="horizontalLayout_5">
       <item>
        <widget class="QLabel" name="label_4">
+        <property name="buddy">
+         <cstring>vpn_implementation</cstring>
+        </property>
         <property name="sizePolicy">
          <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
           <horstretch>0</horstretch>
@@ -57,6 +60,9 @@
       </item>
       <item>
        <widget class="QLabel" name="label_10">
+        <property name="buddy">
+         <cstring>vpn_mtu</cstring>
+        </property>
         <property name="sizePolicy">
          <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
           <horstretch>0</horstretch>
