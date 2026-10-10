@@ -2065,7 +2065,9 @@ void MainWindow::dialog_message_impl(const QString &sender, const QString &info)
             refresh_groups();
             refresh_proxy_list();
             if (!info.contains("dingyue")) {
-                show_log_impl(tr("Added %1 profile(s)").arg(ProxorGui::dataStore->imported_count));
+                const int addedCount = ProxorGui::dataStore->imported_count;
+                // Nothing parsed (e.g. unrelated clipboard text): say so instead of a bare "Added 0".
+                show_log_impl(addedCount > 0 ? tr("Added %1 profile(s)").arg(addedCount) : tr("No profiles were found."));
             }
         } else if (info == "NewGroup") {
             refresh_groups();
@@ -2574,6 +2576,8 @@ void MainWindow::proxor_set_spmode_system_proxy(bool enable, bool save) {
 #else
         if (enable) {
             auto socks_port = ProxorGui::dataStore->inbound_socks_port;
+            // The inbound is a single "mixed" listener that answers both HTTP and SOCKS, so the HTTP proxy
+            // port is intentionally the same port as SOCKS (not a copy and paste slip).
             auto http_port = ProxorGui::dataStore->inbound_socks_port;
             if (!SetSystemProxy(http_port, socks_port)) {
 #ifdef Q_OS_LINUX
@@ -2692,29 +2696,34 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
                 if (requestPermission) {
 #ifdef Q_OS_LINUX
                     if (!Linux_HavePkexec()) {
-                        MessageBoxWarning(software_name, tr("Tun mode needs pkexec. Install PolicyKit and try again."));
+                        MessageBoxWarning(software_name, tr("Tun Mode needs PolicyKit (pkexec). Install it and try again."));
                         proxor_set_spmode_FAILED
                     }
                     if (!Linux_HaveSetcap()) {
-                        MessageBoxWarning(software_name, tr("Tun mode needs setcap. Install libcap and try again."));
+                        MessageBoxWarning(software_name, tr("Tun Mode needs libcap tools (setcap). Install them and try again."));
                         proxor_set_spmode_FAILED
                     }
                     auto ret = Linux_Pkexec_SetCapString(ProxorGui::FindProxorCoreRealPath(), "cap_net_admin=ep");
                     if (ret == 0) {
+                        MW_show_log(tr("Restarting Proxor to apply Tun permissions."));
                         this->exit_reason = 3;
                         on_menu_exit_triggered();
                     } else {
-                        MessageBoxWarning(
-                            software_name,
-                            tr("Tun mode could not grant cap_net_admin to proxor_core. You may have cancelled the authorization dialog, or the installation may not allow file capabilities.")
-                        );
+                        // Technical detail goes to the log; the dialog only says what the user can do.
+                        MW_show_log(tr("Tun Mode: granting cap_net_admin to proxor_core failed (setcap exit code %1). The authorization dialog may have been cancelled, or the installation may not allow file capabilities.").arg(ret));
+                        MessageBoxWarning(software_name, tr("Tun Mode could not get the permission it needs. If you cancelled the password prompt, try again."));
                     }
 #endif
 #ifdef Q_OS_WIN
-                    auto n = QMessageBox::warning(GetMessageBoxParent(), software_name, tr("Please run Proxor as admin"), QMessageBox::Yes | QMessageBox::No);
-                    if (n == QMessageBox::Yes) {
-                        this->exit_reason = 3;
-                        on_menu_exit_triggered();
+                    if (startup_tun_pending) {
+                        // Restoring a remembered Tun at launch: a modal at every login is noise, so log only.
+                        MW_show_log(tr("Tun Mode was not restored: run Proxor as administrator."));
+                    } else {
+                        auto n = QMessageBox::warning(GetMessageBoxParent(), tr("Tun Mode"), tr("Tun needs administrator rights. Restart Proxor as administrator?"), QMessageBox::Yes | QMessageBox::No);
+                        if (n == QMessageBox::Yes) {
+                            this->exit_reason = 3;
+                            on_menu_exit_triggered();
+                        }
                     }
 #endif
                     proxor_set_spmode_FAILED
@@ -2756,7 +2765,7 @@ void MainWindow::proxor_set_spmode_vpn(bool enable, bool save) {
 #endif
 #ifdef Q_OS_LINUX
                 if (!Linux_HavePkexec()) {
-                    MessageBoxWarning(software_name, tr("Tun mode needs pkexec. Install PolicyKit and try again."));
+                    MessageBoxWarning(software_name, tr("Tun Mode needs PolicyKit (pkexec). Install it and try again."));
                     proxor_set_spmode_FAILED
                 }
                 if (qEnvironmentVariableIsSet("APPIMAGE")) {
@@ -3425,7 +3434,18 @@ void MainWindow::on_menu_scan_qr_camera_triggered() {
 #ifdef NKR_CAMERA_SCAN
     DialogScanCamera dialog(this);
     if (dialog.exec() != QDialog::Accepted) {
-        if (!dialog.failure().isEmpty()) show_log_impl(tr("Scan QR code with camera: %1.").arg(dialog.failure()));
+        if (!dialog.failure().isEmpty()) {
+            // The OS asks only once; later denials need this pointer to the right settings page (log only, no extra modal).
+            QString hint;
+#if defined(Q_OS_MACOS)
+            if (dialog.failure().contains(QStringLiteral("not allowed")))
+                hint = tr(" Allow Proxor in System Settings > Privacy & Security > Camera.");
+#elif defined(Q_OS_WIN)
+            if (dialog.failure().contains(QStringLiteral("not allowed")))
+                hint = tr(" Allow Proxor in Settings > Privacy & security > Camera.");
+#endif
+            show_log_impl(tr("Scan QR code with camera: %1.").arg(dialog.failure()) + hint);
+        }
         return;
     }
     show_log_impl("QR Code Result:\n" + dialog.text());
@@ -3456,7 +3476,7 @@ bool MainWindow::macScreenCaptureReady() {
     using namespace ProxorPlatform;
     const auto d = DecideMacScreenScan(ProxorMac::ScreenCapturePreflight(), false);
     if (d.capture) return true;
-    show_log_impl(tr("Scan QR code from screen: the Screen Recording permission is missing."));
+    show_log_impl(tr("Scan QR code from screen: the Screen Recording permission is missing. Allow Proxor in System Settings > Privacy & Security > Screen & System Audio Recording."));
     ProxorMac::ScreenCaptureRequest();
     return false;
 }
@@ -3485,10 +3505,11 @@ void MainWindow::on_menu_scan_qr_triggered() {
     }
 
     if (SelectScreenCaptureBackend(CurrentPlatformEnvironment()) == ScreenCaptureBackend::Portal) {
+        const bool wasVisible = isVisible();
         hide();
-        QTimer::singleShot(400, this, [this, cap, offerAlternatives] {
-            ProxorDesktop::TakeScreenshot(QString(), this, [this, cap, offerAlternatives](const ProxorDesktop::ScreenshotResult &r) {
-                show();
+        QTimer::singleShot(400, this, [this, cap, offerAlternatives, wasVisible] {
+            ProxorDesktop::TakeScreenshot(QString(), this, [this, cap, offerAlternatives, wasVisible](const ProxorDesktop::ScreenshotResult &r) {
+                if (wasVisible) show();
                 if (r.result.outcome == ProxorDesktop::PortalOutcome::Cancelled) {
                     show_log_impl(tr("Scan QR code from screen: %1").arg(r.result.detail));
                     return;
@@ -3515,41 +3536,44 @@ void MainWindow::on_menu_scan_qr_triggered() {
         return;
     }
 
+    // Let the window disappear from the screenshot without blocking the event loop, and only bring it back
+    // if it was visible before (a window hidden in the tray stays hidden).
+    const bool wasVisible = isVisible();
     hide();
-    QThread::sleep(1);
+    QTimer::singleShot(400, this, [this, cap, wasVisible] {
+        // Primary screen first, then every other screen.
+        QList<QScreen *> screens = QGuiApplication::screens();
+        if (auto *primary = QGuiApplication::primaryScreen()) {
+            screens.removeAll(primary);
+            screens.prepend(primary);
+        }
+        bool anyImage = false;
+        QString text;
+        for (auto *screen : screens) {
+            const auto g = screen->geometry();
+            const auto image = screen->grabWindow(0, g.x(), g.y(), g.width(), g.height()).toImage();
+            if (image.isNull()) continue;
+            anyImage = true;
+            text = ProxorPlatform::DecodeQrFromImage(image);
+            if (!text.isEmpty()) break;
+        }
 
-    // Primary screen first, then every other screen.
-    QList<QScreen *> screens = QGuiApplication::screens();
-    if (auto *primary = QGuiApplication::primaryScreen()) {
-        screens.removeAll(primary);
-        screens.prepend(primary);
-    }
-    bool anyImage = false;
-    QString text;
-    for (auto *screen : screens) {
-        const auto g = screen->geometry();
-        const auto image = screen->grabWindow(0, g.x(), g.y(), g.width(), g.height()).toImage();
-        if (image.isNull()) continue;
-        anyImage = true;
-        text = DecodeQrFromImage(image);
-        if (!text.isEmpty()) break;
-    }
-
-    show();
+        if (wasVisible) show();
 
 #ifdef Q_OS_MACOS
-    if (!anyImage) { // preflight said granted but the grab is empty: still the permission, not "not found"
-        show_log_impl(tr("Scan QR code from screen: the Screen Recording permission is missing."));
-        return;
-    }
+        if (!anyImage) { // preflight said granted but the grab is empty: still the permission, not "not found"
+            show_log_impl(tr("Scan QR code from screen: the Screen Recording permission is missing. Allow Proxor in System Settings > Privacy & Security > Screen & System Audio Recording."));
+            return;
+        }
 #endif
-    const auto msg = QrScanMessage(QrSource::Screen, {anyImage, !text.isEmpty()}, cap);
-    if (!msg.isEmpty()) {
-        MessageBoxInfo(software_name, msg);
-    } else {
-        show_log_impl("QR Code Result:\n" + text);
-        ProxorGui_sub::groupUpdater->AsyncUpdate(text);
-    }
+        const auto msg = ProxorPlatform::QrScanMessage(ProxorPlatform::QrSource::Screen, {anyImage, !text.isEmpty()}, cap);
+        if (!msg.isEmpty()) {
+            MessageBoxInfo(software_name, msg);
+        } else {
+            show_log_impl("QR Code Result:\n" + text);
+            ProxorGui_sub::groupUpdater->AsyncUpdate(text);
+        }
+    });
 #endif
 }
 
