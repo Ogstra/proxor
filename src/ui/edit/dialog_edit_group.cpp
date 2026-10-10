@@ -237,7 +237,7 @@ DialogEditGroup::DialogEditGroup(const std::shared_ptr<ProxorGui::Group> &ent, Q
             links += profile->bean->ToShareLink();
         }
         QApplication::clipboard()->setText(links.join("\n"));
-        MessageBoxInfo(software_name, tr("Copied"));
+        MW_show_log(tr("Copied"));
     });
     connect(ui->copy_links_nkr, &QPushButton::clicked, this, [=] {
         QStringList links;
@@ -246,7 +246,7 @@ DialogEditGroup::DialogEditGroup(const std::shared_ptr<ProxorGui::Group> &ent, Q
             links += profile->bean->ToProxorShareLink(profile->type);
         }
         QApplication::clipboard()->setText(links.join("\n"));
-        MessageBoxInfo(software_name, tr("Copied"));
+        MW_show_log(tr("Copied"));
     });
 
     ADJUST_SIZE

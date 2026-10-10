@@ -1479,7 +1479,7 @@ void MainWindow::closeEvent(QCloseEvent *event) {
             event->ignore();
             if (!noTrayCloseNoticeShown) {
                 noTrayCloseNoticeShown = true;
-                MessageBoxInfo(software_name, ProxorPlatform::NoTrayCloseNotice(trayCap));
+                MW_show_log(ProxorPlatform::NoTrayCloseNotice(trayCap));
             }
             return;
         }
@@ -3169,9 +3169,6 @@ void MainWindow::on_menu_clone_triggered() {
     auto ents = get_now_selected_list();
     if (ents.isEmpty()) return;
 
-    auto btn = QMessageBox::question(this, tr("Clone"), tr("Clone %1 item(s)").arg(ents.count()));
-    if (btn != QMessageBox::Yes) return;
-
     QStringList sls;
     for (const auto &ent: ents) {
         sls << ent->bean->ToProxorShareLink(ent->type);
@@ -3207,7 +3204,7 @@ void MainWindow::on_menu_move_triggered() {
 void MainWindow::on_menu_delete_triggered() {
     auto ents = get_now_selected_list();
     if (ents.count() == 0) return;
-    if (QMessageBox::question(this, tr("Confirmation"), QString(tr("Remove %1 item(s) ?")).arg(ents.count())) ==
+    if (QMessageBox::question(this, tr("Confirmation"), QString(tr("Remove %1 item(s)?")).arg(ents.count())) ==
         QMessageBox::StandardButton::Yes) {
         for (const auto &ent: ents) {
             ProxorGui::profileManager->DeleteProfile(ent->id);
@@ -3230,9 +3227,9 @@ void MainWindow::on_menu_profile_debug_info_triggered() {
     auto ents = get_now_selected_list();
     if (ents.count() != 1) return;
     QMessageBox mb(QMessageBox::Information, software_name, ents.first()->ToJsonBytes(), QMessageBox::NoButton, this);
-    auto *btnEdit   = mb.addButton("Edit",   QMessageBox::ActionRole);
-    auto *btnReload = mb.addButton("Reload", QMessageBox::ActionRole);
-    mb.addButton("OK", QMessageBox::AcceptRole);
+    auto *btnEdit   = mb.addButton(tr("Edit"),   QMessageBox::ActionRole);
+    auto *btnReload = mb.addButton(tr("Reload"), QMessageBox::ActionRole);
+    mb.addButton(tr("OK"), QMessageBox::AcceptRole);
     mb.exec();
     if (mb.clickedButton() == btnEdit) {
         auto dialog = new DialogEditProfile("", ents.first()->id, this);
@@ -3276,26 +3273,18 @@ void MainWindow::on_menu_export_config_triggered() {
     auto ent = ents.first();
     if (ent->bean->DisplayCoreType() != software_core_name) return;
 
-    auto result = BuildConfig(ent, false, true);
-    QString config_core = QJsonObject2QString(result->coreConfig, false);
-    QApplication::clipboard()->setText(config_core);
+    QMessageBox msg(QMessageBox::Question, software_name, tr("Export %1 config").arg(ent->bean->DisplayName()), QMessageBox::NoButton, this);
+    auto *btnCore = msg.addButton(tr("Copy core config"), QMessageBox::AcceptRole);
+    auto *btnTest = msg.addButton(tr("Copy test config"), QMessageBox::AcceptRole);
+    auto *btnCancel = msg.addButton(QMessageBox::Cancel);
+    msg.setEscapeButton(btnCancel);
+    msg.setDefaultButton(btnCore);
+    msg.exec();
+    if (msg.clickedButton() != btnCore && msg.clickedButton() != btnTest) return;
 
-    QMessageBox msg(QMessageBox::Information, tr("Config copied"), tr("Config copied"));
-    msg.addButton("Copy core config", QMessageBox::YesRole);
-    msg.addButton("Copy test config", QMessageBox::NoRole);
-    msg.addButton(QMessageBox::Ok);
-    msg.setEscapeButton(QMessageBox::Ok);
-    msg.setDefaultButton(QMessageBox::Ok);
-    auto ret = msg.exec();
-    if (ret == 2) {
-        result = BuildConfig(ent, false, false);
-        config_core = QJsonObject2QString(result->coreConfig, false);
-        QApplication::clipboard()->setText(config_core);
-    } else if (ret == 3) {
-        result = BuildConfig(ent, true, false);
-        config_core = QJsonObject2QString(result->coreConfig, false);
-        QApplication::clipboard()->setText(config_core);
-    }
+    auto result = BuildConfig(ent, msg.clickedButton() == btnTest, false);
+    QApplication::clipboard()->setText(QJsonObject2QString(result->coreConfig, false));
+    show_log_impl(tr("Config copied"));
 }
 
 void MainWindow::display_qr_link(bool nkrFormat) {
@@ -3338,7 +3327,7 @@ void MainWindow::display_qr_link(bool nkrFormat) {
                             im.setPixel(x + qr_padding, y + qr_padding, black);
                 show_qr(size());
             } catch (const std::exception &ex) {
-                QMessageBox::warning(nullptr, "error", ex.what());
+                MessageBoxWarning(software_name, ex.what());
             }
         }
 
@@ -3359,7 +3348,7 @@ void MainWindow::display_qr_link(bool nkrFormat) {
             l->setScaledContents(true);
             layout()->addWidget(l);
             cb = new QCheckBox;
-            cb->setText("Proxor Links");
+            cb->setText(tr("Proxor Links"));
             layout()->addWidget(cb);
             l2 = new QPlainTextEdit();
             l2->setReadOnly(true);
@@ -3579,7 +3568,7 @@ void MainWindow::on_menu_delete_repeat_triggered() {
     }
 
     if (out_del.length() > 0 &&
-        QMessageBox::question(this, tr("Confirmation"), tr("Remove %1 item(s) ?").arg(out_del.length()) + "\n" + remove_display) == QMessageBox::StandardButton::Yes) {
+        QMessageBox::question(this, tr("Confirmation"), tr("Remove %1 item(s)?").arg(out_del.length()) + "\n" + remove_display) == QMessageBox::StandardButton::Yes) {
         for (const auto &ent: out_del) {
             ProxorGui::profileManager->DeleteProfile(ent->id);
         }
@@ -3616,7 +3605,7 @@ void MainWindow::on_menu_remove_unavailable_triggered() {
     }
 
     if (out_del.length() > 0 &&
-        QMessageBox::question(this, tr("Confirmation"), tr("Remove %1 item(s) ?").arg(out_del.length()) + "\n" + remove_display) == QMessageBox::StandardButton::Yes) {
+        QMessageBox::question(this, tr("Confirmation"), tr("Remove %1 item(s)?").arg(out_del.length()) + "\n" + remove_display) == QMessageBox::StandardButton::Yes) {
         for (const auto &ent: out_del) {
             ProxorGui::profileManager->DeleteProfile(ent->id);
         }
