@@ -86,7 +86,7 @@ service. macOS releases are prereleases, so expect rough edges and report them.
   accepted trade-off. After an upgrade, turning on Tun Mode or System Proxy asks for the
   administrator password once more to reinstall the service. `--zap` also removes
   `/var/log/proxor-helper.log` and your preferences.
-- **Removing manually.** Tun settings > Tun service > Remove (Tun Mode and System Proxy are turned
+- **Removing manually.** Tun settings > Proxor service > Remove (Tun Mode and System Proxy are turned
   off first), or `sudo launchctl bootout system/io.github.Ogstra.Proxor.helper` and then delete the
   three paths above. If the app is dragged to the Trash, the service removes itself after about 35
   minutes.

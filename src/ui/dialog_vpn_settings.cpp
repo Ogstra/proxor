@@ -62,13 +62,13 @@ DialogVPNSettings::DialogVPNSettings(QWidget *parent) : QDialog(parent), ui(new 
     // The single-core Tun option does not apply on macOS (Tun runs in the Proxor service).
     ui->single_core->setVisible(false);
     {
-        auto *box = new QGroupBox(tr("Tun service"), this);
+        auto *box = new QGroupBox(tr("Proxor service"), this);
         auto *boxLayout = new QVBoxLayout(box);
         auto *status = new QLabel(box);
         status->setWordWrap(true);
         auto *buttons = new QHBoxLayout();
         auto *install = new QPushButton(box);
-        auto *remove = new QPushButton(tr("Remove Tun service"), box);
+        auto *remove = new QPushButton(tr("Remove Proxor service"), box);
         buttons->addWidget(install);
         buttons->addWidget(remove);
         buttons->addStretch();
@@ -142,8 +142,8 @@ DialogVPNSettings::DialogVPNSettings(QWidget *parent) : QDialog(parent), ui(new 
 
         connect(remove, &QPushButton::clicked, this, [this, self, refresh] {
             const auto answer = QMessageBox::question(
-                this, tr("Remove Tun service"),
-                tr("Remove the Proxor Tun service? Tun Mode and System Proxy will be turned off. You can install it again later."));
+                this, tr("Remove Proxor service"),
+                tr("Remove the Proxor service? Tun Mode and System Proxy will be turned off. You can install it again later."));
             if (answer != QMessageBox::Yes) return;
             GetMainWindow()->proxor_set_spmode_vpn(false);
             GetMainWindow()->proxor_set_spmode_system_proxy(false);

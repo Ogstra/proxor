@@ -18,6 +18,11 @@ if [ -n "$base" ] && command -v unifdef >/dev/null; then
   rel=src/ui/dialog_vpn_settings.cpp
   w=$(diff <(git -C "$repo_root" show "$base:$rel" | unifdef -x2 -DQ_OS_WIN -UQ_OS_MACOS -UQ_OS_LINUX) <(unifdef -x2 -DQ_OS_WIN -UQ_OS_MACOS -UQ_OS_LINUX "$repo_root/$rel") | grep -E '^[<>]' | sort || true)
   m=$(diff <(git -C "$repo_root" show "$base:$rel" | unifdef -x2 -DQ_OS_MACOS -UQ_OS_WIN -UQ_OS_LINUX) <(unifdef -x2 -DQ_OS_MACOS -UQ_OS_WIN -UQ_OS_LINUX "$repo_root/$rel") | grep -E '^[<>]' | sort || true)
+  # The macOS-only service group was renamed from "Tun service" to "Proxor service" (one name for the helper, UX review A8).
+  # Those exact renamed strings are the only macOS-only edits ignored here; any other divergence still fails.
+  renamed='tr\("(Tun|Proxor) service"\)|tr\("Remove (Tun|Proxor) service"\)|Remove the Proxor (Tun )?service\?'
+  w=$(printf '%s\n' "$w" | grep -vE "$renamed" || true)
+  m=$(printf '%s\n' "$m" | grep -vE "$renamed" || true)
   [ "$w" = "$m" ] || fail "Windows and macOS views of $rel changed differently"
 fi
 echo "picker: OK"
