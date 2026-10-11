@@ -54,7 +54,11 @@ int main(int argc, char* argv[]) {
     ProxorDesktop::StartPortalProbe();
     // The tray icon is initialized later; set this now so Linux taskbars identify the
     // first top-level window even while the proxy is inactive.
+#ifndef Q_OS_MACOS // on macOS the Dock shows the app bundle icon; a window icon would replace it while running
+#ifndef Q_OS_MACOS // on macOS the Dock shows the app bundle icon; a window icon would replace it while running
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/proxor/proxor.png")));
+#endif
+#endif
 
     // Clean
     const auto packageRoot = ProxorGui::PackageRootPath();

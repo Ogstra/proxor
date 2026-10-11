@@ -1,3 +1,4 @@
+#include <QMutex>
 #include "sys/LogFile.hpp"
 #include "./ui_mainwindow.h"
 #include "mainwindow.h"
@@ -77,11 +78,17 @@ inline bool speedtesting = false;
 inline std::atomic_bool icmp_unavailable_this_session{false};
 inline std::atomic_bool icmp_fallback_notice_shown{false};
 inline QList<QThread *> speedtesting_threads = {};
+// The test workers add and remove themselves from the list concurrently, and Stop empties it from the UI thread.
+inline QMutex speedtesting_threads_lock;
 
 void MainWindow::speedtest_current_group(int mode, bool test_group) {
     if (mode == 114514) {
-        while (!speedtesting_threads.isEmpty()) {
-            auto t = speedtesting_threads.takeFirst();
+        QList<QThread *> toExit;
+        {
+            QMutexLocker locker(&speedtesting_threads_lock);
+            toExit.swap(speedtesting_threads);
+        }
+        for (auto *t: toExit) {
             if (t != nullptr) t->exit();
         }
         speedtesting = false;
@@ -162,7 +169,10 @@ void MainWindow::speedtest_profiles(const QList<std::shared_ptr<ProxorGui::Proxy
         lock_return.lock();
         for (int i = 0; i < threadN; i++) {
             runOnNewThread([&] {
-                speedtesting_threads << QObject::thread();
+                {
+                    QMutexLocker locker(&speedtesting_threads_lock);
+                    speedtesting_threads << QObject::thread();
+                }
 
                 forever {
                     //
@@ -175,7 +185,10 @@ void MainWindow::speedtest_profiles(const QList<std::shared_ptr<ProxorGui::Proxy
                         }
                         lock_write.unlock();
                         // quit of this thread
-                        speedtesting_threads.removeAll(QObject::thread());
+                        {
+                            QMutexLocker locker(&speedtesting_threads_lock);
+                            speedtesting_threads.removeAll(QObject::thread());
+                        }
                         return;
                     }
                     auto profile = profiles_test.takeFirst();
