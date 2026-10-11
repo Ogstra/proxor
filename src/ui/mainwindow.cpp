@@ -2996,10 +2996,12 @@ void MainWindow::refresh_status(const QString &traffic_update) {
     // refresh title & window icon
     setWindowTitle(make_title(false));
     if (icon_status_new != icon_status) {
+#ifndef Q_OS_MACOS // on macOS the Dock keeps the app bundle icon; the status icon is only for the menu bar
         auto newIcon = Icon::GetTrayIcon(icon_status_new);
         QApplication::setWindowIcon(newIcon);
         for (QWidget *w : QApplication::topLevelWidgets())
             w->setWindowIcon(newIcon);
+#endif
     }
 
     // refresh tray
