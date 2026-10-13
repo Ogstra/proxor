@@ -1,0 +1,45 @@
+name: Defender scan of published Windows zips
+
+# Diagnostic only: downloads the public Windows zip of each tag and scans its executables with the
+# Microsoft Defender that ships on the runner, without removing anything. It publishes nothing.
+on:
+  workflow_dispatch:
+    inputs:
+      tags:
+        description: Comma separated release tags to scan
+        required: true
+        default: v1.6.13,v1.6.14,v1.6.16,v1.6.17
+        type: string
+
+jobs:
+  scan:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Scan
+        shell: pwsh
+        env:
+          TAGS: ${{ inputs.tags }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $mp = "$env:ProgramFiles\Windows Defender\MpCmdRun.exe"
+          & $mp -SignatureUpdate | Out-Host
+          Get-MpComputerStatus | Select-Object AMServiceEnabled, AntivirusSignatureVersion, AntivirusSignatureLastUpdated, RealTimeProtectionEnabled, MAPSReporting, CloudBlockLevel | Format-List | Out-Host
+          Get-MpPreference | Select-Object MAPSReporting, CloudBlockLevel, DisableRealtimeMonitoring | Format-List | Out-Host
+          foreach ($tag in ($env:TAGS -split ',')) {
+            $tag = $tag.Trim()
+            $version = $tag.TrimStart('v')
+            $dir = Join-Path $env:RUNNER_TEMP $tag
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+            gh release download $tag --repo $env:GITHUB_REPOSITORY --pattern "proxor-$version-windows64.zip" --dir $dir
+            Expand-Archive -Path (Join-Path $dir "proxor-$version-windows64.zip") -DestinationPath (Join-Path $dir 'x') -Force
+            foreach ($rel in @('proxor/config/runtime/app.exe', 'proxor/proxor_core.exe', 'proxor/updater.exe')) {
+              $file = Join-Path $dir "x/$rel"
+              $hash = (Get-FileHash -Algorithm SHA256 $file).Hash.ToLower()
+              $out = & $mp -Scan -ScanType 3 -File $file -DisableRemediation 2>&1 | Out-String
+              $verdict = if ($out -match 'found no threats') { 'clean' } elseif ($out -match 'found (\d+) threats?') { 'DETECTED' } else { 'unknown' }
+              Write-Host "RESULT $tag $rel sha256=$hash -> $verdict"
+              if ($verdict -ne 'clean') { Write-Host $out }
+            }
+          }
