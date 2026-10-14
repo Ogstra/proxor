@@ -51,6 +51,7 @@
 #ifdef Q_OS_WIN
 #include "3rdparty/WinCommander.hpp"
 #include "sys/windows/ActiveNetworkType.h"
+#include "sys/windows/TaskbarOverlay.h"
 #else
 #ifdef Q_OS_LINUX
 #include "sys/linux/LinuxCap.h"
@@ -1578,6 +1579,7 @@ void MainWindow::showEvent(QShowEvent *event) {
 #endif
 #ifdef Q_OS_WIN
     themeManager->ReapplyTitleBar();
+    ProxorWin::ReapplyTaskbarOverlay(this);
 #endif
 }
 
@@ -2995,6 +2997,10 @@ void MainWindow::refresh_status(const QString &traffic_update) {
 
     // refresh title & window icon
     setWindowTitle(make_title(false));
+#ifdef Q_OS_WIN
+    // A pinned taskbar button ignores the window icon, so the running state is also shown as a badge.
+    if (icon_status_new != icon_status) ProxorWin::SetTaskbarActiveOverlay(this, icon_status_new != Icon::NONE);
+#endif
     if (icon_status_new != icon_status) {
 #ifndef Q_OS_MACOS // on macOS the Dock keeps the app bundle icon; the status icon is only for the menu bar
 #ifndef Q_OS_MACOS // on macOS the Dock keeps the app bundle icon; the status icon is only for the menu bar
