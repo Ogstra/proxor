@@ -959,7 +959,11 @@ namespace ProxorGui {
                     {"path", geosite},
                 },
             }};
-        if (!status->forTest) routeObj["final"] = dataStore->routing->def_outbound;
+        if (!status->forTest) {
+            // Whitelist mode: only the listed processes/CIDRs go through the proxy, everything else is direct
+            const bool whitelistTun = UseInternalTun() && dataStore->spmode_vpn && dataStore->vpn_rule_white;
+            routeObj["final"] = whitelistTun ? QString("bypass") : dataStore->routing->def_outbound;
+        }
         {
             QJsonObject domainResolver{{"server", "dns-direct"}};
             if (!dataStore->routing->domain_strategy.isEmpty())

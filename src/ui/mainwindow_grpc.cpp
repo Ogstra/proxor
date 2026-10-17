@@ -492,6 +492,17 @@ void MainWindow::proxor_start(int _id, bool startedByWifiTrigger) {
             start_pending = false;
             refresh_status();
             refresh_proxy_list(ent->id);
+            // With Tun and System Proxy both off nothing on this computer uses the local proxy: say so once the
+            // startup restore (which turns them back on) has had time to finish.
+            QTimer::singleShot(4000, this, [this, id = ent->id] {
+                if (ProxorGui::dataStore->started_id != id || ProxorGui::dataStore->prepare_exit) return;
+                if (ProxorGui::dataStore->spmode_vpn || ProxorGui::dataStore->spmode_system_proxy || startup_tun_pending) return;
+#ifdef Q_OS_MACOS
+                if (mac_startup_probe_pending) return;
+#endif
+                MW_show_log(tr("Local proxy on 127.0.0.1:%1. Turn on System Proxy or Tun to route this computer's traffic through it.")
+                                .arg(ProxorGui::dataStore->inbound_socks_port));
+            });
 #ifdef Q_OS_MACOS
             mac_modes->profileStarted();
 #else

@@ -915,7 +915,8 @@ namespace ProxorGui_sub {
                 } else {
                     group->sub_update_interval = intervalMinutes;
                     group->sub_update_always = alwaysUpdate;
-                    group->subscription_ping_onopen_enabled = (pingOnOpenHeaderValid || pingOnOpenBodyFound) && pingOnOpenEnabled;
+                    // The server may turn the test on or off; a server that says nothing leaves the group's own setting.
+                    if (pingOnOpenHeaderValid || pingOnOpenBodyFound) group->subscription_ping_onopen_enabled = pingOnOpenEnabled;
                     if (routingOff || !routingParam.isEmpty() || !routingProfile.isEmpty()) {
                         group->subscription_direct_sites = directSites;
                     }
