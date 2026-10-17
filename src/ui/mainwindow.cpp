@@ -1502,9 +1502,15 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 }
 
 void MainWindow::run_subscription_ping_on_open(int attempts) {
-    if (startup_tun_pending || startup_tun_failed) return;
+    if (startup_tun_failed) return;
     constexpr int maxAttempts = 90;
     if (attempts > maxAttempts) return;
+    // A remembered Tun holds the startup until it is restored (on macOS after the Proxor service answers): wait for
+    // it instead of giving up, otherwise the list is never tested.
+    if (startup_tun_pending) {
+        setTimeout([this, attempts] { run_subscription_ping_on_open(attempts + 1); }, this, 1000);
+        return;
+    }
 
     // Tun carries the tests, and the core installs its routes after it answers on gRPC, so
     // a started profile and a settled tunnel are both required. Without this the list came
@@ -1513,7 +1519,11 @@ void MainWindow::run_subscription_ping_on_open(int attempts) {
     const bool tunSelected = ProxorGui::dataStore->spmode_vpn;
     const bool tunSettled = g_tun_enabled_ms > 0 &&
                             QDateTime::currentMSecsSinceEpoch() - g_tun_enabled_ms >= kTunSettleMs;
-    const bool waitingForTun = tunSelected && (ProxorGui::dataStore->started_id < 0 || !tunSettled);
+    // Without a profile running or about to start, Tun is only selected, not up ("will start after a proxy profile is
+    // running"), so there is no tunnel to wait for; the tests run as they would without Tun.
+    const bool profileComing = ProxorGui::dataStore->started_id >= 0 || start_pending || startup_deferred_profile_id >= 0 ||
+                               (core_process != nullptr && core_process->start_profile_when_core_is_up >= 0);
+    const bool waitingForTun = tunSelected && profileComing && !tunSettled;
 
     if (UI_subscription_updates_running() || !ProxorGui::dataStore->core_running || waitingForTun) {
         setTimeout([this, attempts] { run_subscription_ping_on_open(attempts + 1); }, this, 1000);
