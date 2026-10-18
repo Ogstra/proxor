@@ -3008,11 +3008,8 @@ void MainWindow::refresh_status(const QString &traffic_update) {
     // refresh title & window icon
     setWindowTitle(make_title(false));
 #ifdef Q_OS_WIN
-    // A pinned taskbar button ignores the window icon, so the running state is also shown as a small badge:
-    // the same logo in its active color.
-    if (icon_status_new != icon_status) {
-        ProxorWin::SetTaskbarOverlay(this, icon_status_new != Icon::NONE ? Icon::GetTrayIcon(icon_status_new).toImage() : QImage());
-    }
+    // A pinned taskbar button ignores the window icon, so the running state is also shown as a badge.
+    if (icon_status_new != icon_status) ProxorWin::SetTaskbarActiveOverlay(this, icon_status_new != Icon::NONE);
 #endif
     if (icon_status_new != icon_status) {
 #ifndef Q_OS_MACOS // on macOS the Dock keeps the app bundle icon; the status icon is only for the menu bar

@@ -1,6 +1,7 @@
 #include "sys/windows/TaskbarOverlay.h"
 
 #include <QImage>
+#include <QPainter>
 #include <QPointer>
 #include <QTimer>
 #include <QWidget>
@@ -12,10 +13,18 @@
 
 namespace {
 
-QImage g_badge; // 32x32 ARGB, null: no badge
+bool g_active = false;
 
-HICON makeBadgeIcon(const QImage &badge) {
-    const QImage img = badge.scaled(32, 32, Qt::KeepAspectRatio, Qt::SmoothTransformation).convertToFormat(QImage::Format_ARGB32);
+HICON makeBadgeIcon() {
+    QImage img(32, 32, QImage::Format_ARGB32);
+    img.fill(Qt::transparent);
+    {
+        QPainter p(&img);
+        p.setRenderHint(QPainter::Antialiasing, true);
+        p.setPen(QPen(Qt::white, 2.5));
+        p.setBrush(QColor(232, 48, 48));
+        p.drawEllipse(QRectF(5, 5, 22, 22));
+    }
     BITMAPV5HEADER bi{};
     bi.bV5Size = sizeof(bi);
     bi.bV5Width = img.width();
@@ -44,14 +53,14 @@ HICON makeBadgeIcon(const QImage &badge) {
     return icon;
 }
 
-bool applyOverlay(HWND hwnd, const QImage &badge) {
+bool applyOverlay(HWND hwnd, bool active) {
     if (!hwnd) return false;
     ITaskbarList3 *taskbar = nullptr;
     if (FAILED(CoCreateInstance(CLSID_TaskbarList, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&taskbar))) || !taskbar) return false;
     bool ok = false;
     if (SUCCEEDED(taskbar->HrInit())) {
-        HICON icon = badge.isNull() ? nullptr : makeBadgeIcon(badge);
-        ok = SUCCEEDED(taskbar->SetOverlayIcon(hwnd, icon, badge.isNull() ? L"" : L"Running"));
+        HICON icon = active ? makeBadgeIcon() : nullptr;
+        ok = SUCCEEDED(taskbar->SetOverlayIcon(hwnd, icon, active ? L"Running" : L""));
         if (icon) DestroyIcon(icon);
     }
     taskbar->Release();
@@ -60,7 +69,7 @@ bool applyOverlay(HWND hwnd, const QImage &badge) {
 
 void tryApply(QPointer<QWidget> window, int attemptsLeft) {
     if (!window) return;
-    if (applyOverlay(reinterpret_cast<HWND>(window->winId()), g_badge)) return;
+    if (applyOverlay(reinterpret_cast<HWND>(window->winId()), g_active)) return;
     if (attemptsLeft <= 0) return;
     QTimer::singleShot(1000, window.data(), [window, attemptsLeft] { tryApply(window, attemptsLeft - 1); });
 }
@@ -69,8 +78,8 @@ void tryApply(QPointer<QWidget> window, int attemptsLeft) {
 
 namespace ProxorWin {
 
-void SetTaskbarOverlay(QWidget *window, const QImage &badge) {
-    g_badge = badge;
+void SetTaskbarActiveOverlay(QWidget *window, bool active) {
+    g_active = active;
     tryApply(QPointer<QWidget>(window), 5);
 }
 
